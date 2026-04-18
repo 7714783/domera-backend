@@ -1,0 +1,1177 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id                   String                 @id @default(uuid())
+  slug                 String                 @unique
+  name                 String
+  status               String                 @default("active")
+  storageMode          String                 @default("pooled")
+  defaultUiLocale      String                 @default("en")
+  defaultContentLocale String                 @default("en")
+  timezone             String                 @default("UTC")
+  isDemo               Boolean                @default(false)
+  seedKey              String?                @unique
+  createdBy            String?                @default("system")
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  memberships          Membership[]
+  buildings            Building[]
+  organizations        Organization[]
+  obligations          ObligationTemplate[]
+  buildingObligations  BuildingObligation[]
+  ppmTemplates         PpmTemplate[]
+  ppmPlanItems         PpmPlanItem[]
+  tasks                TaskInstance[]
+  budgets              Budget[]
+  invoices             Invoice[]
+  approvals            ApprovalRequest[]
+  documents            Document[]
+  audits               AuditEntry[]
+  assets               Asset[]
+  seedRuns             SeedRun[]
+
+  @@map("tenants")
+}
+
+model User {
+  id                      String                 @id @default(uuid())
+  email                   String
+  emailNormalized         String                 @unique
+  username                String?                @unique
+  passwordHash            String?
+  displayName             String?
+  status                  String                 @default("active")
+  isSuperAdmin            Boolean                @default(false)
+  lastLoginAt             DateTime?
+  isDemo                  Boolean                @default(false)
+  seedKey                 String?                @unique
+  createdBy               String?                @default("system")
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  memberships             Membership[]
+  organizationMemberships OrganizationMembership[]
+  buildingRoles           BuildingRoleAssignment[]
+  certifications          UserCertification[]
+
+  @@map("users")
+}
+
+model Membership {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String
+  roleKey   String
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, roleKey])
+  @@index([tenantId, userId])
+  @@map("memberships")
+}
+
+model Organization {
+  id          String                 @id @default(uuid())
+  tenantId    String
+  name        String
+  slug        String
+  type        String
+  compliance  Int                    @default(0)
+  status      String                 @default("watch")
+  isDemo      Boolean                @default(false)
+  seedKey     String?                @unique
+  createdBy   String?                @default("system")
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  tenant      Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  buildings   Building[]
+  memberships OrganizationMembership[]
+  mandates    BuildingMandate[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@map("organizations")
+}
+
+model OrganizationMembership {
+  id             String       @id @default(uuid())
+  organizationId String
+  userId         String
+  roleKey        String
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId, roleKey])
+  @@index([organizationId])
+  @@index([userId])
+  @@map("organization_memberships")
+}
+
+model Building {
+  id                   String              @id @default(uuid())
+  tenantId             String
+  organizationId       String?
+  slug                 String
+  buildingCode         String?
+  name                 String
+  timezone             String
+  countryCode          String
+  city                 String
+  addressLine1         String
+  street               String?
+  buildingNumber       String?
+  lat                  Float?
+  lng                  Float?
+  defaultContentLocale String              @default("en")
+  defaultLanguage      String?
+  supportedLanguages   String[]            @default([])
+  type                 String              @default("Commercial")
+  buildingType         String?
+  primaryUse           String?
+  secondaryUses        String[]            @default([])
+  complexityFlags      String[]            @default([])
+  yearBuilt            Int?
+  floorsAboveGround    Int?
+  floorsBelowGround    Int?
+  floorsCount          Int?
+  unitsCount           Int?
+  entrancesCount       Int?
+  liftsCount           Int?
+  hasParking           Boolean?
+  hasRestaurantsGroundFloor Boolean?
+  hasRooftopMechanical Boolean?
+  compliance           Int                 @default(0)
+  mandates             Int                 @default(0)
+  status               String              @default("warning")
+  annualKwh            Float?
+  notes                String?
+  attributes           Json?
+  isDemo               Boolean             @default(false)
+  seedKey              String?             @unique
+  createdBy            String?             @default("system")
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  tenant             Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  organization       Organization?        @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  assets             Asset[]
+  buildingObligations BuildingObligation[]
+  ppmTemplates       PpmTemplate[]
+  ppmPlanItems       PpmPlanItem[]
+  tasks              TaskInstance[]
+  budgets            Budget[]
+  invoices           Invoice[]
+  approvals          ApprovalRequest[]
+  documents          Document[]
+  audits             AuditEntry[]
+  mandatesList       BuildingMandate[]
+  roleAssignments    BuildingRoleAssignment[]
+  engineeringRecs    EngineeringRecommendation[]
+  projects           Project[]
+  workOrders         WorkOrder[]
+  takeoverCases      TakeoverCase[]
+  entrances          Entrance[]
+  floors             Floor[]
+  units              Unit[]
+  settings           BuildingSettings?
+  accounts           Account[]
+  contracts          Contract[]
+  requests           ResidentRequest[]
+  notifications      Notification[]
+  buildingFloors     BuildingFloor[]
+  buildingUnits      BuildingUnit[]
+  verticalTransport  BuildingVerticalTransport[]
+  buildingSystems    BuildingSystem[]
+  occupantCompanies  BuildingOccupantCompany[]
+  unitOccupancies    BuildingUnitOccupancy[]
+  buildingContracts  BuildingContract[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@index([organizationId])
+  @@map("buildings")
+}
+
+model Asset {
+  id            String   @id @default(uuid())
+  tenantId      String
+  buildingId    String
+  parentAssetId String?
+  name          String
+  class         String
+  systemType    String?
+  model         String?
+  manufacturer  String?
+  installDate   DateTime?
+  attributes    Json?
+  isDemo        Boolean  @default(false)
+  seedKey       String?  @unique
+  createdBy     String?  @default("system")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  parent   Asset?   @relation("AssetTree", fields: [parentAssetId], references: [id], onDelete: Cascade)
+  children Asset[]  @relation("AssetTree")
+  maintenancePlans MaintenancePlan[]
+
+  @@index([tenantId, buildingId])
+  @@index([parentAssetId])
+  @@index([systemType])
+  @@map("assets")
+}
+
+model ObligationTemplate {
+  id                       String   @id @default(uuid())
+  tenantId                 String
+  assetId                  String?
+  name                     String
+  basisType                String
+  recurrenceRule           String
+  requiresEvidence         Boolean  @default(true)
+  requiredCertificationKey String?
+  requiredDocumentTypeKey  String?
+  domain                   String?
+  sourceRow                Int?
+  isDemo                   Boolean  @default(false)
+  seedKey                  String?  @unique
+  createdBy                String?  @default("system")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  tenant             Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  buildingLinks      BuildingObligation[]
+  planItems          PpmPlanItem[]
+  bases              ObligationBasis[]
+  applicabilityRules ApplicabilityRule[]
+
+  @@index([tenantId])
+  @@index([domain])
+  @@map("obligation_templates")
+}
+
+model ObligationBasis {
+  id                   String @id @default(uuid())
+  obligationTemplateId String
+  type                 String
+  referenceCode        String?
+  issuingAuthority     String?
+
+  obligationTemplate ObligationTemplate @relation(fields: [obligationTemplateId], references: [id], onDelete: Cascade)
+
+  @@index([obligationTemplateId])
+  @@map("obligation_bases")
+}
+
+model ApplicabilityRule {
+  id                   String @id @default(uuid())
+  obligationTemplateId String
+  predicate            Json
+
+  obligationTemplate ObligationTemplate @relation(fields: [obligationTemplateId], references: [id], onDelete: Cascade)
+
+  @@index([obligationTemplateId])
+  @@map("applicability_rules")
+}
+
+model BuildingObligation {
+  id                 String   @id @default(uuid())
+  tenantId           String
+  buildingId         String
+  obligationTemplateId String
+  complianceStatus   String   @default("active")
+  criticality        String   @default("medium")
+  isDemo             Boolean  @default(false)
+  seedKey            String?  @unique
+  createdBy          String?  @default("system")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building    Building           @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  obligation  ObligationTemplate @relation(fields: [obligationTemplateId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, buildingId])
+  @@map("building_obligations")
+}
+
+model PpmTemplate {
+  id                          String   @id @default(uuid())
+  tenantId                    String
+  buildingId                  String
+  name                        String
+  description                 String?
+  instructions                String?
+  domain                      String?
+  scope                       String   @default("building_common") // building_common | unit_scoped
+  executionMode               String   @default("in_house")        // in_house | contracted | ad_hoc_approved
+  performerOrgId              String?
+  contractId                  String?
+  assignedUserId              String?
+  assignedRole                String?
+  approvalChain               Json?    // ordered: [{ role?, userId?, label? }]
+  evidenceRecipients          Json?    // ordered: [{ role?, userId?, channel? }]
+  openedByRoles               String[] @default([])
+  closedByRoles               String[] @default([])
+  slaReminderDays             Int[]    @default([])
+  estimatedAnnualCost         Float?
+  estimatedCostCurrency       String?  @default("ILS")
+  budgetLineId                String?
+  requiresPhotoEvidence       Boolean  @default(false)
+  requiresSignoff             Boolean  @default(false)
+  retentionYears              Int?
+  requiresApprovalBeforeOrder Boolean  @default(false)
+  frequencyMonths             Int?
+  evidenceDocTypeKey          String?
+  isDemo                      Boolean  @default(false)
+  seedKey                     String?  @unique
+  createdBy                   String?  @default("system")
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building  Building     @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  planItems PpmPlanItem[]
+
+  @@index([tenantId, buildingId])
+  @@index([buildingId, scope])
+  @@map("ppm_templates")
+}
+
+model PpmPlanItem {
+  id                   String   @id @default(uuid())
+  tenantId             String
+  buildingId           String
+  templateId           String
+  obligationTemplateId String
+  assignedRole         String
+  assignedUserId       String?
+  recurrenceRule       String
+  nextDueAt            DateTime
+  lastPerformedAt      DateTime?
+  unitId               String?
+  scope                String   @default("building_common")
+  executionMode        String   @default("in_house")
+  performerOrgId       String?
+  contractId           String?
+  isDemo               Boolean  @default(false)
+  seedKey              String?  @unique
+  createdBy            String?  @default("system")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building    Building           @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  template    PpmTemplate        @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  obligation  ObligationTemplate @relation(fields: [obligationTemplateId], references: [id], onDelete: Cascade)
+  tasks       TaskInstance[]
+
+  @@index([tenantId, buildingId, nextDueAt])
+  @@index([buildingId, scope])
+  @@map("ppm_plan_items")
+}
+
+model TaskInstance {
+  id                       String   @id @default(uuid())
+  tenantId                 String
+  buildingId               String
+  planItemId               String?
+  unitId                   String?
+  title                    String
+  status                   String
+  lifecycleStage           String   @default("scheduled")
+  executionMode            String?
+  performerOrgId           String?
+  dueAt                    DateTime
+  completedAt              DateTime?
+  completedByUserId        String?
+  result                   String?
+  recurrenceRule           String?
+  evidenceRequired         Boolean  @default(false)
+  evidenceDocuments        Json?
+  blockedReason            String?
+  requiredCertificationKey String?
+  requiredDocumentTypeKey  String?
+  quoteDocumentId          String?
+  quoteAmount              Float?
+  quoteCurrency            String?
+  quoteReceivedAt          DateTime?
+  approvalRequestId        String?
+  approvedAt               DateTime?
+  orderedAt                DateTime?
+  serviceReportDocumentId  String?
+  evidenceDistributedTo    Json?
+  archivedAt               DateTime?
+  isDemo                   Boolean  @default(false)
+  seedKey                  String?  @unique
+  createdBy                String?  @default("system")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building Building    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  planItem PpmPlanItem? @relation(fields: [planItemId], references: [id], onDelete: SetNull)
+  workOrders WorkOrder[]
+  executionLogs PpmExecutionLog[]
+
+  @@index([tenantId, buildingId, dueAt])
+  @@index([status])
+  @@index([lifecycleStage])
+  @@map("task_instances")
+}
+
+model PpmExecutionLog {
+  id         String   @id @default(uuid())
+  tenantId   String
+  buildingId String
+  taskId     String
+  actor      String
+  eventType  String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  task TaskInstance @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@index([tenantId, buildingId])
+  @@map("ppm_execution_logs")
+}
+
+model Budget {
+  id         String   @id @default(uuid())
+  tenantId   String
+  buildingId String
+  name       String
+  fiscalYear Int
+  currency   String
+  isDemo     Boolean  @default(false)
+  seedKey    String?  @unique
+  createdBy  String?  @default("system")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building Building    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  lines    BudgetLine[]
+
+  @@index([tenantId, buildingId])
+  @@map("budgets")
+}
+
+model BudgetLine {
+  id        String   @id @default(uuid())
+  budgetId  String
+  code      String
+  name      String
+  amount    Float
+  isDemo    Boolean  @default(false)
+  seedKey   String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  budget   Budget    @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  invoices Invoice[]
+
+  @@index([budgetId])
+  @@map("budget_lines")
+}
+
+model Invoice {
+  id               String   @id @default(uuid())
+  tenantId         String
+  buildingId       String
+  budgetLineId     String?
+  invoiceNo        String
+  amount           Float
+  status           String
+  vendorName       String?
+  isDemo           Boolean  @default(false)
+  seedKey          String?  @unique
+  createdBy        String?  @default("system")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building   Building    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  budgetLine BudgetLine? @relation(fields: [budgetLineId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, buildingId])
+  @@map("invoices")
+}
+
+model ApprovalRequest {
+  id              String   @id @default(uuid())
+  tenantId        String
+  buildingId      String
+  title           String
+  type            String
+  amount          Float
+  status          String
+  requesterUserId String?
+  requesterName   String?
+  threshold       String?
+  hint            String?
+  isDemo          Boolean  @default(false)
+  seedKey         String?  @unique
+  createdBy       String?  @default("system")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building Building       @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  steps    ApprovalStep[]
+
+  @@index([tenantId, buildingId, status])
+  @@map("approval_requests")
+}
+
+model ApprovalStep {
+  id            String   @id @default(uuid())
+  requestId     String
+  orderNo       Int
+  role          String
+  status        String
+  actedByUserId String?
+  actedAt       DateTime?
+  isDemo        Boolean  @default(false)
+  seedKey       String?  @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  request ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, orderNo])
+  @@map("approval_steps")
+}
+
+model Document {
+  id              String   @id @default(uuid())
+  tenantId        String
+  buildingId      String
+  title           String
+  documentType    String
+  documentTypeKey String?
+  status          String
+  versionNo       Int      @default(1)
+  storageKey      String
+  createdBy       String?
+  approvedBy      String?
+  isDemo          Boolean  @default(false)
+  seedKey         String?  @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, buildingId, status])
+  @@index([documentTypeKey])
+  @@map("documents")
+}
+
+model AuditEntry {
+  id           String   @id @default(uuid())
+  tenantId     String
+  buildingId   String?
+  timestamp    DateTime @default(now())
+  actor        String
+  role         String
+  action       String
+  entity       String
+  entityType   String
+  building     String
+  ip           String
+  sensitive    Boolean  @default(false)
+  eventType    String?
+  resourceType String?
+  resourceId   String?
+  metadata     Json?
+  isDemo       Boolean  @default(false)
+  seedKey      String?  @unique
+  createdBy    String?  @default("system")
+  createdAt    DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  buildingRef Building? @relation(fields: [buildingId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, timestamp])
+  @@index([tenantId, buildingId])
+  @@map("audit_entries")
+}
+
+model Certification {
+  id               String @id @default(uuid())
+  key              String @unique
+  name             String
+  issuingAuthority String?
+  domain           String?
+
+  users UserCertification[]
+
+  @@map("certifications")
+}
+
+model UserCertification {
+  id                  String   @id @default(uuid())
+  userId              String
+  certificationId     String
+  issuedAt            DateTime @default(now())
+  expiresAt           DateTime?
+  evidenceDocumentId  String?
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  certification Certification @relation(fields: [certificationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, certificationId])
+  @@index([expiresAt])
+  @@map("user_certifications")
+}
+
+model DocumentType {
+  id               String @id @default(uuid())
+  key              String @unique
+  name             String
+  issuingAuthority String?
+  version          String?
+  retentionYears   Int?
+
+  @@map("document_types")
+}
+
+model Role {
+  id                  String  @id @default(uuid())
+  key                 String  @unique
+  name                String
+  scope               String
+  maxDelegatableScope String?
+
+  permissions     RolePermission[]
+  buildingAssigns BuildingRoleAssignment[]
+
+  @@map("roles")
+}
+
+model RolePermission {
+  roleKey    String
+  permission String
+
+  role Role @relation(fields: [roleKey], references: [key], onDelete: Cascade)
+
+  @@id([roleKey, permission])
+  @@map("role_permissions")
+}
+
+model BuildingRoleAssignment {
+  id          String    @id @default(uuid())
+  tenantId    String
+  buildingId  String
+  userId      String
+  roleKey     String
+  delegatedBy String?
+  delegatedAt DateTime  @default(now())
+  expiresAt   DateTime?
+
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     Role     @relation(fields: [roleKey], references: [key], onDelete: Cascade)
+
+  @@unique([buildingId, userId, roleKey])
+  @@index([tenantId, buildingId])
+  @@map("building_role_assignments")
+}
+
+model BuildingMandate {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  buildingId         String
+  organizationId     String
+  mandateType        String
+  effectiveFrom      DateTime  @default(now())
+  effectiveTo        DateTime?
+  contractDocumentId String?
+  isDemo             Boolean   @default(false)
+  seedKey            String?   @unique
+  createdAt          DateTime  @default(now())
+
+  building     Building     @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, buildingId])
+  @@map("building_mandates")
+}
+
+model ImportJob {
+  id         String    @id @default(uuid())
+  tenantId   String
+  kind       String
+  sourceKey  String
+  status     String
+  summary    Json?
+  createdBy  String
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  rows ImportJobRow[]
+
+  @@index([tenantId, kind])
+  @@map("import_jobs")
+}
+
+model ImportJobRow {
+  id               String @id @default(uuid())
+  importJobId      String
+  sheetName        String
+  rowNumber        Int
+  rawJson          Json
+  mappedJson       Json?
+  validationErrors Json?
+  status           String
+
+  importJob ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+
+  @@index([importJobId, status])
+  @@map("import_job_rows")
+}
+
+model EngineeringRecommendation {
+  id               String   @id @default(uuid())
+  tenantId         String
+  buildingId       String
+  assetId          String?
+  problemStatement String
+  proposedSolution String
+  capexEstimate    Float?
+  opexImpact       Float?
+  lifecycleYears   Int?
+  riskReduction    String?
+  status           String   @default("draft")
+  authorUserId     String
+  reviewerUserId   String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, buildingId, status])
+  @@map("engineering_recommendations")
+}
+
+model Project {
+  id               String   @id @default(uuid())
+  tenantId         String
+  buildingId       String
+  name             String
+  stage            String   @default("initiation")
+  capexBudgetId    String?
+  recommendationId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, buildingId])
+  @@map("projects")
+}
+
+model WorkOrder {
+  id             String    @id @default(uuid())
+  tenantId       String
+  buildingId     String
+  taskInstanceId String?
+  vendorOrgId    String?
+  contractId     String?
+  status         String    @default("dispatched")
+  dueAt          DateTime
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  building Building     @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  task     TaskInstance? @relation(fields: [taskInstanceId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, buildingId, status])
+  @@map("work_orders")
+}
+
+model TakeoverCase {
+  id                  String    @id @default(uuid())
+  tenantId            String
+  buildingId          String
+  outgoingOrgId       String?
+  incomingOrgId       String?
+  targetGoLiveAt      DateTime?
+  status              String    @default("draft")
+  createdByUserId     String
+  signedOffAt         DateTime?
+  signoffLog          Json?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, buildingId])
+  @@map("takeover_cases")
+}
+
+model Entrance {
+  id         String @id @default(uuid())
+  tenantId   String
+  buildingId String
+  name       String
+  number     String?
+  createdAt  DateTime @default(now())
+
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  floors   Floor[]
+
+  @@unique([buildingId, name])
+  @@index([tenantId, buildingId])
+  @@map("entrances")
+}
+
+model Floor {
+  id         String @id @default(uuid())
+  tenantId   String
+  buildingId String
+  entranceId String?
+  number     Int
+  label      String?
+  createdAt  DateTime @default(now())
+
+  building Building  @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  entrance Entrance? @relation(fields: [entranceId], references: [id], onDelete: SetNull)
+  units    Unit[]
+
+  @@unique([buildingId, entranceId, number])
+  @@index([tenantId, buildingId])
+  @@map("floors")
+}
+
+model Unit {
+  id         String @id @default(uuid())
+  tenantId   String
+  buildingId String
+  floorId    String?
+  number     String
+  unitType   String
+  area       Float?
+  rooms      Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  floor    Floor?   @relation(fields: [floorId], references: [id], onDelete: SetNull)
+
+  @@unique([buildingId, number])
+  @@index([tenantId, buildingId])
+  @@map("units")
+}
+
+model BuildingSettings {
+  id            String @id @default(uuid())
+  buildingId    String @unique
+  currency      String @default("USD")
+  timezone      String @default("UTC")
+  billingCycle  String @default("monthly")
+  taxRules      Json?
+  locale        String @default("en")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@map("building_settings")
+}
+
+model Vendor {
+  id          String @id @default(uuid())
+  tenantId    String
+  name        String
+  serviceType String?
+  contactInfo Json?
+  createdAt   DateTime @default(now())
+
+  contracts Contract[]
+
+  @@index([tenantId])
+  @@map("vendors")
+}
+
+model Contract {
+  id           String @id @default(uuid())
+  tenantId     String
+  buildingId   String
+  vendorId     String
+  startDate    DateTime
+  endDate      DateTime?
+  monthlyCost  Float?
+  status       String   @default("active")
+  createdAt    DateTime @default(now())
+
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  vendor   Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, buildingId])
+  @@map("contracts")
+}
+
+model Account {
+  id         String @id @default(uuid())
+  tenantId   String
+  buildingId String
+  type       String
+  balance    Float  @default(0)
+  currency   String @default("USD")
+  createdAt  DateTime @default(now())
+
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, buildingId])
+  @@map("accounts")
+}
+
+model MaintenancePlan {
+  id         String @id @default(uuid())
+  tenantId   String
+  buildingId String
+  assetId    String
+  frequency  String
+  nextDueAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, buildingId])
+  @@map("maintenance_plans")
+}
+
+model ResidentRequest {
+  id          String @id @default(uuid())
+  tenantId    String
+  buildingId  String
+  unitId      String?
+  createdBy   String
+  category    String
+  priority    String  @default("normal")
+  status      String  @default("open")
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, buildingId, status])
+  @@map("resident_requests")
+}
+
+model Notification {
+  id         String @id @default(uuid())
+  tenantId   String
+  buildingId String?
+  userId     String
+  type       String
+  content    String
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  building Building? @relation(fields: [buildingId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, userId, readAt])
+  @@map("notifications")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Building Core v1 — first-building-first, multi-building-ready
+// All rows carry tenantId + buildingId. Each concern lives in its
+// own table instead of a giant JSON blob on `buildings`.
+// ─────────────────────────────────────────────────────────────
+
+model BuildingFloor {
+  id           String   @id @default(uuid())
+  tenantId     String
+  buildingId   String
+  floorCode    String
+  floorNumber  Int
+  floorType    String
+  label        String?
+  isActive     Boolean  @default(true)
+  grossAreaSqm Float?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  building Building       @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  units    BuildingUnit[]
+  systems  BuildingSystem[]
+
+  @@unique([buildingId, floorCode])
+  @@index([tenantId, buildingId, floorNumber])
+  @@map("building_floors")
+}
+
+model BuildingUnit {
+  id          String   @id @default(uuid())
+  tenantId    String
+  buildingId  String
+  floorId     String
+  unitCode    String
+  unitType    String
+  areaSqm     Float?
+  layoutZone  String?
+  isDivisible Boolean  @default(false)
+  status      String   @default("vacant")
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  building    Building               @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  floor       BuildingFloor          @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  occupancies BuildingUnitOccupancy[]
+  contracts   BuildingContract[]
+
+  @@unique([buildingId, unitCode])
+  @@index([tenantId, buildingId, floorId])
+  @@map("building_units")
+}
+
+model BuildingVerticalTransport {
+  id              String   @id @default(uuid())
+  tenantId        String
+  buildingId      String
+  code            String
+  transportType   String
+  servesFromFloor Int
+  servesToFloor   Int
+  quantity        Int      @default(1)
+  status          String   @default("active")
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@unique([buildingId, code])
+  @@index([tenantId, buildingId, transportType])
+  @@map("building_vertical_transport")
+}
+
+model BuildingSystem {
+  id             String   @id @default(uuid())
+  tenantId       String
+  buildingId     String
+  systemCategory String
+  systemCode     String
+  name           String
+  locationType   String?
+  floorId        String?
+  quantity       Int?
+  status         String   @default("active")
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  building Building       @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  floor    BuildingFloor? @relation(fields: [floorId], references: [id], onDelete: SetNull)
+
+  @@unique([buildingId, systemCode])
+  @@index([tenantId, buildingId, systemCategory])
+  @@map("building_systems")
+}
+
+model BuildingOccupantCompany {
+  id           String   @id @default(uuid())
+  tenantId     String
+  buildingId   String
+  companyName  String
+  companyType  String?
+  contactName  String?
+  phone        String?
+  email        String?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  building    Building                @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  occupancies BuildingUnitOccupancy[]
+  contracts   BuildingContract[]
+
+  @@index([tenantId, buildingId])
+  @@map("building_occupant_companies")
+}
+
+model BuildingUnitOccupancy {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  buildingId         String
+  unitId             String
+  occupantCompanyId  String
+  startDate          DateTime?
+  endDate            DateTime?
+  occupancyStatus    String    @default("active")
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  building         Building                @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  unit             BuildingUnit            @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  occupantCompany  BuildingOccupantCompany @relation(fields: [occupantCompanyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, buildingId, unitId])
+  @@index([occupantCompanyId])
+  @@map("building_unit_occupancies")
+}
+
+model BuildingContract {
+  id                String    @id @default(uuid())
+  tenantId          String
+  buildingId        String
+  occupantCompanyId String
+  unitId            String?
+  contractType      String
+  contractNumber    String?
+  startDate         DateTime?
+  endDate           DateTime?
+  status            String    @default("draft")
+  amount            Float?
+  currency          String?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  building         Building                @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  occupantCompany  BuildingOccupantCompany @relation(fields: [occupantCompanyId], references: [id], onDelete: Cascade)
+  unit             BuildingUnit?           @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, buildingId, contractType])
+  @@index([occupantCompanyId])
+  @@map("building_contracts")
+}
+
+model SeedRun {
+  id          String   @id @default(uuid())
+  tenantId    String?
+  seedName    String
+  seedVersion String
+  status      String
+  checksum    String
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+  createdBy   String   @default("seed:test-building")
+  errorText   String?
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@unique([seedName, seedVersion])
+  @@map("seed_runs")
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "id": "srun_6917cad2b8d985e2",
+    "tenantId": "ten_9835688663a81172",
+    "seedName": "test-building",
+    "seedVersion": "2026-04-18",
+    "status": "completed",
+    "checksum": "4259b685a588fdedb175b8970b6c53dd8c11c44a",
+    "startedAt": "2026-04-18T07:13:53.772Z",
+    "finishedAt": "2026-04-18T07:13:53.772Z",
+    "createdBy": "seed:test-building",
+    "errorText": null
+  }
+]

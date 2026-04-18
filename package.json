@@ -1,0 +1,44 @@
+{
+  "name": "@domera/api",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "nest start --watch",
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "start:worker": "node prisma/seeds/register-schedulers.mjs",
+    "seed:test-building": "node prisma/seeds/seed-test-building.mjs",
+    "seed": "pnpm run seed:test-building",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:rls": "node prisma/rls/apply-rls.mjs",
+    "lint": "echo \"todo: lint api\"",
+    "test": "echo \"todo: test api\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "prisma": {
+    "seed": "node prisma/seeds/seed-test-building.mjs"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/platform-express": "^11.0.1",
+    "@prisma/client": "^6.16.3",
+    "bcryptjs": "^3.0.3",
+    "bullmq": "^5.58.0",
+    "jsonwebtoken": "^9.0.3",
+    "reflect-metadata": "^0.2.2",
+    "rrule": "^2.8.1",
+    "rxjs": "^7.8.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.15.17",
+    "prisma": "^6.16.3",
+    "typescript": "^5.8.3"
+  }
+}

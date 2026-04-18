@@ -1,0 +1,28 @@
+# deps
+node_modules
+pnpm-lock.yaml
+yarn.lock
+.pnpm-store
+
+# builds
+dist
+build
+.turbo
+*.tsbuildinfo
+
+# env
+.env
+.env.*
+!.env.example
+
+# prisma
+prisma/.database
+prisma/migrations/migration_lock.toml
+
+# local tooling
+.DS_Store
+.vscode
+.idea
+*.log
+coverage
+.nyc_output
