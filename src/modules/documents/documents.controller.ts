@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, Post, Query, Req, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, Post, Query, Req, Res, UnauthorizedException } from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { DocumentsService } from './documents.service';
@@ -98,5 +98,32 @@ export class DocumentsController {
   @Delete(':id')
   del(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
     return this.svc.delete(resolveTenantId(th), id);
+  }
+
+  @Post(':id/signed-url')
+  async signedUrl(
+    @Param('id') id: string,
+    @Body() body: { ttlSeconds?: number } | undefined,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
+  ) {
+    return this.svc.issueSignedUrl(resolveTenantId(th), await uid(ah, this.auth), id, body?.ttlSeconds || 300);
+  }
+}
+
+@Controller('documents/signed')
+export class DocumentsSignedController {
+  constructor(private readonly svc: DocumentsService) {}
+
+  @Get(':token')
+  async redeem(
+    @Param('token') token: string,
+    @Req() _req: any,
+    @Res({ passthrough: false } as any) res: any,
+  ) {
+    const r = await this.svc.redeemSignedUrl(token);
+    res.setHeader('Content-Type', r.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `inline; filename="${r.title.replace(/[^\w.-]+/g, '_')}"`);
+    res.end(r.body);
   }
 }

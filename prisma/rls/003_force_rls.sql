@@ -89,6 +89,12 @@ declare
     'inbound_webhook_events',
     'personal_data_categories',
     'dsar_requests',
+    'identity_providers',
+    'oidc_login_states',
+    'scim_tokens',
+    'signed_urls',
+    'subprocessor_registry',
+    'dpa_templates',
     'seed_runs'
   ];
 begin

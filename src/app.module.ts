@@ -37,6 +37,9 @@ import { PrivacyModule } from './modules/privacy/privacy.module';
 import { MfaModule } from './modules/mfa/mfa.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { MetricsMiddleware } from './modules/metrics/metrics.middleware';
+import { SsoModule } from './modules/sso/sso.module';
+import { ScimModule } from './modules/scim/scim.module';
+import { ConnectorsModule } from './modules/connectors/connectors.module';
 
 @Module({
   imports: [
@@ -76,6 +79,9 @@ import { MetricsMiddleware } from './modules/metrics/metrics.middleware';
     PrivacyModule,
     MfaModule,
     MetricsModule,
+    SsoModule,
+    ScimModule,
+    ConnectorsModule,
   ],
 })
 export class AppModule implements NestModule {

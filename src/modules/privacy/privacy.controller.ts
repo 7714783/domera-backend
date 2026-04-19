@@ -60,4 +60,82 @@ export class PrivacyController {
   ) {
     return this.svc.processDsar(resolveTenantId(th), await uid(ah, this.auth), id);
   }
+
+  // ─── Subprocessor registry ───────────────────────────────────
+  @Get('subprocessors')
+  listSubprocessors(
+    @Query('status') status?: string,
+    @Query('category') category?: string,
+    @Headers('x-tenant-id') th?: string,
+  ) {
+    return this.svc.listSubprocessors(resolveTenantId(th), { status, category });
+  }
+
+  @Post('subprocessors')
+  async upsertSubprocessor(
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+  ) {
+    return this.svc.upsertSubprocessor(resolveTenantId(th), await uid(ah, this.auth), body);
+  }
+
+  @Post('subprocessors/:id/approve')
+  async approveSubprocessor(
+    @Param('id') id: string,
+    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+  ) {
+    return this.svc.approveSubprocessor(resolveTenantId(th), await uid(ah, this.auth), id);
+  }
+
+  @Post('subprocessors/:id/retire')
+  async retireSubprocessor(
+    @Param('id') id: string,
+    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+  ) {
+    return this.svc.retireSubprocessor(resolveTenantId(th), await uid(ah, this.auth), id);
+  }
+
+  @Post('subprocessors/seed-built-ins')
+  async seedSubprocessors(
+    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+  ) {
+    return this.svc.seedSubprocessors(resolveTenantId(th), await uid(ah, this.auth));
+  }
+
+  // ─── DPA templates ───────────────────────────────────────────
+  @Get('dpa-templates')
+  listDpaTemplates(
+    @Query('jurisdiction') jurisdiction?: string,
+    @Query('includeInactive') includeInactive?: string,
+    @Headers('x-tenant-id') th?: string,
+  ) {
+    return this.svc.listDpaTemplates(resolveTenantId(th), {
+      jurisdiction,
+      includeInactive: includeInactive === '1' || includeInactive === 'true',
+    });
+  }
+
+  @Post('dpa-templates')
+  async createDpaTemplate(
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+  ) {
+    return this.svc.createDpaTemplate(resolveTenantId(th), await uid(ah, this.auth), body);
+  }
+
+  @Post('dpa-templates/:id/render')
+  renderDpaTemplate(
+    @Param('id') id: string,
+    @Body() body: { values: Record<string, string> },
+    @Headers('x-tenant-id') th?: string,
+  ) {
+    return this.svc.renderDpaTemplate(resolveTenantId(th), id, body?.values || {});
+  }
+
+  @Post('dpa-templates/seed-built-ins')
+  async seedDpaTemplates(
+    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+  ) {
+    return this.svc.seedDpaTemplates(resolveTenantId(th), await uid(ah, this.auth));
+  }
 }

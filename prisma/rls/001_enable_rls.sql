@@ -95,7 +95,13 @@ declare
     'inbound_webhook_sources',
     'inbound_webhook_events',
     'personal_data_categories',
-    'dsar_requests'
+    'dsar_requests',
+    'identity_providers',
+    'oidc_login_states',
+    'scim_tokens',
+    'signed_urls',
+    'subprocessor_registry',
+    'dpa_templates'
   ];
 begin
   foreach t in array direct_tables loop

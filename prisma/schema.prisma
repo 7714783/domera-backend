@@ -2086,6 +2086,157 @@ model DsarRequest {
   @@map("dsar_requests")
 }
 
+// SSOT §P19 — DPA templates + subprocessor registry
+model SubprocessorRegistry {
+  id              String   @id @default(uuid())
+  tenantId        String
+  name            String
+  legalEntity     String?
+  countryCode     String?
+  category        String   // hosting | email | sms | storage | analytics | accounting | other
+  websiteUrl      String?
+  dpoEmail        String?
+  region          String?  // e.g. "EU", "Israel", "US-East"
+  dataCategories  String[] @default([]) // PersonalDataCategory.key list this subprocessor touches
+  notes           String?
+  approvedAt      DateTime?
+  approvedByUserId String?
+  status          String   @default("active") // active | suspended | retired
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([tenantId, name])
+  @@index([tenantId, status])
+  @@map("subprocessor_registry")
+}
+
+model DpaTemplate {
+  id              String   @id @default(uuid())
+  tenantId        String
+  key             String   // controller_to_processor | joint_controller | tom_addendum
+  name            String
+  jurisdiction    String   @default("EU")
+  version         Int      @default(1)
+  isActive        Boolean  @default(true)
+  bodyMarkdown    String
+  placeholders    String[] @default([])
+  retentionYears  Int?
+  effectiveFrom   DateTime @default(now())
+  effectiveUntil  DateTime?
+  supersedesId    String?
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([tenantId, key, jurisdiction, version])
+  @@index([tenantId, isActive])
+  @@map("dpa_templates")
+}
+
+// ── OIDC / SAML SSO (SSOT §P2) ──────────────────────────────────────
+// Per-tenant registration of an upstream identity provider.
+model IdentityProvider {
+  id              String   @id @default(uuid())
+  tenantId        String
+  key             String   // "google" | "microsoft" | "okta-acme" | custom
+  displayName     String
+  protocol        String   @default("oidc")  // oidc | saml
+  // OIDC fields
+  issuerUrl       String?  // e.g. https://accounts.google.com
+  clientId        String?
+  clientSecret    String?  // encrypt at rest in production
+  scopes          String[] @default(["openid", "email", "profile"])
+  authorizationEndpoint String?
+  tokenEndpoint   String?
+  userinfoEndpoint String?
+  jwksUri         String?
+  // SAML fields (metadata URL or inline entity descriptor)
+  samlMetadataUrl String?
+  samlEntityId    String?
+  // Mapping
+  emailClaim      String   @default("email")
+  nameClaim       String   @default("name")
+  groupClaim      String?  // if set, groups → role assignment
+  // Status
+  isActive        Boolean  @default(true)
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([tenantId, key])
+  @@index([tenantId, isActive])
+  @@map("identity_providers")
+}
+
+// Federated identity link — maps an upstream subject (sub) to a local user.
+model FederatedIdentity {
+  id             String   @id @default(uuid())
+  userId         String
+  providerId     String
+  subject        String   // "sub" claim from upstream
+  email          String?
+  displayName    String?
+  rawClaims      Json?
+  createdAt      DateTime @default(now())
+  lastLoginAt    DateTime?
+
+  @@unique([providerId, subject])
+  @@index([userId])
+  @@map("federated_identities")
+}
+
+// Ephemeral state for the OIDC authorize → callback handshake.
+// Persists PKCE code_verifier + nonce + return-to URL between the
+// /sso/login redirect and /sso/callback consumption. TTL 10 minutes.
+model OidcLoginState {
+  id           String   @id @default(uuid())
+  tenantId     String
+  providerId   String
+  state        String   @unique
+  nonce        String
+  codeVerifier String
+  redirectTo   String
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+
+  @@index([expiresAt])
+  @@map("oidc_login_states")
+}
+
+// ── SCIM 2.0 (SSOT §P2) ─────────────────────────────────────────────
+// Bearer token exchanged with an enterprise IdP for /scim/v2/Users.
+model ScimToken {
+  id              String   @id @default(uuid())
+  tenantId        String
+  tokenHash       String   @unique
+  label           String
+  isActive        Boolean  @default(true)
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  lastUsedAt      DateTime?
+  revokedAt       DateTime?
+
+  @@index([tenantId, isActive])
+  @@map("scim_tokens")
+}
+
+// ── Signed URLs for document reads (SSOT §P18) ──────────────────────
+model SignedUrl {
+  id         String   @id @default(uuid())
+  tenantId   String
+  documentId String
+  token      String   @unique
+  expiresAt  DateTime
+  usesLeft   Int      @default(1)
+  createdByUserId String
+  createdAt  DateTime @default(now())
+  usedAt     DateTime?
+
+  @@index([tenantId, documentId])
+  @@index([expiresAt])
+  @@map("signed_urls")
+}
+
 model UserMfa {
   id          String   @id @default(uuid())
   userId      String   @unique

@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ObjectStorage } from './storage';
 
@@ -152,6 +152,45 @@ export class DocumentsService {
       where: { id },
       data: { virusScanStatus: status, virusScanAt: new Date() },
     });
+  }
+
+  async issueSignedUrl(tenantId: string, actorUserId: string, id: string, ttlSeconds: number) {
+    const doc = await this.prisma.document.findFirst({ where: { id, tenantId } });
+    if (!doc) throw new NotFoundException('document not found');
+    if (doc.virusScanStatus === 'infected') throw new ForbiddenException('document is quarantined');
+    const ttl = Math.min(Math.max(ttlSeconds || 300, 30), 24 * 3600);
+    const token = randomBytes(24).toString('hex');
+    const row = await this.prisma.signedUrl.create({
+      data: {
+        tenantId, documentId: id, token,
+        expiresAt: new Date(Date.now() + ttl * 1000),
+        usesLeft: 1,
+        createdByUserId: actorUserId,
+      },
+    });
+    const base = process.env.API_URL || 'http://localhost:4000';
+    return {
+      url: `${base}/v1/documents/signed/${token}`,
+      expiresAt: row.expiresAt,
+      usesLeft: row.usesLeft,
+    };
+  }
+
+  async redeemSignedUrl(token: string): Promise<{ body: Buffer; mimeType: string | null; title: string }> {
+    const row = await this.prisma.signedUrl.findUnique({ where: { token } });
+    if (!row) throw new NotFoundException('signed url not found');
+    if (row.expiresAt.getTime() < Date.now()) throw new ForbiddenException('signed url expired');
+    if (row.usesLeft <= 0) throw new ForbiddenException('signed url exhausted');
+    const doc = await this.prisma.document.findFirst({ where: { id: row.documentId, tenantId: row.tenantId } });
+    if (!doc) throw new NotFoundException('document not found');
+    if (doc.virusScanStatus === 'infected') throw new ForbiddenException('document is quarantined');
+
+    await this.prisma.signedUrl.update({
+      where: { id: row.id },
+      data: { usesLeft: row.usesLeft - 1, usedAt: new Date() },
+    });
+    const body = await this.storage.get(doc.storageKey);
+    return { body, mimeType: doc.mimeType, title: doc.title };
   }
 
   async search(

@@ -11,6 +11,8 @@ const BYPASS_PATHS = [
   '/v1/seed-runtime',
   '/v1/public/qr',
   '/v1/metrics',
+  '/v1/documents/signed/',
+  '/v1/sso/callback',
 ];
 
 @Injectable()

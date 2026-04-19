@@ -69,6 +69,23 @@ export class AuthService {
     });
   }
 
+  /**
+   * Issue a JWT + session row for a user who authenticated out-of-band
+   * (e.g. SSO, SCIM password reset). Used by the SsoService after a
+   * successful OIDC callback.
+   */
+  async issueSession(userId: string, meta?: { userAgent?: string; ipAddress?: string; source?: string; providerKey?: string }) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true, isSuperAdmin: true },
+    });
+    if (!user) throw new UnauthorizedException('user not found');
+    const jti = crypto.randomUUID();
+    const token = this.sign(user, jti);
+    await this.createSession(userId, token, { userAgent: meta?.userAgent, ipAddress: meta?.ipAddress });
+    return { token, jti };
+  }
+
   async register(
     body: { username: string; password: string; email?: string; displayName?: string },
     meta?: { userAgent?: string; ipAddress?: string },
