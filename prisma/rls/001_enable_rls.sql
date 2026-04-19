@@ -101,7 +101,16 @@ declare
     'scim_tokens',
     'signed_urls',
     'subprocessor_registry',
-    'dpa_templates'
+    'dpa_templates',
+    'cleaning_contractors',
+    'cleaning_roles',
+    'cleaning_staff',
+    'cleaning_zones',
+    'cleaning_qr_points',
+    'cleaning_requests',
+    'cleaning_request_comments',
+    'cleaning_request_attachments',
+    'cleaning_request_history'
   ];
 begin
   foreach t in array direct_tables loop

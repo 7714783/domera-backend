@@ -13,6 +13,7 @@ const BYPASS_PATHS = [
   '/v1/metrics',
   '/v1/documents/signed/',
   '/v1/sso/callback',
+  '/v1/public/cleaning/',
 ];
 
 @Injectable()

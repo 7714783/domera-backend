@@ -2237,6 +2237,181 @@ model SignedUrl {
   @@map("signed_urls")
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// Cleaning module (bounded context): contractors, staff hierarchy, zones,
+// QR points, cleaning requests + lifecycle audit. Intentionally separated
+// from PPM/maintenance — a cleaning request is NOT a TaskInstance.
+// ═══════════════════════════════════════════════════════════════════
+model CleaningContractor {
+  id         String   @id @default(uuid())
+  tenantId   String
+  buildingId String
+  name       String
+  legalName  String?
+  phone      String?
+  email      String?
+  isActive   Boolean  @default(true)
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([buildingId, name])
+  @@index([tenantId, buildingId, isActive])
+  @@map("cleaning_contractors")
+}
+
+model CleaningRole {
+  id           String @id @default(uuid())
+  tenantId     String
+  contractorId String
+  code         String // boss | manager | supervisor | cleaner | dispatcher
+  name         String
+  createdAt    DateTime @default(now())
+
+  @@unique([contractorId, code])
+  @@index([tenantId, contractorId])
+  @@map("cleaning_roles")
+}
+
+model CleaningStaff {
+  id           String  @id @default(uuid())
+  tenantId     String
+  contractorId String
+  userId       String?
+  fullName     String
+  phone        String?
+  email        String?
+  roleId       String
+  managerId    String?
+  isActive     Boolean @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId, contractorId, isActive])
+  @@index([userId])
+  @@index([managerId])
+  @@map("cleaning_staff")
+}
+
+model CleaningZone {
+  id                 String  @id @default(uuid())
+  tenantId           String
+  buildingId         String
+  floorId            String?
+  locationId         String?
+  name               String
+  code               String
+  zoneType           String // floor | wc | office | lobby | corridor | shared_area | custom
+  contractorId       String?
+  supervisorStaffId  String?
+  isActive           Boolean @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([buildingId, code])
+  @@index([tenantId, buildingId, contractorId])
+  @@index([zoneType])
+  @@map("cleaning_zones")
+}
+
+model CleaningQrPoint {
+  id            String   @id @default(uuid())
+  tenantId      String
+  buildingId    String
+  zoneId        String
+  locationId    String?
+  code          String   @unique // short, random, unguessable public code
+  label         String
+  publicUrl     String
+  isActive      Boolean  @default(true)
+  lastScannedAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([tenantId, buildingId, isActive])
+  @@index([zoneId])
+  @@map("cleaning_qr_points")
+}
+
+model CleaningRequest {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  buildingId          String
+  zoneId              String
+  qrPointId           String?
+  createdByUserId     String?
+  createdByGuestName  String?
+  createdByGuestPhone String?
+  source              String   // dashboard | qr | admin | dispatcher
+  category            String   // regular_cleaning | urgent_cleaning | spill | restroom_issue | trash_overflow | other
+  title               String
+  description         String?
+  priority            String   @default("normal") // low | normal | high | urgent
+  status              String   @default("new")    // new | assigned | in_progress | done | rejected | cancelled
+  contractorId        String?
+  assignedStaffId     String?
+  requestedAt         DateTime @default(now())
+  assignedAt          DateTime?
+  startedAt           DateTime?
+  resolvedAt          DateTime?
+  dueAt               DateTime?
+  closedByUserId      String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([tenantId, buildingId, status])
+  @@index([contractorId, status])
+  @@index([assignedStaffId, status])
+  @@index([zoneId])
+  @@index([dueAt])
+  @@map("cleaning_requests")
+}
+
+model CleaningRequestComment {
+  id             String   @id @default(uuid())
+  tenantId       String
+  requestId      String
+  authorUserId   String?
+  authorStaffId  String?
+  body           String
+  isInternal     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([requestId, createdAt])
+  @@index([tenantId])
+  @@map("cleaning_request_comments")
+}
+
+model CleaningRequestAttachment {
+  id                 String   @id @default(uuid())
+  tenantId           String
+  requestId          String
+  fileUrl            String
+  fileType           String
+  uploadedByUserId   String?
+  uploadedByStaffId  String?
+  createdAt          DateTime @default(now())
+
+  @@index([requestId])
+  @@index([tenantId])
+  @@map("cleaning_request_attachments")
+}
+
+model CleaningRequestHistory {
+  id          String   @id @default(uuid())
+  tenantId    String
+  requestId   String
+  action      String
+  actorType   String   // user | staff | system | guest
+  actorId     String?
+  payloadJson Json?
+  createdAt   DateTime @default(now())
+
+  @@index([requestId, createdAt])
+  @@index([tenantId])
+  @@map("cleaning_request_history")
+}
+
 model UserMfa {
   id          String   @id @default(uuid())
   userId      String   @unique

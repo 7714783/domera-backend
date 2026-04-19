@@ -40,6 +40,7 @@ import { MetricsMiddleware } from './modules/metrics/metrics.middleware';
 import { SsoModule } from './modules/sso/sso.module';
 import { ScimModule } from './modules/scim/scim.module';
 import { ConnectorsModule } from './modules/connectors/connectors.module';
+import { CleaningModule } from './modules/cleaning/cleaning.module';
 
 @Module({
   imports: [
@@ -82,6 +83,7 @@ import { ConnectorsModule } from './modules/connectors/connectors.module';
     SsoModule,
     ScimModule,
     ConnectorsModule,
+    CleaningModule,
   ],
 })
 export class AppModule implements NestModule {
