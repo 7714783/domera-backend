@@ -230,4 +230,180 @@ export class ImportsService {
     });
     return { ok: true, importJobId: updated.id, removedTemplates, removedBases, removedRules };
   }
+
+  /**
+   * PDF bundle import: accepts N PDF filenames (stored out-of-band at
+   * `storageKeys[]`) plus a manifest that maps each PDF to a target entity
+   * (task / project / asset / work_order) and a documentTypeKey. Creates:
+   *   1. Document rows (status='imported', storageKey + mime='application/pdf')
+   *   2. DocumentLink rows per (documentId, targetType, targetId) in the manifest
+   *   3. Legacy CompletionRecord rows when the manifest entry declares kind='completion'
+   *      (for backfilling pre-Domera maintenance history).
+   * Returns a preview first; caller commits with /imports/pdf-bundle/:id/commit.
+   */
+  async pdfBundlePreview(
+    tenantId: string, actorUserId: string,
+    body: {
+      buildingId: string;
+      filename: string;
+      manifest: Array<{
+        storageKey: string;
+        mimeType?: string;
+        sizeBytes?: number;
+        title: string;
+        documentTypeKey: string;
+        targetType?: string;   // ppm_task | work_order | equipment | project | incident
+        targetId?: string;
+        completion?: {          // optional legacy-completion backfill
+          workOrderId?: string;
+          taskInstanceId?: string;
+          completedAt: string;  // occurred_at (business date)
+          labourHours?: number;
+          labourCost?: number;
+          materialsCost?: number;
+          notes?: string;
+        };
+        retentionClass?: string;
+      }>;
+    },
+  ) {
+    if (!body.buildingId) throw new BadRequestException('buildingId required');
+    if (!Array.isArray(body.manifest) || body.manifest.length === 0) {
+      throw new BadRequestException('manifest is empty');
+    }
+
+    const building = await this.prisma.building.findFirst({ where: { id: body.buildingId, tenantId }, select: { id: true } });
+    if (!building) throw new NotFoundException('building not found');
+
+    const catalog = await this.loadCatalog();
+    const knownDocKeys = new Set(catalog.documentTypes.map((d) => d.key));
+
+    const validation = body.manifest.map((m, idx) => {
+      const errs: string[] = [];
+      if (!m.storageKey) errs.push('storageKey required');
+      if (!m.title) errs.push('title required');
+      if (!m.documentTypeKey) errs.push('documentTypeKey required');
+      else if (!knownDocKeys.has(m.documentTypeKey)) errs.push(`unknown documentTypeKey: ${m.documentTypeKey}`);
+      if (m.targetType && !m.targetId) errs.push('targetId required when targetType set');
+      if (m.completion && !m.completion.completedAt) errs.push('completion.completedAt required');
+      return { idx, errors: errs };
+    });
+    const errors = validation.filter((v) => v.errors.length > 0);
+
+    const summary = {
+      filename: body.filename,
+      totalPdfs: body.manifest.length,
+      toCreateDocuments: body.manifest.length - errors.length,
+      toCreateLinks: body.manifest.filter((m) => m.targetType && m.targetId).length,
+      toBackfillCompletions: body.manifest.filter((m) => m.completion).length,
+      errors: errors.length,
+      errorDetail: errors,
+    };
+
+    const job = await this.prisma.importJob.create({
+      data: {
+        tenantId,
+        kind: 'pdf_bundle',
+        sourceKey: `bundle://${body.filename}`,
+        status: 'preview_ready',
+        summary: { ...summary, manifest: body.manifest, buildingId: body.buildingId } as any,
+        createdBy: actorUserId,
+      },
+    });
+    return { importJobId: job.id, summary };
+  }
+
+  async pdfBundleCommit(tenantId: string, id: string, occurredAt?: string | Date) {
+    const job = await this.prisma.importJob.findUnique({ where: { id } });
+    if (!job) throw new NotFoundException('import job not found');
+    if (job.kind !== 'pdf_bundle') throw new BadRequestException('job is not a pdf_bundle');
+    if (job.status === 'committed') throw new BadRequestException('already committed');
+    if (job.status === 'rolled_back') throw new BadRequestException('cannot re-commit rolled-back job');
+    const summary = (job.summary || {}) as any;
+    if (summary.errors > 0) throw new BadRequestException(`manifest has ${summary.errors} errors`);
+
+    const buildingId: string = summary.buildingId;
+    const manifest: any[] = summary.manifest || [];
+
+    const createdDocIds: string[] = [];
+    const createdLinkIds: string[] = [];
+    const createdCompletionIds: string[] = [];
+
+    for (const m of manifest) {
+      const doc = await this.prisma.document.create({
+        data: {
+          tenantId, buildingId,
+          title: m.title,
+          documentType: 'pdf_bundle',
+          documentTypeKey: m.documentTypeKey,
+          status: 'imported',
+          versionNo: 1,
+          storageKey: m.storageKey,
+          mimeType: m.mimeType || 'application/pdf',
+          sizeBytes: m.sizeBytes ?? null,
+          virusScanStatus: 'unscanned',
+          retentionClass: m.retentionClass || 'statutory_7y',
+          createdBy: `import:${job.id}`,
+        },
+      });
+      createdDocIds.push(doc.id);
+
+      if (m.targetType && m.targetId) {
+        const link = await this.prisma.documentLink.create({
+          data: {
+            tenantId,
+            documentId: doc.id,
+            targetType: m.targetType,
+            targetId: m.targetId,
+            createdBy: `import:${job.id}`,
+          },
+        });
+        createdLinkIds.push(link.id);
+      }
+
+      if (m.completion) {
+        const c = await this.prisma.completionRecord.create({
+          data: {
+            tenantId, buildingId,
+            workOrderId: m.completion.workOrderId || null,
+            taskInstanceId: m.completion.taskInstanceId || null,
+            completedByUserId: `import:${job.id}`,
+            completedAt: new Date(m.completion.completedAt),
+            labourHours: m.completion.labourHours ?? null,
+            labourCost: m.completion.labourCost ?? null,
+            materialsCost: m.completion.materialsCost ?? null,
+            serviceReportDocumentId: doc.id,
+            notes: [m.completion.notes, `backfilled from PDF bundle import ${job.id}`].filter(Boolean).join(' — '),
+          },
+        });
+        createdCompletionIds.push(c.id);
+      }
+    }
+
+    const now = new Date();
+    const updated = await this.prisma.importJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'committed',
+        committedAt: now,
+        occurredAt: occurredAt ? new Date(occurredAt) : null,
+        finishedAt: now,
+        createdEntities: {
+          document: createdDocIds,
+          documentLink: createdLinkIds,
+          completionRecord: createdCompletionIds,
+        } as any,
+      },
+    });
+    return {
+      ok: true,
+      importJobId: updated.id,
+      createdDocuments: createdDocIds.length,
+      createdLinks: createdLinkIds.length,
+      backfilledCompletions: createdCompletionIds.length,
+      recordedAt: updated.createdAt,
+      committedAt: updated.committedAt,
+      occurredAt: updated.occurredAt,
+    };
+  }
 }

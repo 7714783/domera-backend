@@ -13,7 +13,7 @@
     "db:generate": "prisma generate",
     "db:rls": "node prisma/rls/apply-rls.mjs 002_split_roles.sql 001_enable_rls.sql 003_force_rls.sql 004_public_qr_rpc.sql",
     "lint": "echo \"todo: lint api\"",
-    "test": "echo \"todo: test api\"",
+    "test": "node test/auth-smoke.mjs",
     "typecheck": "tsc --noEmit"
   },
   "prisma": {

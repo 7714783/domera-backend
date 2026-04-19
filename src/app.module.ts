@@ -31,6 +31,12 @@ import { CalendarBlackoutsModule } from './modules/calendar-blackouts/calendar-b
 import { ConditionTriggersModule } from './modules/condition-triggers/condition-triggers.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { LeasesModule } from './modules/leases/leases.module';
+import { EventsModule } from './modules/events/events.module';
+import { WebhooksModule } from './modules/webhooks/webhooks.module';
+import { PrivacyModule } from './modules/privacy/privacy.module';
+import { MfaModule } from './modules/mfa/mfa.module';
+import { MetricsModule } from './modules/metrics/metrics.module';
+import { MetricsMiddleware } from './modules/metrics/metrics.middleware';
 
 @Module({
   imports: [
@@ -65,10 +71,16 @@ import { LeasesModule } from './modules/leases/leases.module';
     ConditionTriggersModule,
     ProjectsModule,
     LeasesModule,
+    EventsModule,
+    WebhooksModule,
+    PrivacyModule,
+    MfaModule,
+    MetricsModule,
   ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
+    consumer.apply(MetricsMiddleware).forRoutes('*');
     consumer.apply(TenantMiddleware).forRoutes('*');
   }
 }

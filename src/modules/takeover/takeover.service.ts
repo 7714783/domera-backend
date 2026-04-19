@@ -99,6 +99,81 @@ export class TakeoverService {
     };
   }
 
+  /**
+   * Readiness scoring: what fraction of the operational checklist is in place
+   * for a takeover case? Weighted blend of mandatory-doc coverage, overdue
+   * count, missing evidence, and qualification gaps. Returns a 0..100 score
+   * with component breakdown — intended for the takeover UI dial.
+   *
+   * Weights (sum = 100):
+   *   mandatoryDocsPresent    40
+   *   overdueTasksResolved    25
+   *   evidencePresent         20
+   *   qualificationsSatisfied 15
+   */
+  async readinessScore(tenantId: string, caseId: string) {
+    const gap = await this.gapAnalysis(tenantId, caseId);
+
+    const c = await this.prisma.takeoverCase.findFirst({ where: { id: caseId, tenantId }, select: { buildingId: true, signedOffAt: true, status: true } });
+    if (!c) throw new NotFoundException('takeover case not found');
+
+    // Mandatory documents presence: ratio of ObligationTemplate.requiredDocumentTypeKey
+    // that has at least one Document of that type in the building.
+    const templates = await this.prisma.obligationTemplate.findMany({
+      where: { tenantId, requiredDocumentTypeKey: { not: null } },
+      select: { requiredDocumentTypeKey: true, buildingLinks: { where: { buildingId: c.buildingId }, select: { id: true } } },
+    });
+    const applicableDocKeys = [...new Set(templates.filter((t) => t.buildingLinks.length > 0).map((t) => t.requiredDocumentTypeKey!))];
+    let presentDocKeys = 0;
+    if (applicableDocKeys.length > 0) {
+      const docs = await this.prisma.document.findMany({
+        where: { tenantId, buildingId: c.buildingId, documentTypeKey: { in: applicableDocKeys } },
+        select: { documentTypeKey: true },
+      });
+      const present = new Set(docs.map((d) => d.documentTypeKey!));
+      presentDocKeys = applicableDocKeys.filter((k) => present.has(k)).length;
+    }
+    const mandatoryDocsPct = applicableDocKeys.length === 0 ? 100 : Math.round((presentDocKeys / applicableDocKeys.length) * 100);
+
+    // Overdue ratio: penalty scaled against total tasks.
+    const totalTasks = await this.prisma.taskInstance.count({ where: { tenantId, buildingId: c.buildingId } });
+    const overduePct = totalTasks === 0 ? 100 : Math.round(((totalTasks - gap.summary.overdue) / totalTasks) * 100);
+
+    // Evidence presence on completed tasks.
+    const completedCount = await this.prisma.taskInstance.count({
+      where: { tenantId, buildingId: c.buildingId, lifecycleStage: { in: ['completed', 'evidence_distributed', 'archived'] } },
+    });
+    const evidencePct = completedCount === 0 ? 100 : Math.round(((completedCount - gap.summary.missing_evidence) / completedCount) * 100);
+
+    // Qualification coverage: fraction of tasks whose certification requirement is met.
+    const certGapCount = gap.summary.qualification_gaps;
+    const certRequiredCount = await this.prisma.taskInstance.count({
+      where: { tenantId, buildingId: c.buildingId, requiredCertificationKey: { not: null } },
+    });
+    const qualPct = certRequiredCount === 0 ? 100 : Math.round(((certRequiredCount - certGapCount) / certRequiredCount) * 100);
+
+    const score = Math.round(
+      0.40 * mandatoryDocsPct + 0.25 * overduePct + 0.20 * evidencePct + 0.15 * qualPct,
+    );
+    const grade = score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : score >= 40 ? 'D' : 'F';
+
+    return {
+      caseId,
+      score, grade,
+      components: {
+        mandatoryDocsPresent: { pct: mandatoryDocsPct, weight: 40, present: presentDocKeys, total: applicableDocKeys.length },
+        overdueTasksResolved: { pct: overduePct, weight: 25, overdue: gap.summary.overdue, totalTasks },
+        evidencePresent: { pct: evidencePct, weight: 20, missingEvidence: gap.summary.missing_evidence, completedTasks: completedCount },
+        qualificationsSatisfied: { pct: qualPct, weight: 15, gaps: certGapCount, certRequired: certRequiredCount },
+      },
+      canSignoff: score >= 75 && gap.summary.missing_statutory === 0,
+      blockers: [
+        ...(gap.summary.missing_statutory > 0 ? [`${gap.summary.missing_statutory} mandatory obligations not linked to building`] : []),
+        ...(score < 75 ? [`overall readiness ${score}% below signoff threshold 75%`] : []),
+      ],
+    };
+  }
+
   async signoff(tenantId: string, caseId: string, actorUserId: string, actorRole: string) {
     const c = await this.prisma.takeoverCase.findFirst({ where: { id: caseId, tenantId } });
     if (!c) throw new NotFoundException('takeover case not found');

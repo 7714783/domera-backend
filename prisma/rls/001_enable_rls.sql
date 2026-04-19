@@ -89,7 +89,13 @@ declare
     'acceptance_packs',
     'tenant_representatives',
     'approval_policies',
-    'approval_delegations'
+    'approval_delegations',
+    'outbox_events',
+    'webhook_subscriptions',
+    'inbound_webhook_sources',
+    'inbound_webhook_events',
+    'personal_data_categories',
+    'dsar_requests'
   ];
 begin
   foreach t in array direct_tables loop

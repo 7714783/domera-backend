@@ -47,6 +47,26 @@ export class ImportsController {
     const tenantId = resolveTenantId(tenantIdHeader);
     return this.importsService.rollback(tenantId, id, body?.reason);
   }
+
+  @Post('pdf-bundle/preview')
+  async pdfBundlePreview(
+    @Body() body: any,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Headers('x-actor-user-id') actorHeader?: string,
+  ) {
+    const tenantId = resolveTenantId(tenantIdHeader);
+    return this.importsService.pdfBundlePreview(tenantId, actorHeader || 'system', body);
+  }
+
+  @Post('pdf-bundle/:id/commit')
+  async pdfBundleCommit(
+    @Param('id') id: string,
+    @Body() body: { occurredAt?: string } | undefined,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+  ) {
+    const tenantId = resolveTenantId(tenantIdHeader);
+    return this.importsService.pdfBundleCommit(tenantId, id, body?.occurredAt);
+  }
 }
 
 function readStream(req: any): Promise<Buffer> {

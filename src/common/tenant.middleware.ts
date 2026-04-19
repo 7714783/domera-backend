@@ -10,6 +10,7 @@ const BYPASS_PATHS = [
   '/v1/auth/refresh',
   '/v1/seed-runtime',
   '/v1/public/qr',
+  '/v1/metrics',
 ];
 
 @Injectable()

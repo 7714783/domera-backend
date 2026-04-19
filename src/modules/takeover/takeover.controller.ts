@@ -22,6 +22,12 @@ export class TakeoverController {
     return this.takeover.gapAnalysis(tenantId, id);
   }
 
+  @Get(':id/readiness')
+  async readiness(@Param('id') id: string, @Headers('x-tenant-id') tenantIdHeader?: string) {
+    const tenantId = resolveTenantId(tenantIdHeader);
+    return this.takeover.readinessScore(tenantId, id);
+  }
+
   @Post(':id/signoff')
   async signoff(
     @Param('id') id: string,

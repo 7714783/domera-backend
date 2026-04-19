@@ -1981,6 +1981,126 @@ model TenantRepresentative {
   @@map("tenant_representatives")
 }
 
+// Transactional outbox (SSOT §P16)
+model OutboxEvent {
+  id              String   @id @default(uuid())
+  tenantId        String
+  buildingId      String?
+  specversion     String   @default("1.0")
+  type            String
+  source          String
+  subject         String?
+  datacontenttype String   @default("application/json")
+  time            DateTime @default(now())
+  data            Json
+  status          String   @default("pending")
+  attempts        Int      @default(0)
+  lastAttemptAt   DateTime?
+  lastError       String?
+  deliveredAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([tenantId, status, createdAt])
+  @@index([type])
+  @@map("outbox_events")
+}
+
+model WebhookSubscription {
+  id             String   @id @default(uuid())
+  tenantId       String
+  url            String
+  eventTypes     String[] @default([])
+  sharedSecret   String
+  isActive       Boolean  @default(true)
+  createdByUserId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([tenantId, isActive])
+  @@map("webhook_subscriptions")
+}
+
+model InboundWebhookSource {
+  id              String   @id @default(uuid())
+  tenantId        String
+  channel         String
+  sharedSecret    String
+  signatureHeader String   @default("x-signature")
+  signatureAlgo   String   @default("sha256")
+  isActive        Boolean  @default(true)
+  createdByUserId String
+  createdAt       DateTime @default(now())
+
+  @@unique([tenantId, channel])
+  @@map("inbound_webhook_sources")
+}
+
+model InboundWebhookEvent {
+  id          String   @id @default(uuid())
+  tenantId    String
+  channel     String
+  receivedAt  DateTime @default(now())
+  signatureOk Boolean
+  rawHeaders  Json
+  rawBody     String
+  action      String   @default("logged")
+  notes       String?
+
+  @@index([tenantId, channel, receivedAt])
+  @@map("inbound_webhook_events")
+}
+
+model PersonalDataCategory {
+  id            String   @id @default(uuid())
+  tenantId      String
+  key           String
+  name          String
+  lawfulBasis   String
+  retentionDays Int?
+  location      String
+  processors    String[] @default([])
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([tenantId, key])
+  @@map("personal_data_categories")
+}
+
+model DsarRequest {
+  id                String   @id @default(uuid())
+  tenantId          String
+  subjectUserId     String?
+  subjectEmail      String
+  kind              String
+  status            String   @default("received")
+  requestedAt       DateTime @default(now())
+  verifiedAt        DateTime?
+  completedAt       DateTime?
+  fulfilmentSummary Json?
+  assignedToUserId  String?
+  rejectionReason   String?
+
+  @@index([tenantId, status])
+  @@index([subjectEmail])
+  @@map("dsar_requests")
+}
+
+model UserMfa {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  secret      String
+  algorithm   String   @default("SHA1")
+  digits      Int      @default(6)
+  period      Int      @default(30)
+  enabledAt   DateTime?
+  lastUsedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("user_mfa")
+}
+
 model SeedRun {
   id          String   @id @default(uuid())
   tenantId    String?
