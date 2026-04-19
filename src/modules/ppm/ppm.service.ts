@@ -1,5 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { approxMonths, nextAfter, addMonthsUtc } from './engine/recurrence';
+import { applyBlackouts, BlackoutRule } from './engine/blackout';
 
 /**
  * Lifecycle stages for PPM executions (TaskInstance).
@@ -14,32 +16,46 @@ const ALL_STAGES = [
   'ordered', 'in_progress', 'completed', 'evidence_distributed', 'archived', 'cancelled',
 ];
 
-const RRULE_TO_MONTHS: Array<[RegExp, number]> = [
-  [/FREQ=DAILY/, 0],
-  [/FREQ=WEEKLY;INTERVAL=2/, 0.5],
-  [/FREQ=MONTHLY;INTERVAL=1/, 1],
-  [/FREQ=MONTHLY;INTERVAL=3/, 3],
-  [/FREQ=MONTHLY;INTERVAL=6/, 6],
-  [/FREQ=YEARLY;INTERVAL=1/, 12],
-  [/FREQ=YEARLY;INTERVAL=5/, 60],
-];
-
+/** Months between steps (used for UI + fallback when rrule parse fails). */
 function rruleMonths(rule: string, fallbackMonths: number | null): number {
-  for (const [re, m] of RRULE_TO_MONTHS) if (re.test(rule)) return m;
-  if (fallbackMonths) return fallbackMonths;
-  return 12;
+  return approxMonths(rule, fallbackMonths ?? 12);
 }
 
+/** Compute next occurrence after a reference date, using the real rrule engine. */
 function addMonths(from: Date, months: number): Date {
-  const d = new Date(from);
-  if (months >= 1) d.setMonth(d.getMonth() + Math.round(months));
-  else d.setDate(d.getDate() + Math.round(months * 30));
-  return d;
+  return addMonthsUtc(from, months);
+}
+
+/**
+ * Next-due calculation:
+ *  1. Prefer the rrule `.after()` result if the rule parses.
+ *  2. Otherwise fall back to `approxMonths` arithmetic.
+ */
+function nextDueFrom(rule: string, from: Date, fallbackMonths: number | null): Date {
+  const real = nextAfter(rule, from);
+  if (real) return real;
+  const months = approxMonths(rule, fallbackMonths ?? 12);
+  return addMonthsUtc(from, Math.max(months, 0.5));
 }
 
 @Injectable()
 export class PpmService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private async loadBlackouts(tenantId: string, buildingId: string): Promise<BlackoutRule[]> {
+    const rows = await this.prisma.calendarBlackout.findMany({
+      where: {
+        tenantId, isActive: true,
+        OR: [{ buildingId: null }, { buildingId }],
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id, kind: r.kind, label: r.label,
+      dayOfWeek: r.dayOfWeek, startDate: r.startDate, endDate: r.endDate,
+      annualRecurring: r.annualRecurring, policy: r.policy as any,
+      isActive: r.isActive, buildingId: r.buildingId,
+    }));
+  }
 
   private async requireManager(tenantId: string, actorUserId: string) {
     const ws = await this.prisma.membership.findFirst({
@@ -222,6 +238,42 @@ export class PpmService {
     return t;
   }
 
+  /**
+   * Separation of duties guard for a given lifecycle step.
+   *
+   *  - quoteRequester must not be the same person who later submits for approval
+   *    (requester ≠ submitter) — unless there is no other maintenance_coordinator
+   *  - submitter must not also be the approver (enforced by ApprovalRequest SoD)
+   *  - executor (completion recorder) must not be the same as the final reviewer
+   *    (closedByRoles enforced on completion review)
+   *
+   * Each guard emits a ForbiddenException with a clear reason so a UI can
+   * explain why the action was blocked.
+   */
+  private assertSod(
+    step:
+      | 'submit_for_approval'
+      | 'record_completion'
+      | 'review_completion',
+    actorUserId: string,
+    context: {
+      createdByUserId?: string | null;
+      requesterUserId?: string | null;
+      executorUserId?: string | null;
+    },
+  ) {
+    if (step === 'submit_for_approval') {
+      if (context.requesterUserId && context.requesterUserId === actorUserId) {
+        throw new ForbiddenException('separation_of_duties: quote requester cannot submit the same quote for approval');
+      }
+    }
+    if (step === 'review_completion') {
+      if (context.executorUserId && context.executorUserId === actorUserId) {
+        throw new ForbiddenException('separation_of_duties: executor cannot review their own completion');
+      }
+    }
+  }
+
   private async transition(tenantId: string, actorUserId: string, taskId: string, from: string[], to: string, patch: any = {}) {
     await this.requireManager(tenantId, actorUserId);
     const task = await this.getTask(tenantId, taskId);
@@ -259,6 +311,13 @@ export class PpmService {
     if (task.executionMode !== 'ad_hoc_approved') throw new BadRequestException('only ad_hoc_approved tasks need approval');
     if (task.lifecycleStage !== 'quote_received') throw new BadRequestException(`need quote_received, got ${task.lifecycleStage}`);
 
+    // SoD: the person who requested / recorded the quote may not also submit it for approval.
+    const quoteActorLog = await this.prisma.ppmExecutionLog.findFirst({
+      where: { taskId: task.id, eventType: { in: ['lifecycle.quote_requested', 'lifecycle.quote_received'] } },
+      orderBy: { createdAt: 'asc' },
+    });
+    this.assertSod('submit_for_approval', actorUserId, { requesterUserId: quoteActorLog?.actor });
+
     const approval = await this.prisma.approvalRequest.create({
       data: {
         tenantId, buildingId: task.buildingId,
@@ -292,6 +351,10 @@ export class PpmService {
     if (!task.approvalRequestId) throw new BadRequestException('no approval attached');
     const ar = await this.prisma.approvalRequest.findUnique({ where: { id: task.approvalRequestId } });
     if (!ar || ar.status !== 'approved') throw new BadRequestException('approval not yet approved');
+    // SoD: the approval requester cannot be the one marking it approved on the task (that came from a different actor via /approvals/:id/approve).
+    if (ar.requesterUserId && ar.requesterUserId === actorUserId) {
+      throw new ForbiddenException('separation_of_duties: approval requester cannot ratify their own approval');
+    }
     return this.transition(tenantId, actorUserId, taskId, ['awaiting_approval'], 'approved', {
       approvedAt: new Date(),
     });
@@ -338,8 +401,12 @@ export class PpmService {
     if (task.planItemId) {
       const plan = await this.prisma.ppmPlanItem.findUnique({ where: { id: task.planItemId }, include: { template: true } });
       if (plan) {
-        const months = rruleMonths(plan.recurrenceRule, plan.template.frequencyMonths ?? null);
-        const nextDue = addMonths(completedAt, Math.max(months, 0.5));
+        let nextDue = nextDueFrom(plan.recurrenceRule, completedAt, plan.template.frequencyMonths ?? null);
+        const blackouts = await this.loadBlackouts(tenantId, plan.buildingId);
+        if (blackouts.length > 0) {
+          const shifted = applyBlackouts(nextDue, blackouts, plan.buildingId);
+          if (shifted) nextDue = shifted;
+        }
         await this.prisma.ppmPlanItem.update({
           where: { id: plan.id },
           data: { lastPerformedAt: completedAt, nextDueAt: nextDue },
@@ -351,6 +418,53 @@ export class PpmService {
       completedAt, serviceReportDocumentId: body.serviceReportDocumentId,
     });
     return updated;
+  }
+
+  /**
+   * Review the completion. Enforces SoD: the executor (completedByUserId)
+   * cannot also be the reviewer. The reviewer must either be workspace manager
+   * or hold a closing role (default: chief_engineer / building_manager, or
+   * whatever the template declared as closedByRoles).
+   */
+  async reviewCompletion(
+    tenantId: string,
+    actorUserId: string,
+    taskId: string,
+    body: { decision: 'accept' | 'reject'; note?: string },
+  ) {
+    const task = await this.getTask(tenantId, taskId);
+    if (task.lifecycleStage !== 'completed') throw new BadRequestException(`cannot review from ${task.lifecycleStage}`);
+    if (!['accept', 'reject'].includes(body.decision)) throw new BadRequestException('decision must be accept|reject');
+
+    // SoD: executor ≠ reviewer.
+    this.assertSod('review_completion', actorUserId, { executorUserId: task.completedByUserId });
+
+    // Must hold a closing role if the template specifies one.
+    const closingRoles = task.planItem?.template?.closedByRoles?.length
+      ? task.planItem.template.closedByRoles
+      : ['chief_engineer', 'building_manager'];
+    const hasClosingRole = await this.prisma.buildingRoleAssignment.findFirst({
+      where: { tenantId, buildingId: task.buildingId, userId: actorUserId, roleKey: { in: closingRoles } },
+    });
+    const isWsManager = await this.prisma.membership.findFirst({
+      where: { tenantId, userId: actorUserId, roleKey: { in: ['workspace_owner', 'workspace_admin'] } },
+    });
+    if (!hasClosingRole && !isWsManager) {
+      throw new ForbiddenException(`only one of [${closingRoles.join(', ')}] or workspace manager can review completion`);
+    }
+
+    if (body.decision === 'reject') {
+      // Bounce back to in_progress so the executor can fix and re-submit.
+      const updated = await this.prisma.taskInstance.update({
+        where: { id: task.id },
+        data: { lifecycleStage: 'in_progress', status: 'open', completedAt: null, completedByUserId: null, result: null },
+      });
+      await this.log(tenantId, task.buildingId, task.id, actorUserId, 'lifecycle.review.rejected', { note: body.note || null });
+      return updated;
+    }
+
+    await this.log(tenantId, task.buildingId, task.id, actorUserId, 'lifecycle.review.accepted', { note: body.note || null });
+    return task;
   }
 
   async distributeEvidence(tenantId: string, actorUserId: string, taskId: string, body: { recipients: Array<{ role?: string; userId?: string; email?: string; deliveredAt?: string }>; note?: string }) {

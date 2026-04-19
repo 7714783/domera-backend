@@ -1,5 +1,6 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { PrismaModule } from './prisma/prisma.module';
+import { TenantMiddleware } from './common/tenant.middleware';
 import { HealthModule } from './modules/health/health.module';
 import { TenancyModule } from './modules/tenancy/tenancy.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -16,6 +17,20 @@ import { TakeoverModule } from './modules/takeover/takeover.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { BuildingCoreModule } from './modules/building-core/building-core.module';
 import { PpmModule } from './modules/ppm/ppm.module';
+import { QrLocationsModule } from './modules/qr-locations/qr-locations.module';
+import { PublicQrModule } from './modules/public-qr/public-qr.module';
+import { ReactiveModule } from './modules/reactive/reactive.module';
+import { ComplianceProfilesModule } from './modules/compliance-profiles/compliance-profiles.module';
+import { RoleDashboardsModule } from './modules/role-dashboards/role-dashboards.module';
+import { DocumentLinksModule } from './modules/document-links/document-links.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
+import { DocumentsModule } from './modules/documents/documents.module';
+import { VendorInvoicesModule } from './modules/vendor-invoices/vendor-invoices.module';
+import { EmergencyOverridesModule } from './modules/emergency-overrides/emergency-overrides.module';
+import { CalendarBlackoutsModule } from './modules/calendar-blackouts/calendar-blackouts.module';
+import { ConditionTriggersModule } from './modules/condition-triggers/condition-triggers.module';
+import { ProjectsModule } from './modules/projects/projects.module';
+import { LeasesModule } from './modules/leases/leases.module';
 
 @Module({
   imports: [
@@ -36,6 +51,24 @@ import { PpmModule } from './modules/ppm/ppm.module';
     OnboardingModule,
     BuildingCoreModule,
     PpmModule,
+    QrLocationsModule,
+    PublicQrModule,
+    ReactiveModule,
+    ComplianceProfilesModule,
+    RoleDashboardsModule,
+    DocumentLinksModule,
+    InventoryModule,
+    DocumentsModule,
+    VendorInvoicesModule,
+    EmergencyOverridesModule,
+    CalendarBlackoutsModule,
+    ConditionTriggersModule,
+    ProjectsModule,
+    LeasesModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(TenantMiddleware).forRoutes('*');
+  }
+}

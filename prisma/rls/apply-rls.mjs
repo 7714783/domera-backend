@@ -2,8 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
-
 function splitSql(sql) {
   const parts = [];
   let buf = '';
@@ -36,23 +34,46 @@ function splitSql(sql) {
   return parts.filter((p) => !/^--/.test(p) && p.length > 0);
 }
 
-async function run() {
-  const sqlPath = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, '')), '001_enable_rls.sql');
-  const fallback = path.resolve(process.cwd(), 'apps/api/prisma/rls/001_enable_rls.sql');
-  const resolved = fs.existsSync(sqlPath) ? sqlPath : fallback;
-  const raw = fs.readFileSync(resolved, 'utf8');
-  const sql = raw.split('\n').filter((l) => !/^\s*--/.test(l)).join('\n');
-  const stmts = splitSql(sql);
-
-  for (const stmt of stmts) {
-    await prisma.$executeRawUnsafe(stmt);
-  }
-  console.log(`[rls] ${stmts.length} statements applied`);
+function loadFile(name) {
+  const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\//, ''));
+  const p = path.join(here, name);
+  const fb = path.resolve(process.cwd(), 'apps/api/prisma/rls', name);
+  const resolved = fs.existsSync(p) ? p : fb;
+  return fs.readFileSync(resolved, 'utf8');
 }
 
-run()
-  .catch((error) => {
-    console.error('[rls] failed', error);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+async function applyOn(client, name) {
+  const raw = loadFile(name);
+  const sql = raw.split('\n').filter((l) => !/^\s*--/.test(l)).join('\n');
+  const stmts = splitSql(sql);
+  for (const stmt of stmts) {
+    await client.$executeRawUnsafe(stmt);
+  }
+  console.log(`[rls] ${name} → ${stmts.length} statements applied`);
+}
+
+async function run() {
+  const files = (process.argv.slice(2).length
+    ? process.argv.slice(2)
+    : ['001_enable_rls.sql']
+  );
+
+  const needsSuperuser = files.some((f) => f.includes('002_split_roles') || f.includes('003_force_rls'));
+  const url = needsSuperuser
+    ? (process.env.DATABASE_URL_SUPER || process.env.DATABASE_URL_MIGRATOR || process.env.DATABASE_URL)
+    : (process.env.DATABASE_URL_MIGRATOR || process.env.DATABASE_URL);
+
+  const client = new PrismaClient({ datasources: { db: { url } } });
+  try {
+    for (const f of files) {
+      await applyOn(client, f);
+    }
+  } finally {
+    await client.$disconnect();
+  }
+}
+
+run().catch((error) => {
+  console.error('[rls] failed', error);
+  process.exit(1);
+});

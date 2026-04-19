@@ -95,14 +95,19 @@ export class ImportsService {
     return job;
   }
 
-  async commit(tenantId: string, id: string) {
+  async commit(tenantId: string, id: string, occurredAt?: string | Date) {
     const job = await this.prisma.importJob.findUnique({ where: { id }, include: { rows: true } });
     if (!job) throw new NotFoundException('import job not found');
+    if (job.status === 'committed') throw new BadRequestException('already committed');
+    if (job.status === 'rolled_back') throw new BadRequestException('job rolled back; cannot re-commit');
     const summary = (job.summary || {}) as any;
     if (summary.regulator && summary.regulator.errors > 0) {
       throw new BadRequestException(`preview contains ${summary.regulator.errors} errors; fix source file`);
     }
 
+    const templateIds: string[] = [];
+    const basisIds: string[] = [];
+    const ruleIds: string[] = [];
     let createdTemplates = 0;
     let createdBases = 0;
     let createdRules = 0;
@@ -138,33 +143,91 @@ export class ImportsService {
           basisType: mapped.bases?.[0]?.type || 'recommended_best_practice',
         },
       });
+      templateIds.push(template.id);
       createdTemplates += 1;
 
       await this.prisma.obligationBasis.deleteMany({ where: { obligationTemplateId: template.id } });
       for (const b of mapped.bases || []) {
-        await this.prisma.obligationBasis.create({
+        const basis = await this.prisma.obligationBasis.create({
           data: { obligationTemplateId: template.id, type: b.type, referenceCode: b.reference || null },
         });
+        basisIds.push(basis.id);
         createdBases += 1;
       }
 
       await this.prisma.applicabilityRule.deleteMany({ where: { obligationTemplateId: template.id } });
       for (const a of mapped.applicability || []) {
-        await this.prisma.applicabilityRule.create({
+        const rule = await this.prisma.applicabilityRule.create({
           data: { obligationTemplateId: template.id, predicate: a },
         });
+        ruleIds.push(rule.id);
         createdRules += 1;
       }
+    }
+
+    const now = new Date();
+    const occurred = occurredAt ? new Date(occurredAt) : null;
+    const updated = await this.prisma.importJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'committed',
+        committedAt: now,
+        occurredAt: occurred,
+        finishedAt: now,
+        createdEntities: { obligationTemplate: templateIds, obligationBasis: basisIds, applicabilityRule: ruleIds } as any,
+        summary: { ...(job.summary as any), commit: { createdTemplates, createdBases, createdRules } } as any,
+      },
+    });
+    return {
+      ok: true,
+      importJobId: updated.id,
+      createdTemplates, createdBases, createdRules,
+      recordedAt: updated.createdAt,
+      committedAt: updated.committedAt,
+      occurredAt: updated.occurredAt,
+    };
+  }
+
+  async rollback(tenantId: string, id: string, reason?: string) {
+    const job = await this.prisma.importJob.findUnique({ where: { id } });
+    if (!job) throw new NotFoundException('import job not found');
+    if (job.tenantId !== tenantId) throw new NotFoundException('import job not found');
+    if (job.status !== 'committed') throw new BadRequestException(`cannot rollback job in status "${job.status}"`);
+
+    const created = (job.createdEntities || {}) as Record<string, string[]>;
+    const templateIds = created.obligationTemplate || [];
+    const basisIds = created.obligationBasis || [];
+    const ruleIds = created.applicabilityRule || [];
+
+    let removedTemplates = 0;
+    let removedBases = 0;
+    let removedRules = 0;
+
+    if (ruleIds.length > 0) {
+      const r = await this.prisma.applicabilityRule.deleteMany({ where: { id: { in: ruleIds } } });
+      removedRules = r.count;
+    }
+    if (basisIds.length > 0) {
+      const r = await this.prisma.obligationBasis.deleteMany({ where: { id: { in: basisIds } } });
+      removedBases = r.count;
+    }
+    if (templateIds.length > 0) {
+      const blocked = await this.prisma.ppmPlanItem.count({ where: { obligationTemplateId: { in: templateIds } } });
+      if (blocked > 0) {
+        throw new BadRequestException(`cannot rollback: ${blocked} PPM plan item(s) reference imported obligations`);
+      }
+      const r = await this.prisma.obligationTemplate.deleteMany({ where: { id: { in: templateIds } } });
+      removedTemplates = r.count;
     }
 
     const updated = await this.prisma.importJob.update({
       where: { id: job.id },
       data: {
-        status: 'committed',
-        finishedAt: new Date(),
-        summary: { ...(job.summary as any), commit: { createdTemplates, createdBases, createdRules } } as any,
+        status: 'rolled_back',
+        rolledBackAt: new Date(),
+        rollbackReason: reason || null,
       },
     });
-    return { ok: true, importJobId: updated.id, createdTemplates, createdBases, createdRules };
+    return { ok: true, importJobId: updated.id, removedTemplates, removedBases, removedRules };
   }
 }

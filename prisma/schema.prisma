@@ -7,6 +7,43 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── Compliance profiles (P5): per-jurisdiction / per-building rule bundles ──
+model ComplianceProfile {
+  id           String   @id @default(uuid())
+  tenantId     String
+  key          String   // "IL-SI1525", "ASHRAE180", "NFPA25", custom
+  name         String
+  jurisdiction String?  // ISO country code or "global"
+  description  String?
+  domains      String[] @default([])
+  obligationTemplateIds String[] @default([])
+  isActive     Boolean  @default(true)
+  isBuiltIn    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignments BuildingComplianceProfile[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("compliance_profiles")
+}
+
+model BuildingComplianceProfile {
+  id         String   @id @default(uuid())
+  tenantId   String
+  buildingId String
+  profileId  String
+  assignedAt DateTime @default(now())
+  assignedBy String?
+
+  profile ComplianceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([buildingId, profileId])
+  @@index([tenantId, buildingId])
+  @@map("building_compliance_profiles")
+}
+
 model Tenant {
   id                   String                 @id @default(uuid())
   slug                 String                 @unique
@@ -36,6 +73,8 @@ model Tenant {
   audits               AuditEntry[]
   assets               Asset[]
   seedRuns             SeedRun[]
+  approvalPolicies     ApprovalPolicy[]
+  approvalDelegations  ApprovalDelegation[]
 
   @@map("tenants")
 }
@@ -59,8 +98,28 @@ model User {
   organizationMemberships OrganizationMembership[]
   buildingRoles           BuildingRoleAssignment[]
   certifications          UserCertification[]
+  sessions                Session[]
 
   @@map("users")
+}
+
+model Session {
+  id          String    @id @default(uuid())
+  userId      String
+  tokenHash   String    @unique
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  revokedBy   String?
+  userAgent   String?
+  ipAddress   String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
 }
 
 model Membership {
@@ -172,6 +231,7 @@ model Building {
   budgets            Budget[]
   invoices           Invoice[]
   approvals          ApprovalRequest[]
+  approvalPolicies   ApprovalPolicy[]
   documents          Document[]
   audits             AuditEntry[]
   mandatesList       BuildingMandate[]
@@ -214,6 +274,15 @@ model Asset {
   manufacturer  String?
   installDate   DateTime?
   attributes    Json?
+  // Semantic model columns (SSOT §P4):
+  //   haystackTags    — Project Haystack tag set (e.g. ["ahu","discharge","temp","sensor"])
+  //   brickClass      — Brick ontology class URI (e.g. "brick:Supply_Air_Temperature_Sensor")
+  //   brickRelations  — [{ predicate, object }] edges in Brick terms (e.g. isPointOf, feeds)
+  //   externalIds     — { bacnet, opc, haystack, ifc } system-specific identifiers
+  haystackTags   String[] @default([])
+  brickClass     String?
+  brickRelations Json?
+  externalIds    Json?
   isDemo        Boolean  @default(false)
   seedKey       String?  @unique
   createdBy     String?  @default("system")
@@ -229,7 +298,69 @@ model Asset {
   @@index([tenantId, buildingId])
   @@index([parentAssetId])
   @@index([systemType])
+  @@index([brickClass])
   @@map("assets")
+}
+
+model SensorPoint {
+  id          String   @id @default(uuid())
+  tenantId    String
+  buildingId  String
+  assetId     String
+  name        String
+  pointType   String   // temp | pressure | flow | co2 | power | status | setpoint | command
+  unit        String?
+  // Integration IDs
+  bacnetId    String?  // e.g. "2:device-1024:AI:4"
+  opcNodeId   String?  // OPC-UA NodeId (e.g. "ns=2;s=Channel.Device.Tag")
+  haystackRef String?  // ^id or @id reference in a Haystack project
+  haystackTags String[] @default([])
+  brickClass  String?
+  // Metadata
+  minValue    Float?
+  maxValue    Float?
+  sampleRateS Int?    // expected sampling period (seconds)
+  isActive    Boolean @default(true)
+  isDemo      Boolean @default(false)
+  seedKey     String? @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([buildingId, bacnetId])
+  @@unique([buildingId, opcNodeId])
+  @@index([tenantId, buildingId])
+  @@index([assetId])
+  @@index([brickClass])
+  @@map("sensor_points")
+}
+
+model AlarmSource {
+  id          String   @id @default(uuid())
+  tenantId    String
+  buildingId  String
+  assetId     String
+  name        String
+  severity    String   @default("warning") // critical | warning | info
+  source      String   // panel | bms | edge_gateway | controller | manual
+  // Integration IDs
+  bacnetId    String?
+  opcNodeId   String?
+  haystackRef String?
+  haystackTags String[] @default([])
+  brickClass  String?
+  // Runtime state (optional denormalized fields; authoritative state lives in events)
+  isActive    Boolean  @default(false)
+  lastRaisedAt DateTime?
+  lastClearedAt DateTime?
+  isDemo      Boolean  @default(false)
+  seedKey     String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, buildingId])
+  @@index([assetId])
+  @@index([severity, isActive])
+  @@map("alarm_sources")
 }
 
 model ObligationTemplate {
@@ -544,6 +675,10 @@ model ApprovalStep {
   status        String
   actedByUserId String?
   actedAt       DateTime?
+  // SSOT §P15: substitute / time-boxed delegation trail
+  onBehalfOfUserId String?
+  delegationId     String?
+  waitingSinceAt   DateTime? @default(now())
   isDemo        Boolean  @default(false)
   seedKey       String?  @unique
   createdAt     DateTime @default(now())
@@ -552,7 +687,62 @@ model ApprovalStep {
   request ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
   @@index([requestId, orderNo])
+  @@index([status])
   @@map("approval_steps")
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// SSOT §P15 — versioned approval policy templates + bounded delegation
+// ─────────────────────────────────────────────────────────────────────
+model ApprovalPolicy {
+  id             String   @id @default(uuid())
+  tenantId       String
+  name           String
+  type           String   // spend_approval | document_approval | compliance_approval
+  buildingId     String?  // null = global / workspace-wide
+  version        Int      @default(1)
+  isActive       Boolean  @default(true)
+  currency       String   @default("ILS")
+  minAmount      Float    @default(0)
+  maxAmount      Float?   // null = no upper bound
+  stepsJson      Json     // [{ orderNo, role, mandatory: true, escalateAfterHours?: number }]
+  effectiveFrom  DateTime @default(now())
+  effectiveUntil DateTime?
+  supersedesId   String?  // previous policy version this one replaces
+  createdByUserId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building Building? @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, type, isActive])
+  @@index([tenantId, buildingId, type])
+  @@map("approval_policies")
+}
+
+model ApprovalDelegation {
+  id               String   @id @default(uuid())
+  tenantId         String
+  delegatorUserId  String
+  delegateUserId   String
+  role             String   // role being delegated (maintenance_coordinator, finance_controller, ...)
+  buildingId       String?  // null = applies across all buildings the delegator covers
+  reason           String?
+  startsAt         DateTime
+  endsAt           DateTime
+  revokedAt        DateTime?
+  revokedByUserId  String?
+  createdByUserId  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, delegateUserId, role])
+  @@index([tenantId, delegatorUserId, role])
+  @@index([tenantId, endsAt])
+  @@map("approval_delegations")
 }
 
 model Document {
@@ -565,8 +755,26 @@ model Document {
   status          String
   versionNo       Int      @default(1)
   storageKey      String
+  // Content integrity & policy (SSOT §P7)
+  sha256          String?
+  mimeType        String?
+  sizeBytes       Int?
+  virusScanStatus String?  @default("pending") // pending | clean | infected | unscanned
+  virusScanAt     DateTime?
+  retentionClass  String?  // short | standard | statutory_7y | permanent
+  retentionUntil  DateTime?
+  legalHold       Boolean  @default(false)
+  legalHoldReason String?
+  legalHoldSetAt  DateTime?
+  legalHoldSetBy  String?
+  // Free-text search (populated by service with title + documentType + summary)
+  searchText      String?
   createdBy       String?
   approvedBy      String?
+  // SSOT §P13 — content lifecycle for time-bounded docs (insurance, KYC, license)
+  expiresAt       DateTime?
+  expiryAlertedAt DateTime?
+  ownerOrgId      String?  // optional link to BuildingOccupantCompany / Organization owning the doc
   isDemo          Boolean  @default(false)
   seedKey         String?  @unique
   createdAt       DateTime @default(now())
@@ -577,6 +785,10 @@ model Document {
 
   @@index([tenantId, buildingId, status])
   @@index([documentTypeKey])
+  @@index([sha256])
+  @@index([legalHold])
+  @@index([retentionUntil])
+  @@index([expiresAt])
   @@map("documents")
 }
 
@@ -712,19 +924,27 @@ model BuildingMandate {
 }
 
 model ImportJob {
-  id         String    @id @default(uuid())
-  tenantId   String
-  kind       String
-  sourceKey  String
-  status     String
-  summary    Json?
-  createdBy  String
-  createdAt  DateTime  @default(now())
-  finishedAt DateTime?
+  id          String    @id @default(uuid())
+  tenantId    String
+  kind        String
+  sourceKey   String
+  status      String    // preview | committed | rolled_back | failed
+  summary     Json?
+  createdBy   String
+  createdAt   DateTime  @default(now())   // recorded_at — when the import was recorded in our system
+  // Dual timestamps (SSOT §P5): recordedAt + occurredAt distinguish
+  // "when we filed it" from "when the underlying event actually happened"
+  occurredAt  DateTime? // occurred_at — business date of the imported rows
+  committedAt DateTime?
+  rolledBackAt DateTime?
+  rollbackReason String?
+  createdEntities Json?  // { model: [id, id, ...] } snapshot of rows inserted on commit; used to rollback
+  finishedAt  DateTime?
 
   rows ImportJobRow[]
 
   @@index([tenantId, kind])
+  @@index([status])
   @@map("import_jobs")
 }
 
@@ -775,13 +995,121 @@ model Project {
   stage            String   @default("initiation")
   capexBudgetId    String?
   recommendationId String?
+  classification   String   @default("capex")
+  classificationReason String?
+  conversionHistory Json?
+  stageHistory     Json?
+  closedAt         DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, buildingId])
+  @@index([classification])
   @@map("projects")
+}
+
+model ProjectStage {
+  id           String   @id @default(uuid())
+  tenantId     String
+  buildingId   String
+  projectId    String
+  orderNo      Int
+  name         String
+  ownerUserId  String?
+  plannedStart DateTime?
+  plannedEnd   DateTime?
+  actualStart  DateTime?
+  actualEnd    DateTime?
+  status       String   @default("not_started")
+  acceptanceCriteria String?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([projectId, orderNo])
+  @@index([tenantId, buildingId, projectId])
+  @@index([status])
+  @@map("project_stages")
+}
+
+model ProjectBudgetLine {
+  id            String  @id @default(uuid())
+  tenantId      String
+  buildingId    String
+  projectId     String
+  stageId       String?
+  category      String
+  description   String
+  plannedAmount Float
+  actualAmount  Float    @default(0)
+  currency      String   @default("ILS")
+  classification String  @default("capex")
+  vendorOrgId   String?
+  purchaseOrderId String?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([tenantId, buildingId, projectId])
+  @@index([stageId])
+  @@index([classification])
+  @@map("project_budget_lines")
+}
+
+model ChangeOrder {
+  id              String   @id @default(uuid())
+  tenantId        String
+  buildingId      String
+  projectId       String
+  coNumber        String
+  title           String
+  description     String?
+  scopeDelta      String?
+  costDelta       Float
+  currency        String   @default("ILS")
+  scheduleDeltaDays Int?
+  classification  String   @default("capex")
+  requestedByUserId String
+  approvalRequestId String?
+  status          String   @default("pending")
+  approvedByUserId String?
+  approvedAt      DateTime?
+  supersededByCoId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([projectId, coNumber])
+  @@index([tenantId, buildingId, projectId])
+  @@index([status])
+  @@map("change_orders")
+}
+
+model AcceptancePack {
+  id             String   @id @default(uuid())
+  tenantId       String
+  buildingId     String
+  projectId      String   @unique
+  requiredDocumentTypeKeys String[] @default([])
+  submittedAt    DateTime?
+  contractorSignoffByUserId String?
+  contractorSignoffAt       DateTime?
+  managerSignoffByUserId    String?
+  managerSignoffAt          DateTime?
+  chiefEngineerSignoffByUserId String?
+  chiefEngineerSignoffAt       DateTime?
+  ownerSignoffByUserId    String?
+  ownerSignoffAt          DateTime?
+  status         String   @default("draft")
+  rejectionReason String?
+  closedAt       DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([tenantId, buildingId])
+  @@index([status])
+  @@map("acceptance_packs")
 }
 
 model WorkOrder {
@@ -821,6 +1149,451 @@ model TakeoverCase {
 
   @@index([tenantId, buildingId])
   @@map("takeover_cases")
+}
+
+// ─── Space family (P3): parking spots + storage units as first-class leaseable items ───
+model ParkingSpot {
+  id         String   @id @default(uuid())
+  tenantId   String
+  buildingId String
+  floorId    String?
+  code       String
+  spotType   String   @default("reserved") // reserved | floating | ev | accessible | motorcycle
+  features   String[] @default([])         // ['climate', 'covered', ...]
+  isLeased   Boolean  @default(false)
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([buildingId, code])
+  @@index([tenantId, buildingId])
+  @@map("parking_spots")
+}
+
+model StorageUnit {
+  id         String   @id @default(uuid())
+  tenantId   String
+  buildingId String
+  floorId    String?
+  code       String
+  areaSqm    Float?
+  isClimateControlled Boolean @default(false)
+  isLeased   Boolean  @default(false)
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([buildingId, code])
+  @@index([tenantId, buildingId])
+  @@map("storage_units")
+}
+
+// ─── Systems & assets extensions (P4): relations + lift profile ───
+model EquipmentRelation {
+  id           String   @id @default(uuid())
+  tenantId     String
+  buildingId   String
+  parentAssetId String
+  childAssetId  String
+  relationType String   @default("contains")  // contains | serves | feeds | controls
+  createdAt    DateTime @default(now())
+
+  @@unique([parentAssetId, childAssetId, relationType])
+  @@index([tenantId, buildingId])
+  @@map("equipment_relations")
+}
+
+model ElevatorProfile {
+  id              String   @id @default(uuid())
+  tenantId        String
+  buildingId      String
+  assetId         String   @unique
+  shaftCode       String?
+  carType         String?   // passenger | freight | parking
+  capacityKg      Int?
+  servedFromFloor Int?
+  servedToFloor   Int?
+  speedMps        Float?
+  controllerModel String?
+  vendorOrgId     String?
+  rescueMode      String?
+  lastInspectionAt DateTime?
+  nextInspectionDue DateTime?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([tenantId, buildingId])
+  @@map("elevator_profiles")
+}
+
+// ─── Document polymorphic link (P7) ───
+model DocumentLink {
+  id         String   @id @default(uuid())
+  tenantId   String
+  documentId String
+  targetType String   // ppm_task | work_order | equipment | lease | quote | purchase_order | project | incident | service_request | takeover_case
+  targetId   String
+  createdAt  DateTime @default(now())
+  createdBy  String?
+
+  @@unique([documentId, targetType, targetId])
+  @@index([targetType, targetId])
+  @@index([tenantId])
+  @@map("document_links")
+}
+
+// ─── Reactive workflow (P8): Incident / ServiceRequest / Quote / PO / Completion ───
+
+model Incident {
+  id               String    @id @default(uuid())
+  tenantId         String
+  buildingId       String
+  unitId           String?
+  equipmentId      String?
+  title            String
+  description      String?
+  severity         String    // P1 | P2 | P3 | P4
+  status           String    @default("new")   // new | triaged | dispatched | resolved | archived
+  origin           String    // bms | human | qr | email | api | sensor
+  reportedBy       String?
+  reportedAt       DateTime  @default(now())
+  ackedAt          DateTime?
+  resolvedAt       DateTime?
+  rootCause        String?
+  preventiveAction String?
+  workOrderId      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([tenantId, buildingId, status])
+  @@index([severity])
+  @@map("incidents")
+}
+
+model ServiceRequest {
+  id               String    @id @default(uuid())
+  tenantId         String
+  buildingId       String
+  unitId           String?
+  qrLocationId     String?
+  category         String    // cleaning | technical | complaint | safety | elevator | parking | restroom | other
+  priority         String    @default("normal")  // low | normal | high
+  status           String    @default("new")     // new | triaged | dispatched | resolved | archived
+  description      String?
+  photoKey         String?
+  submittedBy      String?
+  submitterContact String?
+  resolutionCode   String?
+  workOrderId      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([tenantId, buildingId, status])
+  @@index([qrLocationId])
+  @@map("service_requests")
+}
+
+model Quote {
+  id                String    @id @default(uuid())
+  tenantId          String
+  buildingId        String
+  workOrderId       String?
+  vendorOrgId       String?
+  requesterUserId   String
+  title             String
+  description       String?
+  amount            Float
+  currency          String    @default("ILS")
+  validUntil        DateTime?
+  status            String    @default("requested")  // requested | received | approved | rejected | superseded | cancelled
+  revisionOf        String?
+  receivedAt        DateTime?
+  approvalRequestId String?
+  documentId        String?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([tenantId, buildingId, status])
+  @@index([workOrderId])
+  @@map("quotes")
+}
+
+model PurchaseOrder {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  buildingId         String
+  poNumber           String
+  quoteId            String?
+  workOrderId        String?
+  vendorOrgId        String?
+  budgetLineId       String?
+  amount             Float
+  currency           String    @default("ILS")
+  status             String    @default("issued")  // issued | in_progress | completed | cancelled
+  issuedAt           DateTime  @default(now())
+  expectedDeliveryAt DateTime?
+  completedAt        DateTime?
+  issuedByUserId     String
+  capexOpex          String?
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([tenantId, poNumber])
+  @@index([tenantId, buildingId, status])
+  @@map("purchase_orders")
+}
+
+// Three-way match: PO ↔ CompletionRecord ↔ VendorInvoice
+model VendorInvoice {
+  id               String   @id @default(uuid())
+  tenantId         String
+  buildingId       String
+  purchaseOrderId  String
+  vendorOrgId      String?
+  invoiceNumber    String
+  invoiceDate      DateTime
+  receivedAt       DateTime @default(now())
+  amount           Float
+  currency         String   @default("ILS")
+  taxAmount        Float?
+  documentId       String?
+  // Three-way match result (populated on POST /vendor-invoices/:id/match)
+  matchStatus      String   @default("unmatched") // unmatched | matched | over_amount | under_amount | no_completion | no_po | price_mismatch | disputed
+  matchedPoAmount     Float?
+  matchedCompletionAmount Float?
+  matchedByUserId  String?
+  matchedAt        DateTime?
+  varianceNotes    String?
+  approvalStatus   String   @default("pending") // pending | approved | rejected
+  approvedByUserId String?
+  approvedAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([tenantId, vendorOrgId, invoiceNumber])
+  @@index([tenantId, buildingId, matchStatus])
+  @@index([purchaseOrderId])
+  @@map("vendor_invoices")
+}
+
+// Calendar blackout: dates/ranges on which PPM `nextDueAt` should be rolled
+// forward. Used to encode local weekends (e.g. Israel: Saturday) + statutory
+// holidays + tenant-specific maintenance freeze windows.
+model CalendarBlackout {
+  id          String   @id @default(uuid())
+  tenantId    String
+  buildingId  String?  // null = tenant-wide
+  kind        String   // weekend | holiday | freeze | custom
+  label       String
+  // Recurring weekly: dayOfWeek (0=Sun..6=Sat). If set, startDate/endDate ignored.
+  dayOfWeek   Int?
+  // One-shot / annual: inclusive range. If annualRecurring=true, the month+day
+  // pattern repeats every year (startDate's year is ignored).
+  startDate   DateTime?
+  endDate     DateTime?
+  annualRecurring Boolean  @default(false)
+  // When a due date hits a blackout: shift | skip | defer_to_next_working_day
+  policy      String   @default("defer_to_next_working_day")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, buildingId, isActive])
+  @@index([dayOfWeek])
+  @@map("calendar_blackouts")
+}
+
+// Condition-based PPM trigger: when a SensorPoint reading crosses the
+// threshold, spawn an ad-hoc TaskInstance from the bound PpmTemplate.
+// This is the "predictive maintenance" edge of P6.
+model ConditionTrigger {
+  id           String   @id @default(uuid())
+  tenantId     String
+  buildingId   String
+  sensorPointId String
+  templateId   String
+  name         String
+  // Threshold semantics: operator applied to reading vs value.
+  operator     String   // gt | gte | lt | lte | eq | ne | crossing
+  threshold    Float
+  unit         String?
+  // De-duplication: don't spawn a new task if another fired within the window.
+  cooldownMinutes Int   @default(60)
+  isActive     Boolean  @default(true)
+  lastFiredAt  DateTime?
+  lastReadingValue Float?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId, buildingId, isActive])
+  @@index([sensorPointId])
+  @@index([templateId])
+  @@map("condition_triggers")
+}
+
+// Audit log of every evaluated sensor reading that flipped a trigger —
+// whether or not it actually spawned a task (may be de-duped by cooldown).
+model ConditionEvent {
+  id           String   @id @default(uuid())
+  tenantId     String
+  buildingId   String
+  triggerId    String
+  sensorPointId String
+  readingValue Float
+  readingAt    DateTime
+  action       String   // spawned_task | deduped_cooldown | threshold_not_met
+  taskInstanceId String?
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId, triggerId, readingAt])
+  @@index([action])
+  @@map("condition_events")
+}
+
+// Emergency override (break-glass): allows bypassing normal SoD/approval
+// chains for P1 incidents; requires post-facto ratification within a window.
+model EmergencyOverride {
+  id               String    @id @default(uuid())
+  tenantId         String
+  buildingId       String
+  targetType       String    // purchase_order | work_order | completion | task_instance | quote
+  targetId         String
+  reason           String
+  severity         String    @default("P1") // P1 | P2
+  invokedByUserId  String
+  invokedAt        DateTime  @default(now())
+  ratificationDueBy DateTime
+  ratifiedByUserId String?
+  ratifiedAt       DateTime?
+  ratificationNotes String?
+  status           String    @default("pending_ratification") // pending_ratification | ratified | lapsed | rejected
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([tenantId, buildingId, status])
+  @@index([targetType, targetId])
+  @@index([ratificationDueBy])
+  @@map("emergency_overrides")
+}
+
+model CompletionRecord {
+  id                      String    @id @default(uuid())
+  tenantId                String
+  buildingId              String
+  workOrderId             String?
+  taskInstanceId          String?
+  completedByUserId       String
+  completedAt             DateTime
+  labourHours             Float?
+  labourCost              Float?
+  materialsCost           Float?
+  downtimeMinutes         Int?
+  serviceReportDocumentId String?
+  photoDocumentIds        String[]  @default([])
+  notes                   String?
+  createdAt               DateTime  @default(now())
+
+  @@index([tenantId, buildingId])
+  @@index([workOrderId])
+  @@index([taskInstanceId])
+  @@map("completion_records")
+}
+
+// ─── Inventory & procurement (P10) ────────────────────────────────────
+
+model InventoryItem {
+  id           String   @id @default(uuid())
+  tenantId     String
+  sku          String
+  name         String
+  category     String?
+  uom          String   @default("piece")
+  alternates   String[] @default([])
+  minLevel     Int?
+  maxLevel     Int?
+  reorderLevel Int?
+  description  String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  movements StockMovement[]
+
+  @@unique([tenantId, sku])
+  @@index([tenantId, category])
+  @@map("inventory_items")
+}
+
+model StockLocation {
+  id         String   @id @default(uuid())
+  tenantId   String
+  buildingId String?
+  code       String
+  name       String
+  kind       String   @default("storeroom")  // storeroom | truck | vendor | scrap
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  movementsFrom StockMovement[] @relation("StockMovementFrom")
+  movementsTo   StockMovement[] @relation("StockMovementTo")
+
+  @@unique([tenantId, code])
+  @@index([tenantId, buildingId])
+  @@map("stock_locations")
+}
+
+model StockMovement {
+  id              String   @id @default(uuid())
+  tenantId        String
+  itemId          String
+  quantity        Float
+  movementType    String   // receipt | issue | transfer | adjustment | return | write_off
+  fromLocationId  String?
+  toLocationId    String?
+  workOrderId     String?
+  taskInstanceId  String?
+  purchaseOrderId String?
+  projectId       String?
+  unitCost        Float?
+  totalCost       Float?
+  reason          String?
+  actorUserId     String
+  occurredAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  item         InventoryItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  fromLocation StockLocation? @relation("StockMovementFrom", fields: [fromLocationId], references: [id], onDelete: SetNull)
+  toLocation   StockLocation? @relation("StockMovementTo",   fields: [toLocationId],   references: [id], onDelete: SetNull)
+
+  @@index([tenantId, itemId])
+  @@index([tenantId, occurredAt])
+  @@index([workOrderId])
+  @@index([purchaseOrderId])
+  @@map("stock_movements")
+}
+
+model QrLocation {
+  id         String   @id @default(uuid())
+  tenantId   String
+  buildingId String
+  code       String   // short scan-friendly code (e.g. BC1-LOBBY-E1)
+  label      String
+  targetType String   // "space" | "equipment" | "floor" | "unit"
+  spaceId    String?
+  equipmentId String?
+  floorId    String?
+  unitId     String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([buildingId, code])
+  @@index([tenantId, buildingId])
+  @@map("qr_locations")
 }
 
 model Entrance {
@@ -1149,13 +1922,63 @@ model BuildingContract {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
+  // SSOT §P13 — escalation policy: { type: 'cpi'|'fixed_pct'|'stepped',
+  // ratePct?: number, indexBase?: string, schedule?: [{ atMonth: number, ratePct: number }] }
+  escalationPolicy Json?
+  paymentFrequency String   @default("monthly") // monthly | quarterly | yearly
+  noticePeriodDays Int?
+  insuranceDocumentId String?
+
   building         Building                @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   occupantCompany  BuildingOccupantCompany @relation(fields: [occupantCompanyId], references: [id], onDelete: Cascade)
   unit             BuildingUnit?           @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  allocations      LeaseAllocation[]
 
   @@index([tenantId, buildingId, contractType])
   @@index([occupantCompanyId])
   @@map("building_contracts")
+}
+
+// SSOT §P13 — single contract can cover multiple billable items: extra units,
+// parking spots, storage. Replaces hard-coded one-unit assumption.
+model LeaseAllocation {
+  id            String  @id @default(uuid())
+  tenantId      String
+  contractId    String
+  targetType    String  // unit | parking_spot | storage_unit
+  targetId      String
+  share         Float   @default(1.0)  // 0..1 portion of monthly amount apportioned here
+  monthlyAmount Float   @default(0)
+  currency      String  @default("ILS")
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  contract BuildingContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, contractId])
+  @@index([tenantId, targetType, targetId])
+  @@map("lease_allocations")
+}
+
+// SSOT §P11 — links a platform User to an occupying company so the user can
+// open the tenant self-service view scoped to their company.
+model TenantRepresentative {
+  id                String   @id @default(uuid())
+  tenantId          String
+  buildingId        String
+  occupantCompanyId String
+  userId            String
+  role              String   @default("primary_contact") // primary_contact | building_committee | finance_contact
+  status            String   @default("active")          // active | revoked
+  invitedByUserId   String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([occupantCompanyId, userId])
+  @@index([tenantId, userId])
+  @@index([tenantId, buildingId])
+  @@map("tenant_representatives")
 }
 
 model SeedRun {

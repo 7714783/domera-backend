@@ -5,15 +5,11 @@
 -- `true` scopes the setting to the transaction so it never leaks across requests.
 -- Missing/invalid setting -> current_setting(...,true) returns NULL -> default-deny.
 --
--- Note: Prisma maps tables to snake_case (via @@map) but columns keep their
+-- Prisma maps tables to snake_case (via @@map) but columns keep their
 -- camelCase model names, so SQL must quote them (e.g. "tenantId").
 --
--- Role model: policies apply to every non-owner role. The table owner bypasses
--- RLS unless we enable FORCE; for dev we keep FORCE off so that the seed (run
--- by the same owner role as the API) can write without juggling contexts.
--- For production set up split roles: a migrator/owner without runtime access
--- and an app role that inherits RLS. Then add `alter table ... force row level
--- security` and revoke bypass from the app role.
+-- Companion: 002_split_roles.sql (migrator/app split) and 003_force_rls.sql
+-- (FORCE on owner). Apply in order 002 → 001 → 003.
 
 create or replace function app_current_tenant_id() returns text
 language sql
@@ -25,23 +21,6 @@ $$;
 do $$
 declare
   t text;
-  tables text[] := array[
-    'organizations',
-    'memberships',
-    'organization_memberships',
-    'buildings',
-    'assets',
-    'obligation_templates',
-    'building_obligations',
-    'ppm_templates',
-    'ppm_plan_items',
-    'task_instances',
-    'budgets',
-    'invoices',
-    'approval_requests',
-    'documents',
-    'audit_entries'
-  ];
   direct_tables text[] := array[
     'organizations',
     'memberships',
@@ -52,19 +31,70 @@ declare
     'ppm_templates',
     'ppm_plan_items',
     'task_instances',
+    'ppm_execution_logs',
     'budgets',
     'invoices',
     'approval_requests',
     'documents',
-    'audit_entries'
+    'audit_entries',
+    'building_role_assignments',
+    'building_mandates',
+    'import_jobs',
+    'engineering_recommendations',
+    'projects',
+    'work_orders',
+    'takeover_cases',
+    'parking_spots',
+    'storage_units',
+    'equipment_relations',
+    'elevator_profiles',
+    'document_links',
+    'incidents',
+    'service_requests',
+    'quotes',
+    'purchase_orders',
+    'completion_records',
+    'inventory_items',
+    'stock_locations',
+    'stock_movements',
+    'qr_locations',
+    'entrances',
+    'floors',
+    'units',
+    'vendors',
+    'contracts',
+    'accounts',
+    'maintenance_plans',
+    'resident_requests',
+    'notifications',
+    'building_floors',
+    'building_units',
+    'building_vertical_transport',
+    'building_systems',
+    'building_occupant_companies',
+    'building_unit_occupancies',
+    'building_contracts',
+    'compliance_profiles',
+    'building_compliance_profiles',
+    'sensor_points',
+    'alarm_sources',
+    'vendor_invoices',
+    'emergency_overrides',
+    'calendar_blackouts',
+    'condition_triggers',
+    'condition_events',
+    'project_stages',
+    'project_budget_lines',
+    'change_orders',
+    'acceptance_packs',
+    'tenant_representatives',
+    'approval_policies',
+    'approval_delegations'
   ];
 begin
-  foreach t in array tables loop
+  foreach t in array direct_tables loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists %I_tenant_isolation on %I', t, t);
-  end loop;
-
-  foreach t in array direct_tables loop
     execute format(
       'create policy %I_tenant_isolation on %I using ("tenantId" = app_current_tenant_id()) with check ("tenantId" = app_current_tenant_id())',
       t, t
@@ -73,6 +103,7 @@ begin
 end $$;
 
 -- organization_memberships has no tenantId column; scope via parent organization.
+alter table organization_memberships enable row level security;
 drop policy if exists organization_memberships_tenant_isolation on organization_memberships;
 create policy organization_memberships_tenant_isolation on organization_memberships
   using (
@@ -90,7 +121,7 @@ create policy organization_memberships_tenant_isolation on organization_membersh
     )
   );
 
--- budget_lines has no direct tenantId; scope via parent budget.
+-- budget_lines: scope via parent budget.
 alter table budget_lines enable row level security;
 drop policy if exists budget_lines_tenant_isolation on budget_lines;
 create policy budget_lines_tenant_isolation on budget_lines
@@ -109,7 +140,7 @@ create policy budget_lines_tenant_isolation on budget_lines
     )
   );
 
--- approval_steps has no direct tenantId; scope via parent approval_request.
+-- approval_steps: scope via parent approval_request.
 alter table approval_steps enable row level security;
 drop policy if exists approval_steps_tenant_isolation on approval_steps;
 create policy approval_steps_tenant_isolation on approval_steps
@@ -128,4 +159,72 @@ create policy approval_steps_tenant_isolation on approval_steps
     )
   );
 
--- seed_runs and tenants are administrative / root; RLS intentionally not applied.
+-- import_job_rows: scope via parent import_job.
+alter table import_job_rows enable row level security;
+drop policy if exists import_job_rows_tenant_isolation on import_job_rows;
+create policy import_job_rows_tenant_isolation on import_job_rows
+  using (
+    exists (
+      select 1 from import_jobs j
+      where j.id = import_job_rows."importJobId"
+        and j."tenantId" = app_current_tenant_id()
+    )
+  )
+  with check (
+    exists (
+      select 1 from import_jobs j
+      where j.id = import_job_rows."importJobId"
+        and j."tenantId" = app_current_tenant_id()
+    )
+  );
+
+-- obligation_bases: scope via parent obligation_template.
+alter table obligation_bases enable row level security;
+drop policy if exists obligation_bases_tenant_isolation on obligation_bases;
+create policy obligation_bases_tenant_isolation on obligation_bases
+  using (
+    exists (
+      select 1 from obligation_templates o
+      where o.id = obligation_bases."obligationTemplateId"
+        and o."tenantId" = app_current_tenant_id()
+    )
+  )
+  with check (
+    exists (
+      select 1 from obligation_templates o
+      where o.id = obligation_bases."obligationTemplateId"
+        and o."tenantId" = app_current_tenant_id()
+    )
+  );
+
+-- applicability_rules: scope via parent obligation_template.
+alter table applicability_rules enable row level security;
+drop policy if exists applicability_rules_tenant_isolation on applicability_rules;
+create policy applicability_rules_tenant_isolation on applicability_rules
+  using (
+    exists (
+      select 1 from obligation_templates o
+      where o.id = applicability_rules."obligationTemplateId"
+        and o."tenantId" = app_current_tenant_id()
+    )
+  )
+  with check (
+    exists (
+      select 1 from obligation_templates o
+      where o.id = applicability_rules."obligationTemplateId"
+        and o."tenantId" = app_current_tenant_id()
+    )
+  );
+
+-- seed_runs has tenantId but is administrative; leave policy in place but
+-- allow migrator-role access via BYPASSRLS.
+alter table seed_runs enable row level security;
+drop policy if exists seed_runs_tenant_isolation on seed_runs;
+create policy seed_runs_tenant_isolation on seed_runs
+  using ("tenantId" = app_current_tenant_id())
+  with check ("tenantId" = app_current_tenant_id());
+
+-- tenants, users, sessions, certifications, document_types, roles,
+-- role_permissions, user_certifications, building_settings: left without
+-- RLS. Some are global catalogs; others (users, sessions) are identity
+-- primitives the auth layer must be able to read without a tenant context.

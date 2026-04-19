@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Headers, Param, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, Param, Post, Req } from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { ImportsService } from './imports.service';
 
@@ -29,9 +29,23 @@ export class ImportsController {
   }
 
   @Post(':id/commit')
-  async commit(@Param('id') id: string, @Headers('x-tenant-id') tenantIdHeader?: string) {
+  async commit(
+    @Param('id') id: string,
+    @Body() body: { occurredAt?: string } | undefined,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+  ) {
     const tenantId = resolveTenantId(tenantIdHeader);
-    return this.importsService.commit(tenantId, id);
+    return this.importsService.commit(tenantId, id, body?.occurredAt);
+  }
+
+  @Post(':id/rollback')
+  async rollback(
+    @Param('id') id: string,
+    @Body() body: { reason?: string } | undefined,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+  ) {
+    const tenantId = resolveTenantId(tenantIdHeader);
+    return this.importsService.rollback(tenantId, id, body?.reason);
   }
 }
 

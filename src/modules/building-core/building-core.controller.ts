@@ -3,10 +3,10 @@ import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { BuildingCoreService } from './building-core.service';
 
-function userId(auth: string | undefined, s: AuthService): string {
+async function userId(auth: string | undefined, s: AuthService): Promise<string> {
   if (!auth || !auth.startsWith('Bearer ')) throw new UnauthorizedException('no token');
-  const p = s.verify(auth.slice(7));
-  if (!p) throw new UnauthorizedException('invalid token');
+  const p = await s.verifySession(auth.slice(7));
+  if (!p) throw new UnauthorizedException('invalid or revoked token');
   return p.sub;
 }
 
@@ -18,129 +18,215 @@ export class BuildingCoreController {
   ) {}
 
   @Get('summary')
-  summary(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
+  async summary(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
     return this.core.summary(resolveTenantId(th), id);
   }
 
   @Get('floors')
-  listFloors(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
+  async listFloors(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
     return this.core.listFloors(resolveTenantId(th), id);
   }
 
   @Post('floors')
-  createFloor(
+  async createFloor(
     @Param('id') id: string,
     @Body() body: any,
     @Headers('x-tenant-id') th?: string,
     @Headers('authorization') ah?: string,
   ) {
-    return this.core.createFloor(resolveTenantId(th), userId(ah, this.auth), id, body);
+    return this.core.createFloor(resolveTenantId(th), await userId(ah, this.auth), id, body);
   }
 
   @Get('units')
-  listUnits(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
+  async listUnits(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
     return this.core.listUnits(resolveTenantId(th), id);
   }
 
   @Post('units')
-  createUnit(
+  async createUnit(
     @Param('id') id: string,
     @Body() body: any,
     @Headers('x-tenant-id') th?: string,
     @Headers('authorization') ah?: string,
   ) {
-    return this.core.createUnit(resolveTenantId(th), userId(ah, this.auth), id, body);
+    return this.core.createUnit(resolveTenantId(th), await userId(ah, this.auth), id, body);
   }
 
   @Patch('units/:unitId')
-  patchUnit(
+  async patchUnit(
     @Param('id') id: string,
     @Param('unitId') unitId: string,
     @Body() body: any,
     @Headers('x-tenant-id') th?: string,
     @Headers('authorization') ah?: string,
   ) {
-    return this.core.updateUnit(resolveTenantId(th), userId(ah, this.auth), id, unitId, body);
+    return this.core.updateUnit(resolveTenantId(th), await userId(ah, this.auth), id, unitId, body);
   }
 
   @Get('transport')
-  listTransport(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
+  async listTransport(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
     return this.core.listTransport(resolveTenantId(th), id);
   }
 
   @Post('transport')
-  createTransport(
+  async createTransport(
     @Param('id') id: string,
     @Body() body: any,
     @Headers('x-tenant-id') th?: string,
     @Headers('authorization') ah?: string,
   ) {
-    return this.core.createTransport(resolveTenantId(th), userId(ah, this.auth), id, body);
+    return this.core.createTransport(resolveTenantId(th), await userId(ah, this.auth), id, body);
   }
 
   @Get('systems')
-  listSystems(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
+  async listSystems(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
     return this.core.listSystems(resolveTenantId(th), id);
   }
 
   @Post('systems')
-  createSystem(
+  async createSystem(
     @Param('id') id: string,
     @Body() body: any,
     @Headers('x-tenant-id') th?: string,
     @Headers('authorization') ah?: string,
   ) {
-    return this.core.createSystem(resolveTenantId(th), userId(ah, this.auth), id, body);
+    return this.core.createSystem(resolveTenantId(th), await userId(ah, this.auth), id, body);
   }
 
   @Patch('systems/:systemId')
-  patchSystem(
+  async patchSystem(
     @Param('id') id: string,
     @Param('systemId') systemId: string,
     @Body() body: any,
     @Headers('x-tenant-id') th?: string,
     @Headers('authorization') ah?: string,
   ) {
-    return this.core.updateSystem(resolveTenantId(th), userId(ah, this.auth), id, systemId, body);
+    return this.core.updateSystem(resolveTenantId(th), await userId(ah, this.auth), id, systemId, body);
   }
 
   @Get('occupants')
-  listOccupants(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
+  async listOccupants(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
     return this.core.listOccupants(resolveTenantId(th), id);
   }
 
   @Post('occupants')
-  createOccupant(
+  async createOccupant(
     @Param('id') id: string,
     @Body() body: any,
     @Headers('x-tenant-id') th?: string,
     @Headers('authorization') ah?: string,
   ) {
-    return this.core.createOccupant(resolveTenantId(th), userId(ah, this.auth), id, body);
+    return this.core.createOccupant(resolveTenantId(th), await userId(ah, this.auth), id, body);
   }
 
   @Post('occupancies')
-  assignOccupancy(
+  async assignOccupancy(
     @Param('id') id: string,
     @Body() body: any,
     @Headers('x-tenant-id') th?: string,
     @Headers('authorization') ah?: string,
   ) {
-    return this.core.assignOccupancy(resolveTenantId(th), userId(ah, this.auth), id, body);
+    return this.core.assignOccupancy(resolveTenantId(th), await userId(ah, this.auth), id, body);
   }
 
   @Get('contracts')
-  listContracts(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
+  async listContracts(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
     return this.core.listContracts(resolveTenantId(th), id);
   }
 
   @Post('contracts')
-  createContract(
+  async createContract(
     @Param('id') id: string,
     @Body() body: any,
     @Headers('x-tenant-id') th?: string,
     @Headers('authorization') ah?: string,
   ) {
-    return this.core.createContract(resolveTenantId(th), userId(ah, this.auth), id, body);
+    return this.core.createContract(resolveTenantId(th), await userId(ah, this.auth), id, body);
+  }
+
+  @Get('parking')
+  async listParking(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
+    return this.core.listParking(resolveTenantId(th), id);
+  }
+
+  @Post('parking')
+  async createParking(
+    @Param('id') id: string, @Body() body: any,
+    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+  ) {
+    return this.core.createParking(resolveTenantId(th), await userId(ah, this.auth), id, body);
+  }
+
+  @Get('storage')
+  async listStorage(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
+    return this.core.listStorage(resolveTenantId(th), id);
+  }
+
+  @Post('storage')
+  async createStorage(
+    @Param('id') id: string, @Body() body: any,
+    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+  ) {
+    return this.core.createStorage(resolveTenantId(th), await userId(ah, this.auth), id, body);
+  }
+
+  @Get('equipment-relations')
+  async listRelations(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
+    return this.core.listEquipmentRelations(resolveTenantId(th), id);
+  }
+
+  @Post('equipment-relations')
+  async createRelation(
+    @Param('id') id: string, @Body() body: any,
+    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+  ) {
+    return this.core.createEquipmentRelation(resolveTenantId(th), await userId(ah, this.auth), id, body);
+  }
+
+  @Get('elevators')
+  async listElevatorProfiles(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
+    return this.core.listElevatorProfiles(resolveTenantId(th), id);
+  }
+
+  @Post('elevators')
+  async upsertElevatorProfile(
+    @Param('id') id: string, @Body() body: any,
+    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+  ) {
+    return this.core.upsertElevatorProfile(resolveTenantId(th), await userId(ah, this.auth), id, body);
+  }
+
+  @Get('sensors')
+  async listSensorPoints(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
+    return this.core.listSensorPoints(resolveTenantId(th), id);
+  }
+
+  @Post('sensors')
+  async createSensorPoint(
+    @Param('id') id: string, @Body() body: any,
+    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+  ) {
+    return this.core.createSensorPoint(resolveTenantId(th), await userId(ah, this.auth), id, body);
+  }
+
+  @Get('alarms')
+  async listAlarmSources(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
+    return this.core.listAlarmSources(resolveTenantId(th), id);
+  }
+
+  @Post('alarms')
+  async createAlarmSource(
+    @Param('id') id: string, @Body() body: any,
+    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+  ) {
+    return this.core.createAlarmSource(resolveTenantId(th), await userId(ah, this.auth), id, body);
+  }
+
+  @Patch('assets/:assetId/tags')
+  async tagAsset(
+    @Param('id') id: string, @Param('assetId') assetId: string, @Body() body: any,
+    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+  ) {
+    return this.core.tagAsset(resolveTenantId(th), await userId(ah, this.auth), id, assetId, body);
   }
 }

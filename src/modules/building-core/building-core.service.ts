@@ -277,6 +277,206 @@ export class BuildingCoreService {
   }
 
   // ── Aggregate view ───────────────────────────────────
+  // ── Parking spots ────────────────────────────────────
+  async listParking(tenantId: string, buildingIdOrSlug: string) {
+    const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    return this.prisma.parkingSpot.findMany({ where: { tenantId, buildingId }, orderBy: { code: 'asc' } });
+  }
+
+  async createParking(tenantId: string, actorUserId: string, buildingIdOrSlug: string, body: {
+    code: string; floorId?: string; spotType?: string; features?: string[]; isLeased?: boolean;
+  }) {
+    await this.requireManager(tenantId, actorUserId);
+    if (!body.code) throw new BadRequestException('code required');
+    const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    return this.prisma.parkingSpot.create({
+      data: {
+        tenantId, buildingId,
+        code: body.code,
+        floorId: body.floorId || null,
+        spotType: body.spotType || 'reserved',
+        features: body.features || [],
+        isLeased: body.isLeased ?? false,
+      },
+    });
+  }
+
+  // ── Storage units ────────────────────────────────────
+  async listStorage(tenantId: string, buildingIdOrSlug: string) {
+    const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    return this.prisma.storageUnit.findMany({ where: { tenantId, buildingId }, orderBy: { code: 'asc' } });
+  }
+
+  async createStorage(tenantId: string, actorUserId: string, buildingIdOrSlug: string, body: {
+    code: string; floorId?: string; areaSqm?: number; isClimateControlled?: boolean; isLeased?: boolean;
+  }) {
+    await this.requireManager(tenantId, actorUserId);
+    if (!body.code) throw new BadRequestException('code required');
+    const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    return this.prisma.storageUnit.create({
+      data: {
+        tenantId, buildingId,
+        code: body.code,
+        floorId: body.floorId || null,
+        areaSqm: body.areaSqm ?? null,
+        isClimateControlled: body.isClimateControlled ?? false,
+        isLeased: body.isLeased ?? false,
+      },
+    });
+  }
+
+  // ── Equipment relations (parent/child) ───────────────
+  async listEquipmentRelations(tenantId: string, buildingIdOrSlug: string) {
+    const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    return this.prisma.equipmentRelation.findMany({ where: { tenantId, buildingId } });
+  }
+
+  async createEquipmentRelation(tenantId: string, actorUserId: string, buildingIdOrSlug: string, body: {
+    parentAssetId: string; childAssetId: string; relationType?: string;
+  }) {
+    await this.requireManager(tenantId, actorUserId);
+    if (!body.parentAssetId || !body.childAssetId) throw new BadRequestException('parentAssetId and childAssetId required');
+    if (body.parentAssetId === body.childAssetId) throw new BadRequestException('parent and child must differ');
+    const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    return this.prisma.equipmentRelation.create({
+      data: {
+        tenantId, buildingId,
+        parentAssetId: body.parentAssetId,
+        childAssetId: body.childAssetId,
+        relationType: body.relationType || 'contains',
+      },
+    });
+  }
+
+  // ── Elevator profile (subtype of asset) ──────────────
+  async listElevatorProfiles(tenantId: string, buildingIdOrSlug: string) {
+    const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    return this.prisma.elevatorProfile.findMany({ where: { tenantId, buildingId } });
+  }
+
+  async upsertElevatorProfile(tenantId: string, actorUserId: string, buildingIdOrSlug: string, body: {
+    assetId: string; shaftCode?: string; carType?: string; capacityKg?: number;
+    servedFromFloor?: number; servedToFloor?: number; speedMps?: number;
+    controllerModel?: string; vendorOrgId?: string; rescueMode?: string;
+    lastInspectionAt?: string; nextInspectionDue?: string;
+  }) {
+    await this.requireManager(tenantId, actorUserId);
+    if (!body.assetId) throw new BadRequestException('assetId required');
+    const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    const data = {
+      tenantId, buildingId,
+      assetId: body.assetId,
+      shaftCode: body.shaftCode || null,
+      carType: body.carType || null,
+      capacityKg: body.capacityKg ?? null,
+      servedFromFloor: body.servedFromFloor ?? null,
+      servedToFloor: body.servedToFloor ?? null,
+      speedMps: body.speedMps ?? null,
+      controllerModel: body.controllerModel || null,
+      vendorOrgId: body.vendorOrgId || null,
+      rescueMode: body.rescueMode || null,
+      lastInspectionAt: body.lastInspectionAt ? new Date(body.lastInspectionAt) : null,
+      nextInspectionDue: body.nextInspectionDue ? new Date(body.nextInspectionDue) : null,
+    };
+    return this.prisma.elevatorProfile.upsert({
+      where: { assetId: body.assetId },
+      create: data,
+      update: data,
+    });
+  }
+
+  // ── Sensor points ────────────────────────────────────
+  async listSensorPoints(tenantId: string, buildingIdOrSlug: string) {
+    const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    return this.prisma.sensorPoint.findMany({ where: { tenantId, buildingId }, orderBy: { name: 'asc' } });
+  }
+
+  async createSensorPoint(tenantId: string, actorUserId: string, buildingIdOrSlug: string, body: {
+    assetId: string; name: string; pointType: string; unit?: string;
+    bacnetId?: string; opcNodeId?: string; haystackRef?: string;
+    haystackTags?: string[]; brickClass?: string;
+    minValue?: number; maxValue?: number; sampleRateS?: number; isActive?: boolean;
+  }) {
+    await this.requireManager(tenantId, actorUserId);
+    if (!body.assetId || !body.name || !body.pointType) {
+      throw new BadRequestException('assetId, name, pointType required');
+    }
+    const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    const asset = await this.prisma.asset.findFirst({ where: { id: body.assetId, tenantId, buildingId }, select: { id: true } });
+    if (!asset) throw new NotFoundException('asset not found in this building');
+    return this.prisma.sensorPoint.create({
+      data: {
+        tenantId, buildingId,
+        assetId: body.assetId,
+        name: body.name,
+        pointType: body.pointType,
+        unit: body.unit || null,
+        bacnetId: body.bacnetId || null,
+        opcNodeId: body.opcNodeId || null,
+        haystackRef: body.haystackRef || null,
+        haystackTags: body.haystackTags || [],
+        brickClass: body.brickClass || null,
+        minValue: body.minValue ?? null,
+        maxValue: body.maxValue ?? null,
+        sampleRateS: body.sampleRateS ?? null,
+        isActive: body.isActive ?? true,
+      },
+    });
+  }
+
+  // ── Alarm sources ────────────────────────────────────
+  async listAlarmSources(tenantId: string, buildingIdOrSlug: string) {
+    const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    return this.prisma.alarmSource.findMany({ where: { tenantId, buildingId }, orderBy: { severity: 'asc' } });
+  }
+
+  async createAlarmSource(tenantId: string, actorUserId: string, buildingIdOrSlug: string, body: {
+    assetId: string; name: string; severity?: string; source: string;
+    bacnetId?: string; opcNodeId?: string; haystackRef?: string;
+    haystackTags?: string[]; brickClass?: string;
+  }) {
+    await this.requireManager(tenantId, actorUserId);
+    if (!body.assetId || !body.name || !body.source) {
+      throw new BadRequestException('assetId, name, source required');
+    }
+    const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    const asset = await this.prisma.asset.findFirst({ where: { id: body.assetId, tenantId, buildingId }, select: { id: true } });
+    if (!asset) throw new NotFoundException('asset not found in this building');
+    return this.prisma.alarmSource.create({
+      data: {
+        tenantId, buildingId,
+        assetId: body.assetId,
+        name: body.name,
+        severity: body.severity || 'warning',
+        source: body.source,
+        bacnetId: body.bacnetId || null,
+        opcNodeId: body.opcNodeId || null,
+        haystackRef: body.haystackRef || null,
+        haystackTags: body.haystackTags || [],
+        brickClass: body.brickClass || null,
+      },
+    });
+  }
+
+  // ── Asset semantic tags (Haystack + Brick) ───────────
+  async tagAsset(tenantId: string, actorUserId: string, buildingIdOrSlug: string, assetId: string, body: {
+    haystackTags?: string[]; brickClass?: string; brickRelations?: unknown; externalIds?: unknown;
+  }) {
+    await this.requireManager(tenantId, actorUserId);
+    const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    const asset = await this.prisma.asset.findFirst({ where: { id: assetId, tenantId, buildingId } });
+    if (!asset) throw new NotFoundException('asset not found in this building');
+    return this.prisma.asset.update({
+      where: { id: assetId },
+      data: {
+        haystackTags: body.haystackTags ?? asset.haystackTags,
+        brickClass: body.brickClass ?? asset.brickClass,
+        brickRelations: body.brickRelations === undefined ? (asset as any).brickRelations : (body.brickRelations as any),
+        externalIds: body.externalIds === undefined ? (asset as any).externalIds : (body.externalIds as any),
+      },
+    });
+  }
+
   async summary(tenantId: string, buildingIdOrSlug: string) {
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
     const building = await this.prisma.building.findUnique({ where: { id: buildingId } });

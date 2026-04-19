@@ -3,10 +3,10 @@ import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { BuildingsService } from './buildings.service';
 
-function extractUserId(auth: string | undefined, authService: AuthService): string {
+async function extractUserId(auth: string | undefined, authService: AuthService): Promise<string> {
   if (!auth || !auth.startsWith('Bearer ')) throw new UnauthorizedException('no token');
-  const payload = authService.verify(auth.slice(7));
-  if (!payload) throw new UnauthorizedException('invalid token');
+  const payload = await authService.verifySession(auth.slice(7));
+  if (!payload) throw new UnauthorizedException('invalid or revoked token');
   return payload.sub;
 }
 
@@ -37,7 +37,7 @@ export class BuildingsController {
     @Headers('authorization') authHeader?: string,
   ) {
     const tenantId = resolveTenantId(tenantIdHeader);
-    const userId = extractUserId(authHeader, this.auth);
+    const userId = await extractUserId(authHeader, this.auth);
     return this.buildings.create(tenantId, userId, body);
   }
 
@@ -49,7 +49,7 @@ export class BuildingsController {
     @Headers('authorization') authHeader?: string,
   ) {
     const tenantId = resolveTenantId(tenantIdHeader);
-    const userId = extractUserId(authHeader, this.auth);
+    const userId = await extractUserId(authHeader, this.auth);
     return this.buildings.update(tenantId, userId, slug, body);
   }
 }

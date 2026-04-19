@@ -1,6 +1,7 @@
 ﻿import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { ApprovalDelegationsService } from './approval-delegations.service';
 import { ApprovalItem, ApprovalStatus } from './approvals.types';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class ApprovalsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly delegations: ApprovalDelegationsService,
   ) {}
 
   private mapType(type: string): 'spend' | 'document' | 'compliance' {
@@ -76,10 +78,12 @@ export class ApprovalsService {
       return this.toItem(request);
     }
 
+    // Substitute approver: allow if an active delegation lets actor sign for pendingStep.role.
+    let delegation: Awaited<ReturnType<typeof this.delegations.activeDelegationFor>> | null = null;
     if (pendingStep.role !== actorRole) {
-      // allow owner representative to approve final L3 explicitly
+      delegation = await this.delegations.activeDelegationFor(tenantId, actorName, pendingStep.role, request.buildingId);
       const allowedOverride = actorRole === 'owner_representative' && pendingStep.orderNo === request.steps.length;
-      if (!allowedOverride) {
+      if (!delegation && !allowedOverride) {
         throw new Error(`Current pending step requires role: ${pendingStep.role}`);
       }
     }
@@ -102,6 +106,8 @@ export class ApprovalsService {
         status: 'approved',
         actedByUserId: actorName,
         actedAt: new Date(),
+        onBehalfOfUserId: delegation ? delegation.delegatorUserId : null,
+        delegationId: delegation ? delegation.id : null,
       },
     });
 

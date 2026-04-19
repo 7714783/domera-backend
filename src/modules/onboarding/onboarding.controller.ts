@@ -2,10 +2,10 @@ import { Body, Controller, Get, Headers, Param, Patch, Post, UnauthorizedExcepti
 import { AuthService } from '../auth/auth.service';
 import { OnboardingService } from './onboarding.service';
 
-function extractUserId(auth: string | undefined, authService: AuthService): string {
+async function extractUserId(auth: string | undefined, authService: AuthService): Promise<string> {
   if (!auth || !auth.startsWith('Bearer ')) throw new UnauthorizedException('no token');
-  const payload = authService.verify(auth.slice(7));
-  if (!payload) throw new UnauthorizedException('invalid token');
+  const payload = await authService.verifySession(auth.slice(7));
+  if (!payload) throw new UnauthorizedException('invalid or revoked token');
   return payload.sub;
 }
 
@@ -18,7 +18,7 @@ export class OnboardingController {
 
   @Get('my-workspaces')
   async myWorkspaces(@Headers('authorization') auth?: string) {
-    const userId = extractUserId(auth, this.auth);
+    const userId = await extractUserId(auth, this.auth);
     return this.onboarding.myWorkspaces(userId);
   }
 
@@ -27,7 +27,7 @@ export class OnboardingController {
     @Body() body: { name: string; slug?: string; timezone?: string; locale?: string },
     @Headers('authorization') auth?: string,
   ) {
-    const userId = extractUserId(auth, this.auth);
+    const userId = await extractUserId(auth, this.auth);
     return this.onboarding.createWorkspace(userId, body);
   }
 
@@ -36,7 +36,7 @@ export class OnboardingController {
     @Body() body: { tenantId: string; name: string; slug?: string; type: 'owner' | 'management_company' | 'vendor' | 'consultant' },
     @Headers('authorization') auth?: string,
   ) {
-    const userId = extractUserId(auth, this.auth);
+    const userId = await extractUserId(auth, this.auth);
     return this.onboarding.createOrganization(userId, body);
   }
 
@@ -45,7 +45,7 @@ export class OnboardingController {
     @Body() body: any,
     @Headers('authorization') auth?: string,
   ) {
-    const userId = extractUserId(auth, this.auth);
+    const userId = await extractUserId(auth, this.auth);
     return this.onboarding.createBuilding(userId, body);
   }
 
@@ -54,7 +54,7 @@ export class OnboardingController {
     @Body() body: { buildingName: string; addressLine1: string; city: string; countryCode: string; timezone: string; buildingType?: any; workspaceName?: string },
     @Headers('authorization') auth?: string,
   ) {
-    const userId = extractUserId(auth, this.auth);
+    const userId = await extractUserId(auth, this.auth);
     return this.onboarding.bootstrapFirstBuilding(userId, body);
   }
 
@@ -77,7 +77,7 @@ export class OnboardingController {
     @Headers('authorization') auth?: string,
     @Headers('x-tenant-id') tenantIdHeader?: string,
   ) {
-    const userId = extractUserId(auth, this.auth);
+    const userId = await extractUserId(auth, this.auth);
     const { resolveTenantId } = await import('../../common/tenant.utils');
     const tenantId = resolveTenantId(tenantIdHeader);
     return this.onboarding.updateBuilding(userId, tenantId, slug, patch);

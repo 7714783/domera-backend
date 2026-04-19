@@ -11,7 +11,7 @@
     "seed": "pnpm run seed:test-building",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
-    "db:rls": "node prisma/rls/apply-rls.mjs",
+    "db:rls": "node prisma/rls/apply-rls.mjs 002_split_roles.sql 001_enable_rls.sql 003_force_rls.sql 004_public_qr_rpc.sql",
     "lint": "echo \"todo: lint api\"",
     "test": "echo \"todo: test api\"",
     "typecheck": "tsc --noEmit"
@@ -27,6 +27,7 @@
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.58.0",
     "jsonwebtoken": "^9.0.3",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rrule": "^2.8.1",
     "rxjs": "^7.8.1",
