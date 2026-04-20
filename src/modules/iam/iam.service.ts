@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 
 const SCOPE_RANK: Record<string, number> = {
   project: 1,
@@ -11,7 +12,10 @@ const SCOPE_RANK: Record<string, number> = {
 
 @Injectable()
 export class IamService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async permissions(userId: string, buildingId: string): Promise<Set<string>> {
     const assignments = await this.prisma.buildingRoleAssignment.findMany({
@@ -78,22 +82,13 @@ export class IamService {
           },
         });
 
-    await this.prisma.auditEntry.create({
-      data: {
-        tenantId,
-        buildingId,
-        actor: actorUserId,
-        role: 'delegator',
-        action: existing ? 'Role re-assigned' : 'Role assigned',
-        entity: body.userId,
-        entityType: 'role_assignment',
-        building: buildingId,
-        ip: '127.0.0.1',
-        eventType: 'role.assigned',
-        resourceType: 'role_assignment',
-        resourceId: result.id,
-        metadata: { roleKey: body.roleKey, delegatedBy: actorUserId },
-      },
+    await this.audit.write({
+      tenantId, buildingId, actor: actorUserId, role: 'delegator',
+      action: existing ? 'Role re-assigned' : 'Role assigned',
+      entity: body.userId, entityType: 'role_assignment',
+      building: buildingId, ip: '127.0.0.1', sensitive: false,
+      eventType: 'role.assigned', resourceType: 'role_assignment', resourceId: result.id,
+      metadata: { roleKey: body.roleKey, delegatedBy: actorUserId },
     });
     return result;
   }
@@ -167,14 +162,12 @@ export class IamService {
       },
     });
 
-    await this.prisma.auditEntry.create({
-      data: {
-        tenantId, buildingId, actor: actorUserId, role: 'delegator',
-        action: 'Staff member added', entity: user.id, entityType: 'user',
-        building: buildingId, ip: '127.0.0.1',
-        eventType: 'staff.created', resourceType: 'user', resourceId: user.id,
-        metadata: { roleKey: body.roleKey, organizationId: body.organizationId || null },
-      },
+    await this.audit.write({
+      tenantId, buildingId, actor: actorUserId, role: 'delegator',
+      action: 'Staff member added', entity: user.id, entityType: 'user',
+      building: buildingId, ip: '127.0.0.1', sensitive: false,
+      eventType: 'staff.created', resourceType: 'user', resourceId: user.id,
+      metadata: { roleKey: body.roleKey, organizationId: body.organizationId || null },
     });
 
     return { user, assignment, temporaryPassword: body.password ? undefined : password };
@@ -238,13 +231,12 @@ export class IamService {
     const ok = await this.canDelegate(actorUserId, buildingId, existing.roleKey);
     if (!ok) throw new ForbiddenException('actor cannot revoke this role');
     await this.prisma.buildingRoleAssignment.delete({ where: { id: existing.id } });
-    await this.prisma.auditEntry.create({
-      data: {
-        tenantId, buildingId, actor: actorUserId, role: 'delegator', action: 'Role revoked',
-        entity: existing.userId, entityType: 'role_assignment', building: buildingId, ip: '127.0.0.1',
-        eventType: 'role.revoked', resourceType: 'role_assignment', resourceId: existing.id,
-        metadata: { roleKey: existing.roleKey },
-      },
+    await this.audit.write({
+      tenantId, buildingId, actor: actorUserId, role: 'delegator', action: 'Role revoked',
+      entity: existing.userId, entityType: 'role_assignment', building: buildingId, ip: '127.0.0.1',
+      sensitive: false,
+      eventType: 'role.revoked', resourceType: 'role_assignment', resourceId: existing.id,
+      metadata: { roleKey: existing.roleKey },
     });
     return { ok: true };
   }

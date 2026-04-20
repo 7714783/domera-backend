@@ -27,8 +27,14 @@ export class PpmController {
   }
 
   @Get('buildings/:id/ppm/programs')
-  async listPrograms(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
-    return this.ppm.listPrograms(resolveTenantId(th), id);
+  async listPrograms(
+    @Param('id') id: string,
+    @Query('includeAwaitingOnboarding') includeAwaitingOnboarding?: string,
+    @Headers('x-tenant-id') th?: string,
+  ) {
+    return this.ppm.listPrograms(resolveTenantId(th), id, {
+      includeAwaitingOnboarding: includeAwaitingOnboarding === '1' || includeAwaitingOnboarding === 'true',
+    });
   }
 
   @Post('buildings/:id/ppm/programs')
@@ -76,6 +82,33 @@ export class PpmController {
     @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
   ) {
     return this.ppm.wizardApply(resolveTenantId(th), await uid(ah, this.auth), id, body || { items: [] });
+  }
+
+  @Get('buildings/:id/ppm/plan-items')
+  async listPlanItems(
+    @Param('id') id: string,
+    @Query('baselineStatus') baselineStatus?: string,
+    @Headers('x-tenant-id') th?: string,
+  ) {
+    return this.ppm.listPlanItems(resolveTenantId(th), id, { baselineStatus });
+  }
+
+  @Post('ppm/plan-items/:planItemId/baseline')
+  async recordBaseline(
+    @Param('planItemId') planItemId: string,
+    @Body() body: { lastPerformedAt: string; evidenceDocumentId?: string | null; notes?: string | null },
+    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+  ) {
+    return this.ppm.recordBaseline(resolveTenantId(th), await uid(ah, this.auth), planItemId, body);
+  }
+
+  @Post('buildings/:id/ppm/setup-baseline')
+  async setupBaseline(
+    @Param('id') id: string,
+    @Body() body: { items: Array<{ planItemId: string; lastPerformedAt?: string; evidenceDocumentId?: string | null; notes?: string | null; skip?: boolean }> },
+    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+  ) {
+    return this.ppm.recordBaselineBulk(resolveTenantId(th), await uid(ah, this.auth), id, body || { items: [] });
   }
 
   @Get('ppm/executions/:id')

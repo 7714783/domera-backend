@@ -1,9 +1,13 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, forwardRef, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AssetsService } from '../assets/assets.service';
 
 @Injectable()
 export class BuildingCoreService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => AssetsService)) private readonly assets: AssetsService,
+  ) {}
 
   private async requireManager(tenantId: string, actorUserId: string) {
     const ws = await this.prisma.membership.findFirst({
@@ -276,7 +280,84 @@ export class BuildingCoreService {
     });
   }
 
-  // ── Aggregate view ───────────────────────────────────
+  // ── Canonical locations (single source of truth) ─────
+  // Unified view: BuildingLocation rows (non-leasable: restrooms, corridors,
+  // lobbies, mechanical rooms) + BuildingUnit rows (leasable: offices,
+  // storage) — projected into the same shape. Every module that needs a
+  // physical space references this endpoint — rooms are created here,
+  // nowhere else.
+  async listLocations(tenantId: string, buildingIdOrSlug: string) {
+    const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    const [locations, units, floors] = await Promise.all([
+      this.prisma.buildingLocation.findMany({
+        where: { tenantId, buildingId },
+        orderBy: [{ floorId: 'asc' }, { code: 'asc' }],
+      }),
+      this.prisma.buildingUnit.findMany({
+        where: { tenantId, buildingId },
+        orderBy: [{ floorId: 'asc' }, { unitCode: 'asc' }],
+      }),
+      this.prisma.buildingFloor.findMany({
+        where: { tenantId, buildingId },
+        select: { id: true, floorCode: true, floorNumber: true, label: true },
+      }),
+    ]);
+    const floorById = new Map(floors.map((f) => [f.id, f]));
+    const asUnits = units.map((u) => ({
+      id: u.id, source: 'unit' as const,
+      tenantId: u.tenantId, buildingId: u.buildingId,
+      floorId: u.floorId,
+      floorNumber: floorById.get(u.floorId)?.floorNumber ?? null,
+      floorCode: floorById.get(u.floorId)?.floorCode ?? null,
+      code: u.unitCode, name: u.unitCode,
+      locationType: u.unitType,
+      areaSqm: u.areaSqm, isLeasable: true, unitId: u.id,
+      notes: u.notes, isActive: u.status !== 'decommissioned',
+    }));
+    const asLocations = locations.map((l) => ({
+      id: l.id, source: 'location' as const,
+      tenantId: l.tenantId, buildingId: l.buildingId,
+      floorId: l.floorId,
+      floorNumber: floorById.get(l.floorId)?.floorNumber ?? null,
+      floorCode: floorById.get(l.floorId)?.floorCode ?? null,
+      code: l.code, name: l.name,
+      locationType: l.locationType,
+      areaSqm: l.areaSqm, isLeasable: l.isLeasable, unitId: l.unitId,
+      notes: l.notes, isActive: l.isActive,
+    }));
+    return [...asUnits, ...asLocations].sort((a, b) => {
+      const fa = a.floorNumber ?? Number.POSITIVE_INFINITY;
+      const fb = b.floorNumber ?? Number.POSITIVE_INFINITY;
+      if (fa !== fb) return fa - fb;
+      return a.code.localeCompare(b.code);
+    });
+  }
+
+  async createLocation(tenantId: string, actorUserId: string, buildingIdOrSlug: string, body: {
+    floorId: string; code: string; name: string; locationType: string;
+    areaSqm?: number; notes?: string; isLeasable?: boolean;
+  }) {
+    await this.requireManager(tenantId, actorUserId);
+    if (!body.floorId || !body.code || !body.name || !body.locationType) {
+      throw new BadRequestException('floorId, code, name, locationType required');
+    }
+    const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    const floor = await this.prisma.buildingFloor.findFirst({ where: { id: body.floorId, tenantId, buildingId } });
+    if (!floor) throw new NotFoundException('floor not found in this building');
+    const dupeLoc = await this.prisma.buildingLocation.findFirst({ where: { buildingId, code: body.code } });
+    if (dupeLoc) throw new BadRequestException(`code "${body.code}" already exists as a location`);
+    const dupeUnit = await this.prisma.buildingUnit.findFirst({ where: { buildingId, unitCode: body.code } });
+    if (dupeUnit) throw new BadRequestException(`code "${body.code}" already exists as a unit — pick another`);
+    return this.prisma.buildingLocation.create({
+      data: {
+        tenantId, buildingId, floorId: body.floorId,
+        code: body.code, name: body.name, locationType: body.locationType,
+        areaSqm: body.areaSqm ?? null, notes: body.notes || null,
+        isLeasable: !!body.isLeasable,
+      },
+    });
+  }
+
   // ── Parking spots ────────────────────────────────────
   async listParking(tenantId: string, buildingIdOrSlug: string) {
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
@@ -459,22 +540,14 @@ export class BuildingCoreService {
   }
 
   // ── Asset semantic tags (Haystack + Brick) ───────────
+  // Building-core authorizes + resolves, but the DB write is delegated to
+  // AssetsService (the sole owner of the assets table).
   async tagAsset(tenantId: string, actorUserId: string, buildingIdOrSlug: string, assetId: string, body: {
     haystackTags?: string[]; brickClass?: string; brickRelations?: unknown; externalIds?: unknown;
   }) {
     await this.requireManager(tenantId, actorUserId);
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
-    const asset = await this.prisma.asset.findFirst({ where: { id: assetId, tenantId, buildingId } });
-    if (!asset) throw new NotFoundException('asset not found in this building');
-    return this.prisma.asset.update({
-      where: { id: assetId },
-      data: {
-        haystackTags: body.haystackTags ?? asset.haystackTags,
-        brickClass: body.brickClass ?? asset.brickClass,
-        brickRelations: body.brickRelations === undefined ? (asset as any).brickRelations : (body.brickRelations as any),
-        externalIds: body.externalIds === undefined ? (asset as any).externalIds : (body.externalIds as any),
-      },
-    });
+    return this.assets.setSemanticTags(tenantId, assetId, buildingId, body);
   }
 
   async summary(tenantId: string, buildingIdOrSlug: string) {

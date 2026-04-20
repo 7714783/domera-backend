@@ -1,5 +1,6 @@
 import { Module, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { ApprovalsModule } from '../approvals/approvals.module';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PpmController } from './ppm.controller';
 import { PpmService } from './ppm.service';
@@ -26,7 +27,7 @@ class PpmSlaReminderRunner implements OnModuleInit, OnModuleDestroy {
 }
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, ApprovalsModule],
   controllers: [PpmController],
   providers: [PpmService, PpmSlaReminderRunner],
   exports: [PpmService, PpmSlaReminderRunner],

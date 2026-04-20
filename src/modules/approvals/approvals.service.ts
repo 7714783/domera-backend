@@ -165,4 +165,28 @@ export class ApprovalsService {
       escalated: items.filter((x) => x.status === 'escalated').length,
     };
   }
+
+  // Other modules (e.g. PPM) request an approval chain for an action they
+  // originated. Approvals owns the approval_requests table; callers must route
+  // through this method instead of creating rows themselves.
+  async createRequest(body: {
+    tenantId: string; buildingId: string; title: string; type: string;
+    amount?: number; requesterUserId: string; requesterName?: string;
+    hint?: string; steps: Array<{ orderNo: number; role: string }>;
+  }) {
+    return this.prisma.approvalRequest.create({
+      data: {
+        tenantId: body.tenantId, buildingId: body.buildingId,
+        title: body.title, type: body.type,
+        amount: body.amount ?? 0,
+        status: 'pending',
+        requesterUserId: body.requesterUserId,
+        requesterName: body.requesterName ?? body.requesterUserId,
+        hint: body.hint ?? null,
+        steps: {
+          create: body.steps.map((s) => ({ orderNo: s.orderNo, role: s.role, status: 'pending' })),
+        },
+      },
+    });
+  }
 }

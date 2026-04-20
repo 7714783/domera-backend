@@ -1,5 +1,7 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
+import { PpmService } from '../ppm/ppm.service';
 
 export interface BuildingListItem {
   id: string;
@@ -17,7 +19,13 @@ export interface BuildingListItem {
 
 @Injectable()
 export class BuildingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(BuildingsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+    private readonly ppm: PpmService,
+  ) {}
 
   private slugify(input: string): string {
     return input
@@ -171,14 +179,38 @@ export class BuildingsService {
       });
     }
 
-    await this.prisma.auditEntry.create({
-      data: {
-        tenantId, buildingId: building.id, actor: actorUserId, role: 'workspace_owner',
-        action: 'Building created', entity: building.slug, entityType: 'building',
-        building: building.name, ip: '127.0.0.1', eventType: 'building.created',
-        resourceType: 'building', resourceId: building.id,
-      },
+    await this.audit.write({
+      tenantId, buildingId: building.id, actor: actorUserId, role: 'workspace_owner',
+      action: 'Building created', entity: building.slug, entityType: 'building',
+      building: building.name, ip: '127.0.0.1', sensitive: false,
+      eventType: 'building.created', resourceType: 'building', resourceId: building.id,
     });
+
+    // Seed the PPM backlog so the new building enters the standard lifecycle
+    // (every obligation → a pending PpmPlanItem visible on /ppm/setup).
+    // PPM is the single writer of ppm_* tables — buildings delegates via PpmService.
+    // Runs after the building row is committed; if this fails we log but do NOT
+    // fail the whole creation (building is usable and the operator can rerun
+    // the seed later from the Setup page).
+    try {
+      const res = await this.ppm.seedPendingPlanItemsForBuilding({
+        tenantId, buildingId: building.id, actorUserId,
+      });
+      if (res.created > 0) {
+        await this.audit.write({
+          tenantId, buildingId: building.id, actor: actorUserId, role: 'workspace_owner',
+          action: `PPM backlog seeded: ${res.created} plan items awaiting setup`,
+          entity: building.slug, entityType: 'building',
+          building: building.name, ip: '127.0.0.1', sensitive: false,
+          eventType: 'ppm.backlog_seeded', resourceType: 'building', resourceId: building.id,
+          metadata: { created: res.created, skipped: res.skipped, total: res.total },
+        });
+      }
+    } catch (e) {
+      this.logger.warn(
+        `PPM seed failed for building ${building.id} (${building.slug}): ${(e as Error).message}`,
+      );
+    }
 
     return building;
   }
@@ -201,14 +233,31 @@ export class BuildingsService {
 
     const updated = await this.prisma.building.update({ where: { id: existing.id }, data });
 
-    await this.prisma.auditEntry.create({
-      data: {
-        tenantId, buildingId: existing.id, actor: actorUserId, role: 'building_manager',
-        action: 'Building updated', entity: updated.slug, entityType: 'building',
-        building: updated.name, ip: '127.0.0.1', eventType: 'building.updated',
-        resourceType: 'building', resourceId: updated.id,
-      },
+    await this.audit.write({
+      tenantId, buildingId: existing.id, actor: actorUserId, role: 'building_manager',
+      action: 'Building updated', entity: updated.slug, entityType: 'building',
+      building: updated.name, ip: '127.0.0.1', sensitive: false,
+      eventType: 'building.updated', resourceType: 'building', resourceId: updated.id,
     });
     return updated;
+  }
+
+  // Set the operational status of a building. Other modules (takeover, etc.)
+  // must call this instead of writing building.status directly.
+  async setStatus(tenantId: string, buildingId: string, status: string) {
+    const b = await this.prisma.building.findFirst({ where: { id: buildingId, tenantId } });
+    if (!b) throw new NotFoundException('building not found');
+    return this.prisma.building.update({ where: { id: buildingId }, data: { status } });
+  }
+
+  // Denormalized "is currently leased" flag on parking/storage. Building-core
+  // owns these tables; leases module must route through this method.
+  async setLeasedFlag(
+    tenantId: string, targetType: 'parking_spot' | 'storage_unit', targetId: string, isLeased: boolean,
+  ) {
+    if (targetType === 'parking_spot') {
+      return this.prisma.parkingSpot.update({ where: { id: targetId }, data: { isLeased } });
+    }
+    return this.prisma.storageUnit.update({ where: { id: targetId }, data: { isLeased } });
   }
 }

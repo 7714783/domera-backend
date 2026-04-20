@@ -1,11 +1,17 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
+import { BuildingsService } from '../buildings/buildings.service';
 
 const SIGNOFF_CHAIN = ['building_manager', 'chief_engineer', 'owner_representative'];
 
 @Injectable()
 export class TakeoverService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+    private readonly buildings: BuildingsService,
+  ) {}
 
   async createCase(
     tenantId: string,
@@ -34,13 +40,11 @@ export class TakeoverService {
       },
     });
 
-    await this.prisma.auditEntry.create({
-      data: {
-        tenantId, buildingId: building.id, actor: actorUserId, role: 'initiator',
-        action: 'Takeover case created', entity: c.id, entityType: 'takeover_case',
-        building: building.name, ip: '127.0.0.1', eventType: 'takeover.created',
-        resourceType: 'takeover_case', resourceId: c.id,
-      },
+    await this.audit.write({
+      tenantId, buildingId: building.id, actor: actorUserId, role: 'initiator',
+      action: 'Takeover case created', entity: c.id, entityType: 'takeover_case',
+      building: building.name, ip: '127.0.0.1', sensitive: false,
+      eventType: 'takeover.created', resourceType: 'takeover_case', resourceId: c.id,
     });
     return c;
   }
@@ -199,17 +203,16 @@ export class TakeoverService {
     });
 
     if (completed) {
-      await this.prisma.building.update({ where: { id: c.buildingId }, data: { status: 'operational' } });
+      await this.buildings.setStatus(tenantId, c.buildingId, 'operational');
     }
 
-    await this.prisma.auditEntry.create({
-      data: {
-        tenantId, buildingId: c.buildingId, actor: actorUserId, role: actorRole,
-        action: completed ? 'Takeover signed off' : 'Takeover signoff step',
-        entity: c.id, entityType: 'takeover_case', building: c.buildingId, ip: '127.0.0.1',
-        eventType: completed ? 'takeover.completed' : 'takeover.signoff.step',
-        resourceType: 'takeover_case', resourceId: c.id, metadata: { step: actorRole, log },
-      },
+    await this.audit.write({
+      tenantId, buildingId: c.buildingId, actor: actorUserId, role: actorRole,
+      action: completed ? 'Takeover signed off' : 'Takeover signoff step',
+      entity: c.id, entityType: 'takeover_case', building: c.buildingId, ip: '127.0.0.1',
+      sensitive: false,
+      eventType: completed ? 'takeover.completed' : 'takeover.signoff.step',
+      resourceType: 'takeover_case', resourceId: c.id, metadata: { step: actorRole, log },
     });
     return updated;
   }

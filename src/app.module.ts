@@ -41,6 +41,9 @@ import { SsoModule } from './modules/sso/sso.module';
 import { ScimModule } from './modules/scim/scim.module';
 import { ConnectorsModule } from './modules/connectors/connectors.module';
 import { CleaningModule } from './modules/cleaning/cleaning.module';
+import { DocumentTemplatesModule } from './modules/document-templates/document-templates.module';
+import { RoundsModule } from './modules/rounds/rounds.module';
+import { AssetsModule } from './modules/assets/assets.module';
 
 @Module({
   imports: [
@@ -84,6 +87,9 @@ import { CleaningModule } from './modules/cleaning/cleaning.module';
     ScimModule,
     ConnectorsModule,
     CleaningModule,
+    DocumentTemplatesModule,
+    RoundsModule,
+    AssetsModule,
   ],
 })
 export class AppModule implements NestModule {

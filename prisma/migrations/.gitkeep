@@ -1,0 +1,10 @@
+# Prisma migrations live here.
+#
+# - Created by:    pnpm --filter @domera/api db:migrate:dev --name <desc>
+# - Applied by:    pnpm --filter @domera/api db:migrate:deploy
+# - Inspect with:  pnpm --filter @domera/api db:migrate:status
+#
+# Do NOT manually edit applied migrations — create a new one instead.
+# Raw SQL that Prisma can't express (partial unique, RLS, policies) either
+# lives inside `migration.sql` of a Prisma migration, or in a standalone raw
+# SQL file under prisma/migrations-sql/ / prisma/rls/.

@@ -78,8 +78,9 @@ model Building {
 When a new building field becomes stable:
 
 1. Add the column in `schema.prisma` with a safe default (`@default(...)`)  
-2. Run `prisma db push` (dev) or `prisma migrate dev --name add_<field>` (once
-   we adopt migrations) — no data loss.
+2. Run `pnpm --filter @domera/api db:migrate:dev --name add_<field>` to author
+   the migration and apply it locally. `prisma db push` is no longer the
+   accepted path — see `docs/architecture/database-migrations.md`.
 3. Update the `PATCH /v1/buildings/:slug` `allowed` list in
    `BuildingsService.update`.
 4. Surface it in `/buildings/:slug/settings` UI.

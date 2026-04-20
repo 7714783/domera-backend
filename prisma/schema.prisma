@@ -262,27 +262,49 @@ model Building {
   @@map("buildings")
 }
 
+// Asset (building operational registry). Supports two modes:
+//   - serialized unit/component: serial number, unique item
+//   - group/zone asset:           zonal / linear / area without serial
 model Asset {
   id            String   @id @default(uuid())
   tenantId      String
   buildingId    String
   parentAssetId String?
+  assetTypeId   String?         // FK to AssetType (taxonomy)
+  locationId    String?         // FK to canonical BuildingLocation
+  qrBarcode     String?         @unique
   name          String
-  class         String
-  systemType    String?
+  class         String          // legacy coarse class (kept for backward-compat)
+  systemType    String?         // legacy subsystem label
+  systemFamily  String?         // canonical: HVAC | Electrical | Fire | Lift | Water | …
+  assetLevel    String          @default("unit") // system | subsystem | unit | component | group | zone
   model         String?
   manufacturer  String?
+  manufacturerPartNo String?
+  serialNumber  String?
   installDate   DateTime?
+  commissioningDate DateTime?
+  warrantyStart DateTime?
+  warrantyEnd   DateTime?
   attributes    Json?
+  // Lifecycle + responsibility
+  lifecycleStatus    String  @default("active")   // planned | active | standby | out_of_service | obsolete | disposed
+  conditionState     String  @default("good")     // good | fair | poor | critical
+  riskCriticality    String  @default("medium")   // low | medium | high | life_safety | mission_critical
+  responsibleDepartment String?
+  responsibleUserId  String?
+  // Commercial
+  purchaseCost       Float?
+  replacementCost    Float?
+  contractId         String?
+  slaId              String?
   // Semantic model columns (SSOT §P4):
-  //   haystackTags    — Project Haystack tag set (e.g. ["ahu","discharge","temp","sensor"])
-  //   brickClass      — Brick ontology class URI (e.g. "brick:Supply_Air_Temperature_Sensor")
-  //   brickRelations  — [{ predicate, object }] edges in Brick terms (e.g. isPointOf, feeds)
-  //   externalIds     — { bacnet, opc, haystack, ifc } system-specific identifiers
   haystackTags   String[] @default([])
   brickClass     String?
   brickRelations Json?
   externalIds    Json?
+  ifcGuid        String?
+  isActive       Boolean  @default(true)
   isDemo        Boolean  @default(false)
   seedKey       String?  @unique
   createdBy     String?  @default("system")
@@ -294,12 +316,131 @@ model Asset {
   parent   Asset?   @relation("AssetTree", fields: [parentAssetId], references: [id], onDelete: Cascade)
   children Asset[]  @relation("AssetTree")
   maintenancePlans MaintenancePlan[]
+  ppmPlanItems PpmPlanItem[] @relation("AssetPpmPlanItems")
 
   @@index([tenantId, buildingId])
   @@index([parentAssetId])
   @@index([systemType])
   @@index([brickClass])
+  @@index([assetTypeId])
+  @@index([locationId])
+  @@index([systemFamily])
+  @@index([riskCriticality])
+  @@index([lifecycleStatus])
   @@map("assets")
+}
+
+// Asset taxonomy — tenant-scoped, extensible. Seeded with the canonical
+// building-ops taxonomy (HVAC/Electrical/Fire/Lift/Water/Comms/Security/
+// Envelope/Roof/Sanitary/...).
+model AssetType {
+  id             String   @id @default(uuid())
+  tenantId       String
+  key            String                   // stable key, e.g. "hvac.ahu"
+  name           String
+  systemFamily   String                   // HVAC | Electrical | Fire | Lift | Water | Comms | Security | Envelope | Roof | Sanitary | Service | Monitoring
+  isSerialized   Boolean  @default(true)  // serialized unit vs group/zone
+  schemaKey      String?                  // links to JSON Schema for typed custom attrs
+  description    String?
+  isBuiltIn      Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, key])
+  @@index([tenantId, systemFamily, isActive])
+  @@map("asset_types")
+}
+
+// Custom typed attributes per asset. Value stored as JSON to keep schema
+// flexible while preserving indexable `attributeKey` on hot paths.
+model AssetCustomAttribute {
+  id            String   @id @default(uuid())
+  tenantId      String
+  assetId       String
+  attributeKey  String
+  valueType     String   @default("string") // string | number | integer | boolean | date | json
+  valueJson     Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([assetId, attributeKey])
+  @@index([tenantId, attributeKey])
+  @@map("asset_custom_attributes")
+}
+
+// Document attachments for assets (paspoort, O&M manual, as-built drawings).
+// Different from DocumentLink (polymorphic) — this is a typed direct link
+// that the asset detail page reads to render the Documents tab fast.
+model AssetDocument {
+  id         String   @id @default(uuid())
+  tenantId   String
+  assetId    String
+  documentId String
+  docType    String                // o_m_manual | as_built | certificate | warranty | datasheet | photo | schema | other
+  title      String?
+  version    String?
+  createdAt  DateTime @default(now())
+
+  @@unique([assetId, documentId, docType])
+  @@index([tenantId, assetId])
+  @@index([documentId])
+  @@map("asset_documents")
+}
+
+// Photos/media attached to an asset (nameplate shot, installed-position
+// shot, condition-evidence shot). Stored as object-storage URLs in the
+// existing Document table, but surfaced here so that each media item can
+// carry a caption + mediaType without polluting Document itself.
+model AssetMedia {
+  id         String   @id @default(uuid())
+  tenantId   String
+  assetId    String
+  mediaType  String                // photo | drawing | diagram | video
+  documentId String?               // optional link to a stored Document
+  url        String?               // or a direct URL (for external refs)
+  caption    String?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, assetId])
+  @@map("asset_media")
+}
+
+// Spare parts catalogue (tenant-scoped). Spare parts are their own
+// entities in inventory and get linked to one or more asset types (or
+// specific assets) via AssetSparePart.
+model SparePart {
+  id             String   @id @default(uuid())
+  tenantId       String
+  partNo         String
+  name           String
+  manufacturer   String?
+  supplierId     String?
+  unit           String?  @default("pc")
+  reorderPoint   Int?
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, partNo])
+  @@index([tenantId, supplierId])
+  @@map("spare_parts")
+}
+
+// Many-to-many: which spare parts are recommended for a given asset.
+model AssetSparePart {
+  id              String   @id @default(uuid())
+  tenantId        String
+  assetId         String
+  partId          String
+  qtyRecommended  Float    @default(1)
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  @@unique([assetId, partId])
+  @@index([tenantId, assetId])
+  @@index([partId])
+  @@map("asset_spare_parts")
 }
 
 model SensorPoint {
@@ -465,6 +606,9 @@ model PpmTemplate {
   requiresApprovalBeforeOrder Boolean  @default(false)
   frequencyMonths             Int?
   evidenceDocTypeKey          String?
+  // Strong link to a reusable DocumentTemplate — the sketch/printable/
+  // reference template the performer uses when closing this obligation.
+  evidenceDocumentTemplateId  String?
   isDemo                      Boolean  @default(false)
   seedKey                     String?  @unique
   createdBy                   String?  @default("system")
@@ -496,6 +640,22 @@ model PpmPlanItem {
   executionMode        String   @default("in_house")
   performerOrgId       String?
   contractId           String?
+  // Baseline state — whether this plan item has been onboarded into the
+  // main scheduled flow.
+  //   pending  — no baseline yet; excluded from the scheduler / compliance
+  //              / triage surfaces. Awaits operator action on the Setup page.
+  //   set      — baseline recorded (lastPerformedAt + evidence); main flow.
+  //   unknown  — operator declared the prior record unknown; forced into
+  //              main flow with immediate due date. Evidence may be filled
+  //              later by a back-dated completion.
+  baselineStatus       String   @default("pending")
+  baselineSetAt        DateTime?
+  baselineSetByUserId  String?
+  baselineEvidenceDocumentId String?
+  baselineNote         String?
+  // Optional link to an Asset — when the plan item is scoped to a specific
+  // piece of equipment (e.g. AHU-01) rather than the whole building or a unit.
+  assetId              String?
   isDemo               Boolean  @default(false)
   seedKey              String?  @unique
   createdBy            String?  @default("system")
@@ -506,10 +666,22 @@ model PpmPlanItem {
   building    Building           @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   template    PpmTemplate        @relation(fields: [templateId], references: [id], onDelete: Cascade)
   obligation  ObligationTemplate @relation(fields: [obligationTemplateId], references: [id], onDelete: Cascade)
+  asset       Asset?             @relation("AssetPpmPlanItems", fields: [assetId], references: [id], onDelete: SetNull)
   tasks       TaskInstance[]
 
   @@index([tenantId, buildingId, nextDueAt])
   @@index([buildingId, scope])
+  @@index([assetId])
+  // DB-level uniqueness enforced via two PARTIAL indexes declared in
+  // apps/api/prisma/migrations-sql/001_ppm_plan_item_unique.sql:
+  //   ppm_plan_items_unique_scope_no_unit
+  //     UNIQUE(tenantId, buildingId, obligationTemplateId, scope) WHERE unitId IS NULL
+  //   ppm_plan_items_unique_scope_unit
+  //     UNIQUE(tenantId, buildingId, obligationTemplateId, scope, unitId) WHERE unitId IS NOT NULL
+  // Prisma @@unique cannot express the WHERE clause, so the indexes live in a
+  // raw-SQL migration. The app-level pre-check in PpmService still catches
+  // the common case and returns a user-friendly error; the partial indexes
+  // close the race window.
   @@map("ppm_plan_items")
 }
 
@@ -859,6 +1031,131 @@ model DocumentType {
   retentionYears   Int?
 
   @@map("document_types")
+}
+
+// Reusable document templates (sketch forms, printable samples, reference
+// packs). Used by PPM completion flows as the authoritative evidence template
+// that the performer must fill out or attach. Templates live per-tenant and
+// can optionally be scoped to a specific building.
+//
+//   - kind=sketch_form   : body_markdown holds a fillable markdown form
+//                          (question prompts, numbered checkpoints, tables).
+//                          Completion produces a Document instance rendered
+//                          from the filled template.
+//   - kind=printable     : sampleDocumentId points to an uploaded sample
+//                          (e.g. the blank form the authority expects;
+//                          operator prints it, fills by hand, scans back).
+//   - kind=reference     : informational — no fill-in, just attached for
+//                          guidance (SOP, checklist PDF).
+model DocumentTemplate {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  buildingId          String?          // optional scope; null = tenant-wide
+  key                 String           // stable identifier within (tenantId, key)
+  name                String
+  description         String?
+  kind                String           // sketch_form | printable | reference
+  documentTypeKey     String?          // link to DocumentType taxonomy
+  bodyMarkdown        String?          // sketch_form body
+  sampleDocumentId    String?          // printable/reference sample Document
+  requiresPhoto       Boolean  @default(false)
+  requiresDigitalSignoff Boolean @default(false)
+  retentionYears      Int?
+  isActive            Boolean  @default(true)
+  createdByUserId     String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([tenantId, key])
+  @@index([tenantId, buildingId, isActive])
+  @@index([documentTypeKey])
+  @@map("document_templates")
+}
+
+// ── Rounds (inspection walks / checklists) ──────────────────────────
+// A "Round" is a named sequence of waypoints a person walks through,
+// e.g. "Morning fire-safety walk" or "Weekly restroom check". Each
+// waypoint references a canonical BuildingLocation and a
+// DocumentTemplate (the checklist to fill at that spot).
+// Rounds are scheduled (optional RRULE) and produce RoundInstance rows
+// when executed.
+model Round {
+  id             String    @id @default(uuid())
+  tenantId       String
+  buildingId     String
+  name           String
+  description    String?
+  recurrenceRule String?   // optional RRULE; null = ad-hoc
+  assignedRole   String?   // default role that runs the round
+  estimatedMinutes Int?
+  isActive       Boolean   @default(true)
+  createdByUserId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  waypoints      RoundWaypoint[]
+
+  @@index([tenantId, buildingId, isActive])
+  @@map("rounds")
+}
+
+model RoundWaypoint {
+  id                String   @id @default(uuid())
+  tenantId          String
+  roundId           String
+  orderNo           Int
+  locationId        String?   // BuildingLocation.id (canonical)
+  unitId            String?   // OR BuildingUnit.id
+  legacyZoneId      String?   // OR legacy CleaningZone.id
+  label             String    // display name for this step
+  documentTemplateId String?  // checklist to complete here
+  requiresPhoto     Boolean   @default(false)
+  requiresSignature Boolean   @default(false)
+  expectedDurationMinutes Int?
+  notes             String?
+  createdAt         DateTime  @default(now())
+
+  round Round @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, orderNo])
+  @@index([tenantId, roundId])
+  @@index([documentTemplateId])
+  @@map("round_waypoints")
+}
+
+// Execution of a Round by a user. Each answered waypoint becomes a row
+// in RoundInstanceAnswer (checklist responses + photos/signature refs).
+model RoundInstance {
+  id             String    @id @default(uuid())
+  tenantId       String
+  buildingId     String
+  roundId        String
+  startedByUserId String
+  startedAt      DateTime  @default(now())
+  completedAt    DateTime?
+  status         String    @default("in_progress") // in_progress | completed | aborted
+  notes          String?
+  createdAt      DateTime  @default(now())
+
+  @@index([tenantId, buildingId, status])
+  @@index([roundId])
+  @@map("round_instances")
+}
+
+model RoundInstanceAnswer {
+  id              String   @id @default(uuid())
+  tenantId        String
+  instanceId      String
+  waypointId      String
+  answeredAt      DateTime @default(now())
+  passed          Boolean  @default(true)
+  findings        String?
+  photoDocumentIds String[] @default([])
+  signatureDocumentId String?
+
+  @@unique([instanceId, waypointId])
+  @@index([tenantId, instanceId])
+  @@map("round_instance_answers")
 }
 
 model Role {
@@ -1818,6 +2115,34 @@ model BuildingUnit {
   @@map("building_units")
 }
 
+// Canonical physical location within a building. One row per room/space.
+// Used by every module that needs to reference a space (cleaning, PPM,
+// security, incidents, QR). Leasable offices live as BuildingUnit rows;
+// non-leasable common areas (restrooms, corridors, lobbies, mechanical
+// rooms) live as BuildingLocation rows. The `GET /v1/buildings/:id/locations`
+// endpoint returns BOTH as a unified list.
+model BuildingLocation {
+  id           String   @id @default(uuid())
+  tenantId     String
+  buildingId   String
+  floorId      String
+  code         String   // unique within the building
+  name         String
+  locationType String   // restroom | corridor | lobby | shared_area | mechanical_room | storage | office | meeting_room | kitchen | custom
+  areaSqm      Float?
+  isLeasable   Boolean  @default(false)
+  unitId       String?  @unique // optional back-link to BuildingUnit if this location IS a leasable unit
+  notes        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([buildingId, code])
+  @@index([tenantId, buildingId, floorId])
+  @@index([locationType])
+  @@map("building_locations")
+}
+
 model BuildingVerticalTransport {
   id              String   @id @default(uuid())
   tenantId        String
@@ -1956,6 +2281,7 @@ model LeaseAllocation {
 
   contract BuildingContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
 
+  @@unique([contractId, targetType, targetId])
   @@index([tenantId, contractId])
   @@index([tenantId, targetType, targetId])
   @@map("lease_allocations")

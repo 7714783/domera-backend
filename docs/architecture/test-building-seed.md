@@ -67,8 +67,10 @@ Create one idempotent demo workspace and one fully populated demo building (`nor
 ```bash
 docker compose -f infra/docker/docker-compose.yml up -d postgres redis
 pnpm install
-pnpm --filter api db:push
 pnpm --filter api db:rls
+pnpm --filter api db:migrate:deploy   # was: db:push — see docs/architecture/database-migrations.md
+pnpm --filter api db:migrate:sql
+pnpm --filter api db:generate
 ALLOW_DEMO_SEED=true DEMO_DISABLE_EMAIL=true DEMO_DISABLE_SMS=true \
   DEMO_DISABLE_WEBHOOKS=true pnpm --filter api seed:test-building
 pnpm --filter api start:worker

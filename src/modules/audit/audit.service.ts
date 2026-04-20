@@ -81,6 +81,7 @@ export class AuditService {
     const created = await this.prisma.auditEntry.create({
       data: {
         tenantId: entry.tenantId,
+        buildingId: entry.buildingId ?? null,
         actor: entry.actor,
         role: entry.role,
         action: entry.action,
@@ -89,7 +90,10 @@ export class AuditService {
         building: entry.building,
         ip: entry.ip,
         sensitive: entry.sensitive,
-        buildingRef: undefined,
+        eventType: entry.eventType ?? null,
+        resourceType: entry.resourceType ?? null,
+        resourceId: entry.resourceId ?? null,
+        metadata: (entry.metadata ?? undefined) as any,
       },
     });
 
@@ -105,6 +109,11 @@ export class AuditService {
       building: created.building,
       ip: created.ip,
       sensitive: created.sensitive,
+      buildingId: created.buildingId,
+      eventType: created.eventType,
+      resourceType: created.resourceType,
+      resourceId: created.resourceId,
+      metadata: created.metadata as any,
     };
   }
 }

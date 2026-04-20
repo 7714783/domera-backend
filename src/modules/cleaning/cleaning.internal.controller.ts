@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, Param, Patch, Post, Query, Res, UnauthorizedException } from '@nestjs/common';
+import type { Response } from 'express';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { CleaningAccessService } from './cleaning.access.service';
@@ -178,6 +179,17 @@ export class CleaningInternalController {
     return this.qr.list(tenantId, buildingId);
   }
 
+  @Get('qr-locations')
+  async listQrLocations(
+    @Query('buildingId') buildingId: string,
+    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+  ) {
+    if (!buildingId) throw new BadRequestException('buildingId query param required');
+    const tenantId = resolveTenantId(th);
+    await this.access.resolve(tenantId, await uid(ah, this.auth));
+    return this.qr.listLocations(tenantId, buildingId);
+  }
+
   @Post('qr-points')
   async createQr(
     @Body() body: any,
@@ -186,5 +198,29 @@ export class CleaningInternalController {
     const tenantId = resolveTenantId(th);
     await this.access.resolve(tenantId, await uid(ah, this.auth));
     return this.qr.create(tenantId, body);
+  }
+
+  @Get('qr-points/:id/image')
+  async renderQrImage(
+    @Param('id') id: string,
+    @Res() res: Response,
+    @Query('format') format?: string,
+    @Query('size') size?: string,
+    @Query('download') download?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
+  ) {
+    const tenantId = resolveTenantId(th);
+    await this.access.resolve(tenantId, await uid(ah, this.auth));
+    const out = await this.qr.renderImage(tenantId, id, {
+      format: format === 'png' ? 'png' : 'svg',
+      size: size ? Number(size) : undefined,
+    });
+    res.setHeader('Content-Type', out.mime);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    if (download === '1' || download === 'true') {
+      res.setHeader('Content-Disposition', `attachment; filename="${out.filename}"`);
+    }
+    res.send(out.body);
   }
 }

@@ -123,3 +123,91 @@ export const registeredConnectors: Connector[] = [
   accountingCsvConnector,
   vendorMasterCsvConnector,
 ];
+
+// ─── Bridge connectors for BACnet / OPC UA / MQTT ───────────────────
+// Production Domera never speaks BACnet/OPC UA/MQTT directly — a separate
+// gateway (Niagara, Edge OPC UA server, mqtt-bridge) normalises field-level
+// packets and POSTs them here. Each connector decodes the bridge-normalised
+// JSON envelope into domain objects (incidents or sensor readings) the rest
+// of the platform already understands.
+//
+// Envelope contract (accepted by all three decoders):
+//   {
+//     "tenantId": "uuid",            // required
+//     "buildingId": "uuid",          // required
+//     "sourceId": "bridge-xyz",      // id of the gateway process
+//     "points": [
+//       { "ref": "ahu-1.supply_temp_f", "ts": "ISO", "value": 58.3,
+//         "alarm": false, "quality": "good",
+//         "bacnetId": "2001",          // bacnet
+//         "opcNodeId": "ns=2;s=AHU1.T",// opcua
+//         "mqttTopic": "dom/bldg/ahu", // mqtt
+//         "severity": "P2",            // optional — triggers incident
+//         "alarmMessage": "Freeze-stat tripped"
+//       }
+//     ]
+//   }
+
+export interface BridgeIngestEnvelope {
+  tenantId: string;
+  buildingId: string;
+  sourceId: string;
+  points: BridgePoint[];
+}
+
+export interface BridgePoint {
+  ref: string;
+  ts: string;
+  value?: number | string | boolean | null;
+  alarm?: boolean;
+  quality?: 'good' | 'bad' | 'uncertain';
+  bacnetId?: string;
+  opcNodeId?: string;
+  mqttTopic?: string;
+  haystackRef?: string;
+  severity?: 'P1' | 'P2' | 'P3' | 'P4';
+  alarmMessage?: string;
+}
+
+export interface DecodedBridgeRow {
+  kind: 'sensor_reading' | 'incident';
+  point: BridgePoint;
+}
+
+function buildBridgeDecoder(
+  id: string,
+  kind: 'bacnet' | 'opcua' | 'mqtt',
+  externalIdKey: keyof BridgePoint,
+): Connector<never, DecodedBridgeRow> {
+  return {
+    id,
+    kind,
+    direction: 'inbound',
+    eventTypes: ['domera.sensor.reading', 'domera.incident.opened'],
+    async decode(_ctx, raw) {
+      let env: BridgeIngestEnvelope;
+      try { env = JSON.parse(raw); } catch { throw new Error(`${id}: invalid JSON envelope`); }
+      if (!env || !Array.isArray(env.points)) throw new Error(`${id}: envelope missing points[]`);
+      const out: DecodedBridgeRow[] = [];
+      for (const p of env.points) {
+        if (!p.ref) continue;
+        // Confirm that the point carries the expected protocol identifier —
+        // rejects mis-routed packets (e.g. an MQTT topic sent to the BACnet
+        // endpoint) so the audit trail remains accurate.
+        if (!p[externalIdKey]) continue;
+        if (p.alarm || p.severity) {
+          out.push({ kind: 'incident', point: p });
+        } else {
+          out.push({ kind: 'sensor_reading', point: p });
+        }
+      }
+      return out;
+    },
+  };
+}
+
+export const bacnetBridgeConnector = buildBridgeDecoder('bridge.bacnet.v1', 'bacnet', 'bacnetId');
+export const opcuaBridgeConnector = buildBridgeDecoder('bridge.opcua.v1', 'opcua', 'opcNodeId');
+export const mqttBridgeConnector = buildBridgeDecoder('bridge.mqtt.v1', 'mqtt', 'mqttTopic');
+
+registeredConnectors.push(bacnetBridgeConnector, opcuaBridgeConnector, mqttBridgeConnector);

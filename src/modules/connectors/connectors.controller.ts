@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Post, Query, Req, Res, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Query, Req, Res, UnauthorizedException } from '@nestjs/common';
 import type { Response } from 'express';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
@@ -52,5 +52,20 @@ export class ConnectorsController {
       resolveTenantId(th), await uid(ah, this.auth),
       raw.toString('utf8'),
     );
+  }
+
+  @Post(':connectorId/ingest')
+  async ingestBridge(
+    @Param('connectorId') connectorId: string,
+    @Req() req: any,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
+  ) {
+    const userId = ah ? await uid(ah, this.auth).catch(() => null) : null;
+    const raw: string = req.rawBody
+      ? req.rawBody.toString('utf8')
+      : (body ? (typeof body === 'string' ? body : JSON.stringify(body)) : '');
+    return this.svc.ingestBridge(resolveTenantId(th), connectorId, userId, raw);
   }
 }

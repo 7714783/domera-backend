@@ -1,9 +1,13 @@
 ﻿import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class SeedRuntimeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async getWorkspaceBySlug(slug: string) {
     const workspace = await this.prisma.tenant.findUnique({ where: { slug } });
@@ -173,23 +177,14 @@ export class SeedRuntimeService {
       },
     });
 
-    await this.prisma.auditEntry.create({
-      data: {
-        tenantId: updated.tenantId,
-        buildingId: updated.buildingId,
-        actor: actorUserId,
-        role: 'operator',
-        action: 'Task completed',
-        entity: updated.title,
-        entityType: 'task',
-        building: task.building.name,
-        ip: '127.0.0.1',
-        sensitive: false,
-        eventType: 'task.completed',
-        resourceType: 'task',
-        resourceId: updated.id,
-        metadata: { comment: payload?.comment || null },
-      },
+    await this.audit.write({
+      tenantId: updated.tenantId,
+      buildingId: updated.buildingId,
+      actor: actorUserId, role: 'operator',
+      action: 'Task completed', entity: updated.title, entityType: 'task',
+      building: task.building.name, ip: '127.0.0.1', sensitive: false,
+      eventType: 'task.completed', resourceType: 'task', resourceId: updated.id,
+      metadata: { comment: payload?.comment || null },
     });
 
     return updated;
@@ -252,23 +247,15 @@ export class SeedRuntimeService {
       include: { steps: { orderBy: { orderNo: 'asc' } } },
     });
 
-    await this.prisma.auditEntry.create({
-      data: {
-        tenantId: approval.tenantId,
-        buildingId: approval.buildingId,
-        actor: actorUserId,
-        role: actorRole,
-        action: 'Approval step approved',
-        entity: approval.title,
-        entityType: 'approval',
-        building: approval.building.name,
-        ip: '127.0.0.1',
-        sensitive: approval.type === 'spend_approval',
-        eventType: 'approval.step.approved',
-        resourceType: 'approval',
-        resourceId: approval.id,
-        metadata: { decision: payload?.decision || 'approve', comment: payload?.comment || null },
-      },
+    await this.audit.write({
+      tenantId: approval.tenantId,
+      buildingId: approval.buildingId,
+      actor: actorUserId, role: actorRole,
+      action: 'Approval step approved', entity: approval.title, entityType: 'approval',
+      building: approval.building.name, ip: '127.0.0.1',
+      sensitive: approval.type === 'spend_approval',
+      eventType: 'approval.step.approved', resourceType: 'approval', resourceId: approval.id,
+      metadata: { decision: payload?.decision || 'approve', comment: payload?.comment || null },
     });
 
     return updatedApproval;

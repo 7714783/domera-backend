@@ -12,4 +12,9 @@ export interface AuditEntry {
   building: string;
   ip: string;
   sensitive: boolean;
+  buildingId?: string | null;
+  eventType?: string | null;
+  resourceType?: string | null;
+  resourceId?: string | null;
+  metadata?: Record<string, unknown> | null;
 }

@@ -104,6 +104,18 @@ declare
     'cleaning_request_comments',
     'cleaning_request_attachments',
     'cleaning_request_history',
+    'building_locations',
+    'document_templates',
+    'rounds',
+    'round_waypoints',
+    'round_instances',
+    'round_instance_answers',
+    'asset_types',
+    'asset_custom_attributes',
+    'asset_documents',
+    'asset_media',
+    'spare_parts',
+    'asset_spare_parts',
     'seed_runs'
   ];
 begin

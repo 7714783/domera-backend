@@ -45,7 +45,10 @@ export class ComplianceService {
 
     const [planItems, tasks, buildings] = await Promise.all([
       this.prisma.ppmPlanItem.findMany({
-        where: { tenantId },
+        // Exclude plan items still in baseline pending — they haven't been
+        // onboarded into the main flow yet, so they must not pollute
+        // compliance counters as "overdue".
+        where: { tenantId, baselineStatus: { not: 'pending' } },
         include: {
           building: { select: { id: true, name: true } },
           template: { select: { name: true, evidenceDocTypeKey: true } },

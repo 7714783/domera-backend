@@ -1,6 +1,16 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { accountingCsvConnector, InvoiceRow, registeredConnectors, vendorMasterCsvConnector } from './connector';
+import {
+  accountingCsvConnector,
+  bacnetBridgeConnector,
+  InvoiceRow,
+  mqttBridgeConnector,
+  opcuaBridgeConnector,
+  registeredConnectors,
+  vendorMasterCsvConnector,
+  BridgeIngestEnvelope,
+  DecodedBridgeRow,
+} from './connector';
 
 @Injectable()
 export class ConnectorsService {
@@ -75,5 +85,65 @@ export class ConnectorsService {
       }
     }
     return { createdVendors: created.length, updatedVendors: updated.length, totalRows: decoded.length };
+  }
+
+  // ─── BACnet / OPC UA / MQTT bridge ingestion ─────────────────
+  async ingestBridge(tenantId: string, connectorId: string, actorUserId: string | null, raw: string) {
+    const conn = connectorId === 'bridge.bacnet.v1' ? bacnetBridgeConnector
+      : connectorId === 'bridge.opcua.v1' ? opcuaBridgeConnector
+      : connectorId === 'bridge.mqtt.v1' ? mqttBridgeConnector
+      : null;
+    if (!conn) throw new NotFoundException(`unknown bridge connector ${connectorId}`);
+    if (!raw) throw new BadRequestException('empty payload');
+
+    // Envelope tenant must match the request context — rejects mis-routed or
+    // spoofed gateway packets.
+    let env: BridgeIngestEnvelope;
+    try { env = JSON.parse(raw); } catch { throw new BadRequestException('invalid JSON envelope'); }
+    if (env.tenantId !== tenantId) {
+      throw new BadRequestException('envelope tenantId mismatch');
+    }
+    const building = await this.prisma.building.findFirst({
+      where: { id: env.buildingId, tenantId }, select: { id: true },
+    });
+    if (!building) throw new BadRequestException('envelope buildingId not in tenant');
+
+    const decoded: DecodedBridgeRow[] = await conn.decode!({ tenantId, buildingId: env.buildingId }, raw);
+    const incidents: string[] = [];
+    const readings: Array<{ ref: string; ts: string; value: any }> = [];
+
+    for (const row of decoded) {
+      if (row.kind === 'incident') {
+        const inc = await this.prisma.incident.create({
+          data: {
+            tenantId,
+            buildingId: env.buildingId,
+            title: row.point.alarmMessage || `Bridge alarm: ${row.point.ref}`,
+            description: `Source: ${env.sourceId} · Ref: ${row.point.ref} · Quality: ${row.point.quality || 'n/a'}`,
+            severity: row.point.severity || 'P3',
+            origin: `bridge:${conn.kind}`,
+            status: 'new',
+            reportedBy: actorUserId,
+            reportedAt: new Date(row.point.ts || Date.now()),
+          },
+        });
+        incidents.push(inc.id);
+      } else {
+        readings.push({
+          ref: row.point.ref,
+          ts: row.point.ts,
+          value: row.point.value ?? null,
+        });
+      }
+    }
+    return {
+      connectorId, sourceId: env.sourceId, buildingId: env.buildingId,
+      pointsReceived: env.points.length,
+      incidentsCreated: incidents.length,
+      incidentIds: incidents,
+      readingsAccepted: readings.length,
+      // Note: sensor readings are accepted but only echoed back in this
+      // version; a downstream worker fans them out to SensorPoint history.
+    };
   }
 }

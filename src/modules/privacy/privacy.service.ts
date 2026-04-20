@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { AuthService } from '../auth/auth.service';
 
 const DSAR_KINDS = ['access', 'delete', 'restrict', 'portability'];
 const LAWFUL_BASIS = ['contract', 'consent', 'legal_obligation', 'legitimate_interest', 'vital_interest', 'public_task'];
@@ -10,6 +11,7 @@ export class PrivacyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly auth: AuthService,
   ) {}
 
   // ── Personal data inventory + retention matrix ─────────
@@ -321,33 +323,20 @@ export class PrivacyService {
     }
 
     if (r.kind === 'delete') {
-      const user = r.subjectUserId
-        ? await this.prisma.user.findUnique({ where: { id: r.subjectUserId } })
-        : await this.prisma.user.findUnique({ where: { emailNormalized: r.subjectEmail } });
+      const user = await this.auth.findUserBySubject(r.subjectUserId, r.subjectEmail);
       if (user) {
-        const anonymized = `deleted-${user.id.slice(0, 8)}@redacted.local`;
-        await this.prisma.user.update({
-          where: { id: user.id },
-          data: {
-            email: anonymized, emailNormalized: anonymized,
-            displayName: 'Deleted User', passwordHash: null, status: 'deleted',
-          },
-        });
-        await this.prisma.session.updateMany({
-          where: { userId: user.id, revokedAt: null },
-          data: { revokedAt: new Date(), revokedBy: `dsar:${r.id}` },
-        });
-        summary.deleted = { userId: user.id, anonymizedEmail: anonymized };
+        const res = await this.auth.anonymizeUser(user.id, `dsar:${r.id}`);
+        summary.deleted = res ?? { note: 'user vanished between lookup and delete' };
       } else {
         summary.deleted = { note: 'no user matched subjectEmail; nothing to delete' };
       }
     }
 
     if (r.kind === 'restrict') {
-      const user = await this.prisma.user.findUnique({ where: { emailNormalized: r.subjectEmail } });
+      const user = await this.auth.findUserBySubject(null, r.subjectEmail);
       if (user) {
-        await this.prisma.user.update({ where: { id: user.id }, data: { status: 'suspended' } });
-        summary.restricted = { userId: user.id };
+        const res = await this.auth.suspendUser(user.id);
+        if (res) summary.restricted = res;
       }
     }
 

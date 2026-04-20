@@ -200,4 +200,38 @@ export class AuthService {
     });
     return { pruned: count };
   }
+
+  // ── Privileged operations invoked by the Privacy module (DSAR). The auth
+  // module owns the users + sessions tables; callers must route through these
+  // methods rather than writing those tables directly.
+  async anonymizeUser(userId: string, reason: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return null;
+    const anonymized = `deleted-${user.id.slice(0, 8)}@redacted.local`;
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        email: anonymized, emailNormalized: anonymized,
+        displayName: 'Deleted User', passwordHash: null, status: 'deleted',
+      },
+    });
+    await this.prisma.session.updateMany({
+      where: { userId: user.id, revokedAt: null },
+      data: { revokedAt: new Date(), revokedBy: reason },
+    });
+    return { userId: user.id, anonymizedEmail: anonymized };
+  }
+
+  async suspendUser(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return null;
+    await this.prisma.user.update({ where: { id: user.id }, data: { status: 'suspended' } });
+    return { userId: user.id };
+  }
+
+  async findUserBySubject(subjectUserId: string | null | undefined, subjectEmail: string | null | undefined) {
+    if (subjectUserId) return this.prisma.user.findUnique({ where: { id: subjectUserId } });
+    if (subjectEmail) return this.prisma.user.findUnique({ where: { emailNormalized: subjectEmail } });
+    return null;
+  }
 }

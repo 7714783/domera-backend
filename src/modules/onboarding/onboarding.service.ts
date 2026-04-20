@@ -1,9 +1,17 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
+import { PpmService } from '../ppm/ppm.service';
 
 @Injectable()
 export class OnboardingService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(OnboardingService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+    private readonly ppm: PpmService,
+  ) {}
 
   private slugify(input: string): string {
     return input
@@ -41,13 +49,11 @@ export class OnboardingService {
       data: { tenantId: tenant.id, userId: user.id, roleKey: 'workspace_owner', status: 'active' },
     });
 
-    await this.prisma.auditEntry.create({
-      data: {
-        tenantId: tenant.id, actor: actorUserId, role: 'workspace_owner',
-        action: 'Workspace created', entity: tenant.slug, entityType: 'workspace',
-        building: '', ip: '127.0.0.1', eventType: 'workspace.created',
-        resourceType: 'workspace', resourceId: tenant.id,
-      },
+    await this.audit.write({
+      tenantId: tenant.id, actor: actorUserId, role: 'workspace_owner',
+      action: 'Workspace created', entity: tenant.slug, entityType: 'workspace',
+      building: '', ip: '127.0.0.1', sensitive: false,
+      eventType: 'workspace.created', resourceType: 'workspace', resourceId: tenant.id,
     });
 
     return tenant;
@@ -83,13 +89,11 @@ export class OnboardingService {
       data: { organizationId: org.id, userId: actorUserId, roleKey: 'org_admin' },
     });
 
-    await this.prisma.auditEntry.create({
-      data: {
-        tenantId: body.tenantId, actor: actorUserId, role: 'org_admin',
-        action: 'Organization created', entity: org.slug, entityType: 'organization',
-        building: '', ip: '127.0.0.1', eventType: 'organization.created',
-        resourceType: 'organization', resourceId: org.id,
-      },
+    await this.audit.write({
+      tenantId: body.tenantId, actor: actorUserId, role: 'org_admin',
+      action: 'Organization created', entity: org.slug, entityType: 'organization',
+      building: '', ip: '127.0.0.1', sensitive: false,
+      eventType: 'organization.created', resourceType: 'organization', resourceId: org.id,
     });
 
     return org;
@@ -258,6 +262,8 @@ export class OnboardingService {
       });
 
       await tx.auditEntry.create({
+        // Inside a Prisma transaction — must use tx client directly to stay in
+        // the same transactional context. Shape matches AuditService.write().
         data: {
           tenantId: body.tenantId, buildingId: created.id, actor: actorUserId, role: 'workspace_owner',
           action: 'Building created', entity: created.slug, entityType: 'building',
@@ -272,6 +278,17 @@ export class OnboardingService {
 
       return created;
     });
+
+    // Seed PPM backlog post-commit. Delegated to PpmService — the buildings
+    // onboarding module is not the owner of ppm_* tables. Failure is logged
+    // but doesn't roll back the building.
+    try {
+      await this.ppm.seedPendingPlanItemsForBuilding({
+        tenantId: body.tenantId, buildingId: building.id, actorUserId,
+      });
+    } catch (e) {
+      this.logger.warn(`PPM seed failed for onboarded building ${building.id}: ${(e as Error).message}`);
+    }
 
     const stats = {
       entrances: await this.prisma.entrance.count({ where: { buildingId: building.id } }),
@@ -363,13 +380,11 @@ export class OnboardingService {
         data: { organizationId: org.id, userId: actorUserId, roleKey: 'org_admin' },
       });
 
-      await this.prisma.auditEntry.create({
-        data: {
-          tenantId, actor: actorUserId, role: 'workspace_owner',
-          action: 'Workspace auto-provisioned', entity: tenant.slug, entityType: 'workspace',
-          building: '', ip: '127.0.0.1', eventType: 'workspace.created',
-          resourceType: 'workspace', resourceId: tenant.id,
-        },
+      await this.audit.write({
+        tenantId, actor: actorUserId, role: 'workspace_owner',
+        action: 'Workspace auto-provisioned', entity: tenant.slug, entityType: 'workspace',
+        building: '', ip: '127.0.0.1', sensitive: false,
+        eventType: 'workspace.created', resourceType: 'workspace', resourceId: tenant.id,
       });
     }
 
@@ -543,6 +558,8 @@ export class OnboardingService {
       }
 
       await tx.auditEntry.create({
+        // Inside a Prisma transaction — must use tx client directly to stay in
+        // the same transactional context. Shape matches AuditService.write().
         data: {
           tenantId, buildingId: building.id, actor: actorUserId, role: 'building_manager',
           action: 'Building updated', entity: b.slug, entityType: 'building',

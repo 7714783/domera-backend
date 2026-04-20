@@ -37,6 +37,21 @@ export class BuildingCoreController {
     return this.core.createFloor(resolveTenantId(th), await userId(ah, this.auth), id, body);
   }
 
+  @Get('locations')
+  async listLocations(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
+    return this.core.listLocations(resolveTenantId(th), id);
+  }
+
+  @Post('locations')
+  async createLocation(
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
+  ) {
+    return this.core.createLocation(resolveTenantId(th), await userId(ah, this.auth), id, body);
+  }
+
   @Get('units')
   async listUnits(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
     return this.core.listUnits(resolveTenantId(th), id);

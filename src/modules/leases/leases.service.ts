@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { BuildingsService } from '../buildings/buildings.service';
 
 const ALLOWED_ALLOCATION_TARGETS = ['unit', 'parking_spot', 'storage_unit'];
 const ALLOWED_ESCALATION_TYPES = ['cpi', 'fixed_pct', 'stepped'];
@@ -31,7 +32,10 @@ function validateEscalation(p: any): EscalationPolicy | null {
 
 @Injectable()
 export class LeasesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly buildings: BuildingsService,
+  ) {}
 
   // ─── Contracts ────────────────────────────────────────────────
   async setEscalationPolicy(tenantId: string, contractId: string, policy: any) {
@@ -88,11 +92,9 @@ export class LeasesService {
         notes: body.notes || null,
       },
     });
-    // Flip isLeased flag on parking/storage for visibility
-    if (body.targetType === 'parking_spot') {
-      await this.prisma.parkingSpot.update({ where: { id: body.targetId }, data: { isLeased: true } });
-    } else if (body.targetType === 'storage_unit') {
-      await this.prisma.storageUnit.update({ where: { id: body.targetId }, data: { isLeased: true } });
+    // Flip isLeased flag on parking/storage for visibility (delegated to building-core).
+    if (body.targetType === 'parking_spot' || body.targetType === 'storage_unit') {
+      await this.buildings.setLeasedFlag(tenantId, body.targetType as any, body.targetId, true);
     }
     return created;
   }
@@ -107,11 +109,7 @@ export class LeasesService {
         where: { tenantId, targetType: a.targetType, targetId: a.targetId },
       });
       if (remaining === 0) {
-        if (a.targetType === 'parking_spot') {
-          await this.prisma.parkingSpot.update({ where: { id: a.targetId }, data: { isLeased: false } });
-        } else {
-          await this.prisma.storageUnit.update({ where: { id: a.targetId }, data: { isLeased: false } });
-        }
+        await this.buildings.setLeasedFlag(tenantId, a.targetType as any, a.targetId, false);
       }
     }
     return { deleted: true };
