@@ -1,0 +1,78 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate (typecheck + prisma)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.11.0, run_install: false }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm exec prisma validate
+      - run: pnpm exec prisma generate
+      - run: pnpm run typecheck
+      - name: Syntax-check RLS SQL
+        run: |
+          for f in prisma/rls/*.sql; do
+            awk '/create policy|alter policy/ { if ($0 !~ /on /) { print "missing ON in: " $0; exit 1 } }' "$f"
+          done
+
+  migrations-apply:
+    name: Apply migrations on a clean Postgres (end-to-end)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: domera_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.11.0, run_install: false }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      - run: pnpm install --no-frozen-lockfile
+      - name: RLS (split roles + policies)
+        env:
+          DATABASE_URL_SUPER: postgresql://postgres:postgres@localhost:5432/domera_ci
+        run: pnpm run db:rls
+      - name: Prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/domera_ci
+        run: pnpm run db:migrate:deploy
+      - name: Raw-SQL migrations
+        env:
+          DATABASE_URL_MIGRATOR: postgresql://postgres:postgres@localhost:5432/domera_ci
+        run: pnpm run db:migrate:sql
+      - name: migrate status must be clean
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/domera_ci
+        run: |
+          out="$(pnpm --silent exec prisma migrate status 2>&1 || true)"
+          echo "$out"
+          echo "$out" | grep -q "Database schema is up to date" || { echo "drift"; exit 1; }
