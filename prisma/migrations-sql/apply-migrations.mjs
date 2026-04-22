@@ -10,7 +10,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import pkg from '@prisma/client';
+const { PrismaClient } = pkg;
 
 function loadDir() {
   const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\//, ''));

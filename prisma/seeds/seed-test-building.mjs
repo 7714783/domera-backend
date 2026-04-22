@@ -1,13 +1,18 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import pkg from '@prisma/client';
+const { PrismaClient } = pkg;
 
 const prisma = new PrismaClient();
 
 const root = process.cwd();
-const apiRoot = root.endsWith(path.join('apps', 'api')) ? root : path.join(root, 'apps', 'api');
-const manifestPath = path.join(apiRoot, 'prisma', 'seeds', 'test-building.seed.json');
+// Split-repo lives at repo root (prisma/seeds/...), monorepo lives at apps/api/prisma/seeds/...
+const candidates = [
+  path.join(root, 'prisma', 'seeds', 'test-building.seed.json'),
+  path.join(root, 'apps', 'api', 'prisma', 'seeds', 'test-building.seed.json'),
+];
+const manifestPath = candidates.find((p) => fs.existsSync(p)) || candidates[0];
 
 function assertDevGuards() {
   if ((process.env.NODE_ENV || 'development') === 'production') {
