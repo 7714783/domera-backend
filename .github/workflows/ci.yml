@@ -16,16 +16,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 10.11.0, run_install: false }
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'pnpm'
-      - run: pnpm install --no-frozen-lockfile
-      - run: pnpm exec prisma validate
-      - run: pnpm exec prisma generate
-      - run: pnpm run typecheck
+          cache: 'npm'
+      - run: npm ci --no-audit --no-fund
+      - name: Prisma validate
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/ci
+        run: npx prisma validate
+      - name: Prisma generate
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/ci
+        run: npx prisma generate
+      - name: TypeScript typecheck
+        run: npm run typecheck
       - name: Syntax-check RLS SQL
         run: |
           for f in prisma/rls/*.sql; do
@@ -50,29 +55,23 @@ jobs:
           --health-retries=10
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 10.11.0, run_install: false }
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'pnpm'
-      - run: pnpm install --no-frozen-lockfile
-      - name: RLS (split roles + policies)
-        env:
-          DATABASE_URL_SUPER: postgresql://postgres:postgres@localhost:5432/domera_ci
-        run: pnpm run db:rls
+          cache: 'npm'
+      - run: npm ci --no-audit --no-fund
       - name: Prisma migrate deploy
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/domera_ci
-        run: pnpm run db:migrate:deploy
+        run: npx prisma migrate deploy
       - name: Raw-SQL migrations
         env:
           DATABASE_URL_MIGRATOR: postgresql://postgres:postgres@localhost:5432/domera_ci
-        run: pnpm run db:migrate:sql
+        run: node prisma/migrations-sql/apply-migrations.mjs
       - name: migrate status must be clean
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/domera_ci
         run: |
-          out="$(pnpm --silent exec prisma migrate status 2>&1 || true)"
+          out="$(npx prisma migrate status 2>&1 || true)"
           echo "$out"
           echo "$out" | grep -q "Database schema is up to date" || { echo "drift"; exit 1; }
