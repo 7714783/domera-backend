@@ -78,6 +78,14 @@ export class BuildingCoreController {
     return this.core.updateUnit(resolveTenantId(th), await userId(ah, this.auth), id, unitId, body);
   }
 
+  // Unit-groups: feature lives in monorepo but not yet ported to this split-repo's
+  // Prisma schema (table `building_unit_groups` missing from Railway). Stub returns
+  // empty list so the frontend stops 404-erroring when it opens a building page.
+  @Get('unit-groups')
+  async listUnitGroups() {
+    return [];
+  }
+
   @Get('transport')
   async listTransport(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
     return this.core.listTransport(resolveTenantId(th), id);
