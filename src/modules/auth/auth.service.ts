@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'node:crypto';
 import * as jwt from 'jsonwebtoken';
@@ -49,7 +54,9 @@ export class AuthService {
     if (row.expiresAt.getTime() < Date.now()) return null;
     if (row.userId !== payload.sub) return null;
     // fire-and-forget last-seen bump (ignore errors)
-    this.prisma.session.update({ where: { id: row.id }, data: { lastSeenAt: new Date() } }).catch(() => undefined);
+    this.prisma.session
+      .update({ where: { id: row.id }, data: { lastSeenAt: new Date() } })
+      .catch(() => undefined);
     return payload;
   }
 
@@ -74,7 +81,10 @@ export class AuthService {
    * (e.g. SSO, SCIM password reset). Used by the SsoService after a
    * successful OIDC callback.
    */
-  async issueSession(userId: string, meta?: { userAgent?: string; ipAddress?: string; source?: string; providerKey?: string }) {
+  async issueSession(
+    userId: string,
+    meta?: { userAgent?: string; ipAddress?: string; source?: string; providerKey?: string },
+  ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, username: true, isSuperAdmin: true },
@@ -82,7 +92,10 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('user not found');
     const jti = crypto.randomUUID();
     const token = this.sign(user, jti);
-    await this.createSession(userId, token, { userAgent: meta?.userAgent, ipAddress: meta?.ipAddress });
+    await this.createSession(userId, token, {
+      userAgent: meta?.userAgent,
+      ipAddress: meta?.ipAddress,
+    });
     return { token, jti };
   }
 
@@ -90,8 +103,10 @@ export class AuthService {
     body: { username: string; password: string; email?: string; displayName?: string },
     meta?: { userAgent?: string; ipAddress?: string },
   ) {
-    if (!body.username || body.username.length < 3) throw new BadRequestException('username too short');
-    if (!body.password || body.password.length < 8) throw new BadRequestException('password too short');
+    if (!body.username || body.username.length < 3)
+      throw new BadRequestException('username too short');
+    if (!body.password || body.password.length < 8)
+      throw new BadRequestException('password too short');
 
     const existing = await this.prisma.user.findUnique({ where: { username: body.username } });
     if (existing) throw new ConflictException('username already taken');
@@ -118,7 +133,13 @@ export class AuthService {
     await this.createSession(user.id, token, meta);
     return {
       token,
-      user: { id: user.id, username: user.username, displayName: user.displayName, email: user.email, isSuperAdmin: user.isSuperAdmin },
+      user: {
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        email: user.email,
+        isSuperAdmin: user.isSuperAdmin,
+      },
     };
   }
 
@@ -127,16 +148,14 @@ export class AuthService {
     meta?: { userAgent?: string; ipAddress?: string },
   ) {
     const identifier = body.username || body.email;
-    if (!identifier || !body.password) throw new BadRequestException('username/email and password required');
+    if (!identifier || !body.password)
+      throw new BadRequestException('username/email and password required');
 
     // Accept either username or email — some frontends send "admin@domerahub.com"
     // in the username field, others split them. Look up by whichever is non-empty.
     const user = await this.prisma.user.findFirst({
       where: {
-        OR: [
-          { username: identifier },
-          { emailNormalized: identifier.toLowerCase() },
-        ],
+        OR: [{ username: identifier }, { emailNormalized: identifier.toLowerCase() }],
       },
     });
     if (!user || !user.passwordHash) throw new UnauthorizedException('invalid credentials');
@@ -151,7 +170,13 @@ export class AuthService {
     await this.createSession(user.id, token, meta);
     return {
       token,
-      user: { id: user.id, username: user.username, displayName: user.displayName, email: user.email, isSuperAdmin: user.isSuperAdmin },
+      user: {
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        email: user.email,
+        isSuperAdmin: user.isSuperAdmin,
+      },
     };
   }
 
@@ -159,7 +184,12 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
-        id: true, username: true, displayName: true, email: true, isSuperAdmin: true, status: true,
+        id: true,
+        username: true,
+        displayName: true,
+        email: true,
+        isSuperAdmin: true,
+        status: true,
         // Tenant-level memberships are needed by the frontend login router to
         // decide whether a just-authenticated user has any workspace at all.
         // Without this a superadmin with a platform-only membership would be
@@ -167,12 +197,25 @@ export class AuthService {
         memberships: {
           where: { status: 'active' },
           select: {
-            id: true, roleKey: true, status: true,
+            id: true,
+            roleKey: true,
+            status: true,
             tenant: { select: { id: true, slug: true, name: true } },
           },
         },
-        organizationMemberships: { include: { organization: { select: { id: true, name: true, slug: true, tenantId: true, type: true } } } },
-        buildingRoles: { include: { building: { select: { id: true, name: true, slug: true, tenantId: true } }, role: { select: { key: true, name: true } } } },
+        organizationMemberships: {
+          include: {
+            organization: {
+              select: { id: true, name: true, slug: true, tenantId: true, type: true },
+            },
+          },
+        },
+        buildingRoles: {
+          include: {
+            building: { select: { id: true, name: true, slug: true, tenantId: true } },
+            role: { select: { key: true, name: true } },
+          },
+        },
       },
     });
     if (!user) throw new UnauthorizedException('user not found');
@@ -190,7 +233,14 @@ export class AuthService {
   async listSessions(userId: string) {
     const items = await this.prisma.session.findMany({
       where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
-      select: { id: true, createdAt: true, lastSeenAt: true, expiresAt: true, userAgent: true, ipAddress: true },
+      select: {
+        id: true,
+        createdAt: true,
+        lastSeenAt: true,
+        expiresAt: true,
+        userAgent: true,
+        ipAddress: true,
+      },
       orderBy: { lastSeenAt: 'desc' },
     });
     return { total: items.length, items };
@@ -221,10 +271,7 @@ export class AuthService {
     const cutoff = new Date(Date.now() - olderThanDays * 86400 * 1000);
     const { count } = await this.prisma.session.deleteMany({
       where: {
-        OR: [
-          { expiresAt: { lt: new Date() } },
-          { revokedAt: { lt: cutoff } },
-        ],
+        OR: [{ expiresAt: { lt: new Date() } }, { revokedAt: { lt: cutoff } }],
       },
     });
     return { pruned: count };
@@ -240,8 +287,11 @@ export class AuthService {
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
-        email: anonymized, emailNormalized: anonymized,
-        displayName: 'Deleted User', passwordHash: null, status: 'deleted',
+        email: anonymized,
+        emailNormalized: anonymized,
+        displayName: 'Deleted User',
+        passwordHash: null,
+        status: 'deleted',
       },
     });
     await this.prisma.session.updateMany({
@@ -258,9 +308,13 @@ export class AuthService {
     return { userId: user.id };
   }
 
-  async findUserBySubject(subjectUserId: string | null | undefined, subjectEmail: string | null | undefined) {
+  async findUserBySubject(
+    subjectUserId: string | null | undefined,
+    subjectEmail: string | null | undefined,
+  ) {
     if (subjectUserId) return this.prisma.user.findUnique({ where: { id: subjectUserId } });
-    if (subjectEmail) return this.prisma.user.findUnique({ where: { emailNormalized: subjectEmail } });
+    if (subjectEmail)
+      return this.prisma.user.findUnique({ where: { emailNormalized: subjectEmail } });
     return null;
   }
 }
