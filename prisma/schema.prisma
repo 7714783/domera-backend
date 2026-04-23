@@ -77,6 +77,7 @@ model Tenant {
   approvalDelegations  ApprovalDelegation[]
 
   @@map("tenants")
+  devices Device[]
 }
 
 model User {
@@ -101,6 +102,7 @@ model User {
   sessions                Session[]
 
   @@map("users")
+  devices Device[]
 }
 
 model Session {
@@ -155,6 +157,7 @@ model Organization {
   buildings   Building[]
   memberships OrganizationMembership[]
   mandates    BuildingMandate[]
+  vendorContracts BuildingContract[] @relation("BuildingContractVendor")
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -250,6 +253,7 @@ model Building {
   notifications      Notification[]
   buildingFloors     BuildingFloor[]
   buildingUnits      BuildingUnit[]
+  buildingUnitGroups BuildingUnitGroup[]
   verticalTransport  BuildingVerticalTransport[]
   buildingSystems    BuildingSystem[]
   occupantCompanies  BuildingOccupantCompany[]
@@ -2102,17 +2106,45 @@ model BuildingUnit {
   isDivisible Boolean  @default(false)
   status      String   @default("vacant")
   notes       String?
+  groupId     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   building    Building               @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   floor       BuildingFloor          @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  group       BuildingUnitGroup?     @relation(fields: [groupId], references: [id], onDelete: SetNull)
   occupancies BuildingUnitOccupancy[]
   contracts   BuildingContract[]
 
   @@unique([buildingId, unitCode])
   @@index([tenantId, buildingId, floorId])
+  @@index([groupId])
   @@map("building_units")
+}
+
+// SSOT §P11 — combined office: multiple BuildingUnits treated as one
+// logically rented space by the same occupant company. Used when a single
+// company rents 2+ adjacent/non-adjacent units and wants unified reporting
+// (floor plan, contracts, tasks, evidence).
+model BuildingUnitGroup {
+  id                String   @id @default(uuid())
+  tenantId          String
+  buildingId        String
+  groupCode         String
+  name              String
+  occupantCompanyId String?
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  building         Building                 @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  occupantCompany  BuildingOccupantCompany? @relation(fields: [occupantCompanyId], references: [id], onDelete: SetNull)
+  units            BuildingUnit[]
+
+  @@unique([buildingId, groupCode])
+  @@index([tenantId, buildingId])
+  @@index([occupantCompanyId])
+  @@map("building_unit_groups")
 }
 
 // Canonical physical location within a building. One row per room/space.
@@ -2203,9 +2235,47 @@ model BuildingOccupantCompany {
   building    Building                @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   occupancies BuildingUnitOccupancy[]
   contracts   BuildingContract[]
+  unitGroups  BuildingUnitGroup[]
+  settings    OccupantCompanySettings?
 
   @@index([tenantId, buildingId])
   @@map("building_occupant_companies")
+}
+
+// SSOT §P11 — per-tenant (occupant company) preferences and service
+// entitlements. 1:1 with BuildingOccupantCompany. Stores values that differ
+// between tenants of the same building: cleaning frequency, insurance,
+// notification channels, allocations they purchased (parking count, storage).
+model OccupantCompanySettings {
+  id                   String  @id @default(uuid())
+  tenantId             String
+  occupantCompanyId    String  @unique
+  // Cleaning
+  cleaningFrequency    String  @default("daily")       // daily | weekdays | weekly | custom
+  cleaningSlaHours     Int     @default(24)
+  cleaningZone         String?                          // free-text zone label inside the shared scheme
+  // Allocations (what they paid for)
+  parkingCount         Int     @default(0)
+  storageCount         Int     @default(0)
+  // Compliance / access
+  insuranceRequired    Boolean @default(true)
+  insuranceExpiresAt   DateTime?
+  accessCardCount      Int     @default(0)
+  allowsAfterHours     Boolean @default(false)
+  // Billing / comms
+  billingEmail         String?
+  preferredLanguage    String  @default("en")
+  notificationChannels String[] @default([])            // ['email', 'sms', 'inapp']
+  // Notes & custom
+  notes                String?
+  customFields         Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  occupantCompany BuildingOccupantCompany @relation(fields: [occupantCompanyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("occupant_company_settings")
 }
 
 model BuildingUnitOccupancy {
@@ -2234,7 +2304,12 @@ model BuildingContract {
   id                String    @id @default(uuid())
   tenantId          String
   buildingId        String
-  occupantCompanyId String
+  // Counterparty is EITHER an occupant company (lease contracts) OR an
+  // organization-as-vendor (service contracts). Exactly one must be set.
+  // Previously occupantCompanyId was required and PPM seed polluted the
+  // occupant table with vendor rows — now vendor contracts use vendorOrgId.
+  occupantCompanyId String?
+  vendorOrgId       String?
   unitId            String?
   contractType      String
   contractNumber    String?
@@ -2254,13 +2329,15 @@ model BuildingContract {
   noticePeriodDays Int?
   insuranceDocumentId String?
 
-  building         Building                @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  occupantCompany  BuildingOccupantCompany @relation(fields: [occupantCompanyId], references: [id], onDelete: Cascade)
-  unit             BuildingUnit?           @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  building         Building                 @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  occupantCompany  BuildingOccupantCompany? @relation(fields: [occupantCompanyId], references: [id], onDelete: Cascade)
+  vendorOrg        Organization?            @relation("BuildingContractVendor", fields: [vendorOrgId], references: [id], onDelete: SetNull)
+  unit             BuildingUnit?            @relation(fields: [unitId], references: [id], onDelete: SetNull)
   allocations      LeaseAllocation[]
 
   @@index([tenantId, buildingId, contractType])
   @@index([occupantCompanyId])
+  @@index([vendorOrgId])
   @@map("building_contracts")
 }
 
@@ -2769,4 +2846,26 @@ model SeedRun {
 
   @@unique([seedName, seedVersion])
   @@map("seed_runs")
+}
+
+/// Registered push-notification device. One row per (user, expo push token).
+/// Tenant-scoped so admins can revoke devices for a specific workspace without
+/// touching the user's other sessions.
+model Device {
+  id           String   @id @default(uuid())
+  tenantId     String
+  userId       String
+  platform     String   // 'ios' | 'android' | 'web'
+  expoPushToken String  @unique
+  osVersion    String?
+  appVersion   String?
+  lastSeenAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+  @@index([userId])
+  @@map("devices")
 }
