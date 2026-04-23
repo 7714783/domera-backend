@@ -10,7 +10,8 @@
 //
 // Idempotent: skips insertion if PpmTemplate with the computed seedKey exists.
 
-import { PrismaClient } from '@prisma/client';
+import pkg from '@prisma/client';
+const { PrismaClient } = pkg;
 
 const prisma = new PrismaClient();
 

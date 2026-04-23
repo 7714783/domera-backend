@@ -1,4 +1,17 @@
-import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Headers, NotFoundException, Param, Post, Query, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  ForbiddenException,
+  Get,
+  Headers,
+  NotFoundException,
+  Param,
+  Post,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { ApprovalsService } from './approvals.service';
@@ -24,7 +37,11 @@ export class ApprovalsController {
   ) {}
 
   @Get()
-  async list(@Headers('x-tenant-id') tenantIdHeader?: string) {
+  async list(
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Headers('authorization') ah?: string,
+  ) {
+    await uid(ah, this.auth);
     const tenantId = resolveTenantId(tenantIdHeader);
     const items = await this.approvalsService.list(tenantId);
     return { tenantId, summary: this.approvalsService.summary(items), items };
@@ -34,15 +51,20 @@ export class ApprovalsController {
   async approve(
     @Param('id') id: string,
     @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Headers('authorization') ah?: string,
+    // Header retained as an OPT-IN override for testing/migration, but it
+    // NEVER bypasses authentication — the actual user is always derived from
+    // the bearer token. Default role changed from a privileged constant to a
+    // neutral one; real role comes from the user's memberships in the service.
     @Headers('x-actor-role') actorRoleHeader?: string,
-    @Headers('x-actor-user-id') actorUserIdHeader?: string,
   ) {
     const tenantId = resolveTenantId(tenantIdHeader);
+    const actorUserId = await uid(ah, this.auth);
     const item = await this.approvalsService.approve(
       tenantId,
       id,
-      actorRoleHeader || 'finance_controller',
-      actorUserIdHeader || 'System Operator',
+      actorRoleHeader || 'member',
+      actorUserId,
     );
     if (!item) throw new NotFoundException('Approval not found');
     return item;
@@ -57,7 +79,8 @@ export class ApprovalsController {
     @Headers('x-tenant-id') th?: string,
   ) {
     return this.policiesService.list(resolveTenantId(th), {
-      type, buildingId,
+      type,
+      buildingId,
       includeInactive: includeInactive === 'true' || includeInactive === '1',
     });
   }
@@ -96,7 +119,8 @@ export class ApprovalsController {
     @Body() body: { type: string; buildingId?: string | null; amount: number },
     @Headers('x-tenant-id') th?: string,
   ) {
-    if (!body?.type || typeof body?.amount !== 'number') throw new BadRequestException('type + amount required');
+    if (!body?.type || typeof body?.amount !== 'number')
+      throw new BadRequestException('type + amount required');
     return this.policiesService.resolveActive(resolveTenantId(th), body);
   }
 
@@ -109,7 +133,8 @@ export class ApprovalsController {
     @Headers('x-tenant-id') th?: string,
   ) {
     return this.delegationsService.list(resolveTenantId(th), {
-      delegateUserId, delegatorUserId,
+      delegateUserId,
+      delegatorUserId,
       activeOnly: activeOnly === 'true' || activeOnly === '1',
     });
   }

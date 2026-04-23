@@ -2,7 +2,8 @@
 // Idempotent: skips if a building with the target slug already exists
 // inside the user's first workspace.
 
-import { PrismaClient } from '@prisma/client';
+import pkg from '@prisma/client';
+const { PrismaClient } = pkg;
 
 const prisma = new PrismaClient();
 
