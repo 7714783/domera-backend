@@ -123,12 +123,22 @@ export class AuthService {
   }
 
   async login(
-    body: { username: string; password: string },
+    body: { username?: string; email?: string; password: string },
     meta?: { userAgent?: string; ipAddress?: string },
   ) {
-    if (!body.username || !body.password) throw new BadRequestException('username and password required');
+    const identifier = body.username || body.email;
+    if (!identifier || !body.password) throw new BadRequestException('username/email and password required');
 
-    const user = await this.prisma.user.findUnique({ where: { username: body.username } });
+    // Accept either username or email — some frontends send "admin@domerahub.com"
+    // in the username field, others split them. Look up by whichever is non-empty.
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { username: identifier },
+          { emailNormalized: identifier.toLowerCase() },
+        ],
+      },
+    });
     if (!user || !user.passwordHash) throw new UnauthorizedException('invalid credentials');
 
     const ok = await bcrypt.compare(body.password, user.passwordHash);
@@ -150,12 +160,31 @@ export class AuthService {
       where: { id: userId },
       select: {
         id: true, username: true, displayName: true, email: true, isSuperAdmin: true, status: true,
+        // Tenant-level memberships are needed by the frontend login router to
+        // decide whether a just-authenticated user has any workspace at all.
+        // Without this a superadmin with a platform-only membership would be
+        // wrongly routed to /setup after login.
+        memberships: {
+          where: { status: 'active' },
+          select: {
+            id: true, roleKey: true, status: true,
+            tenant: { select: { id: true, slug: true, name: true } },
+          },
+        },
         organizationMemberships: { include: { organization: { select: { id: true, name: true, slug: true, tenantId: true, type: true } } } },
         buildingRoles: { include: { building: { select: { id: true, name: true, slug: true, tenantId: true } }, role: { select: { key: true, name: true } } } },
       },
     });
     if (!user) throw new UnauthorizedException('user not found');
-    return user;
+    const normalizedMemberships = user.memberships.map((m) => ({
+      id: m.id,
+      tenantId: m.tenant.id,
+      tenantSlug: m.tenant.slug,
+      tenantName: m.tenant.name,
+      roleKey: m.roleKey,
+      status: m.status,
+    }));
+    return { ...user, memberships: normalizedMemberships };
   }
 
   async listSessions(userId: string) {
