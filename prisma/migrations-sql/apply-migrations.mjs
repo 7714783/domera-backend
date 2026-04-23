@@ -10,13 +10,22 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import pkg from '@prisma/client';
 const { PrismaClient } = pkg;
 
 function loadDir() {
-  const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\//, ''));
-  const fallback = path.resolve(process.cwd(), 'apps/api/prisma/migrations-sql');
-  return fs.existsSync(here) ? here : fallback;
+  // fileURLToPath handles Windows (C:\...) and Linux (/home/...) correctly.
+  // Previously `new URL(...).pathname.replace(/^\//,'')` on Linux produced
+  // a relative path that fs.existsSync rejected — the runner then fell back
+  // to the monorepo path `apps/api/prisma/migrations-sql` which doesn't
+  // exist in the split-repo layout and the runner silently applied nothing.
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  if (fs.existsSync(here)) return here;
+  const monorepoFallback = path.resolve(process.cwd(), 'apps/api/prisma/migrations-sql');
+  if (fs.existsSync(monorepoFallback)) return monorepoFallback;
+  const splitRepoFallback = path.resolve(process.cwd(), 'prisma/migrations-sql');
+  return splitRepoFallback;
 }
 
 async function ensureTable(client) {
