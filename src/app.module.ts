@@ -45,6 +45,7 @@ import { DocumentTemplatesModule } from './modules/document-templates/document-t
 import { RoundsModule } from './modules/rounds/rounds.module';
 import { AssetsModule } from './modules/assets/assets.module';
 import { DevicesModule } from './modules/devices/devices.module';
+import { TasksModule } from './modules/tasks/tasks.module';
 
 @Module({
   imports: [
@@ -92,6 +93,7 @@ import { DevicesModule } from './modules/devices/devices.module';
     RoundsModule,
     AssetsModule,
     DevicesModule,
+    TasksModule,
   ],
 })
 export class AppModule implements NestModule {
