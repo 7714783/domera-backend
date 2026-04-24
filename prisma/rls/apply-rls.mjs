@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import pkg from '@prisma/client';
 const { PrismaClient } = pkg;
 
@@ -36,11 +37,18 @@ function splitSql(sql) {
 }
 
 function loadFile(name) {
-  const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\//, ''));
-  const p = path.join(here, name);
-  const fb = path.resolve(process.cwd(), 'apps/api/prisma/rls', name);
-  const resolved = fs.existsSync(p) ? p : fb;
-  return fs.readFileSync(resolved, 'utf8');
+  // fileURLToPath handles Linux paths correctly; the previous
+  // `new URL(...).pathname.replace(/^\//, '')` produced a relative path on
+  // Linux runners which fs.existsSync rejected — runner then silently fell
+  // back to the wrong dir and applied nothing.
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.join(here, name),
+    path.resolve(process.cwd(), 'prisma/rls', name),
+    path.resolve(process.cwd(), 'apps/api/prisma/rls', name),
+  ];
+  for (const c of candidates) if (fs.existsSync(c)) return fs.readFileSync(c, 'utf8');
+  throw new Error(`apply-rls: file not found in any candidate dir: ${name} — tried ${candidates.join(', ')}`);
 }
 
 async function applyOn(client, name) {

@@ -96,7 +96,9 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/domera_rls
       DATABASE_URL_MIGRATOR: postgresql://postgres:postgres@localhost:5432/domera_rls
-      DATABASE_URL_APP: postgresql://domera_app:domera_app_pw@localhost:5432/domera_rls
+      # Password matches the default in 002_split_roles.sql when no
+      # app.app_password GUC is set — keeps the apply step credential-free.
+      DATABASE_URL_APP: postgresql://domera_app:domera_app@localhost:5432/domera_rls
       JWT_SECRET: ci-rls-secret-not-for-prod
       PORT: '4000'
       API_BASE: http://127.0.0.1:4000
@@ -111,17 +113,45 @@ jobs:
       - name: Prisma migrate deploy
         run: npx prisma migrate deploy
 
-      - name: Apply raw-SQL migrations (002-007)
+      - name: Apply raw-SQL migrations
         run: node prisma/migrations-sql/apply-migrations.mjs
 
-      - name: Apply RLS bundle (enable + split roles + force + public RPC)
-        # Sets app.migrator_password / app.app_password GUCs so 002_split_roles.sql
-        # picks them up via current_setting(). Then runs every prisma/rls/*.sql
-        # in order. apply-rls.mjs is idempotent.
+      - name: Apply RLS bundle in order (enable → split roles → force → public RPC)
+        # 002_split_roles.sql reads optional GUCs app.migrator_password +
+        # app.app_password via current_setting(...,true) and falls back to
+        # 'domera_migrator' / 'domera_app' literal passwords. We want the
+        # fallback (DATABASE_URL_APP above uses 'domera_app' as the password)
+        # so no extra plumbing needed. Files passed explicitly so the script
+        # doesn't default to running only 001.
         run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -d domera_rls -c "ALTER DATABASE domera_rls SET app.migrator_password = 'postgres'"
-          PGPASSWORD=postgres psql -h localhost -U postgres -d domera_rls -c "ALTER DATABASE domera_rls SET app.app_password = 'domera_app_pw'"
-          node prisma/rls/apply-rls.mjs
+          node prisma/rls/apply-rls.mjs \
+            001_enable_rls.sql \
+            002_split_roles.sql \
+            003_force_rls.sql \
+            004_public_qr_rpc.sql
+
+      - name: Re-grant tables to domera_migrator/domera_app (now that roles exist)
+        # 007 + 008 wrap GRANTs in role-existence checks; on the first apply
+        # the roles didn't exist so the GRANTs were skipped. apply-migrations
+        # tracks each file as applied so it won't re-run them. Replay just
+        # the GRANT blocks here as plain SQL so domera_app + domera_migrator
+        # can read what the RLS bundle now expects them to.
+        run: |
+          node -e "
+          const { PrismaClient } = require('@prisma/client');
+          const p = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL_MIGRATOR } } });
+          (async () => {
+            // Grants from 007 (public-QR SECURITY DEFINER path)
+            for (const t of ['qr_locations','buildings','building_floors','building_units','service_requests']) {
+              await p.\$executeRawUnsafe('GRANT ALL ON TABLE ' + t + ' TO domera_migrator');
+            }
+            // Grants from 008 (task_notes)
+            await p.\$executeRawUnsafe('GRANT ALL ON TABLE \"task_notes\" TO domera_migrator');
+            await p.\$executeRawUnsafe('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE \"task_notes\" TO domera_app');
+            console.log('grants OK');
+            await p.\$disconnect();
+          })().catch(e => { console.error(e.message); process.exit(1); });
+          "
 
       - name: Build TypeScript
         run: npx nest build
