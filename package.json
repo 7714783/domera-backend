@@ -23,6 +23,7 @@
     "lint": "echo \"todo: lint api\"",
     "test": "node test/auth-smoke.mjs",
     "test:rls": "node test/rls-isolation-smoke.mjs",
+    "test:authz": "tsc --outDir dist --noEmit false && node test/authz-policy.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "prisma": {

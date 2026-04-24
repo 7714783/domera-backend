@@ -1217,12 +1217,30 @@ model BuildingRoleAssignment {
   delegatedAt DateTime  @default(now())
   expiresAt   DateTime?
 
+  // INIT-007 Phase 1 — ABAC scope narrowing. Every field is nullable +
+  // additive so old rows keep working (NULL = unrestricted within the
+  // parent scope). Guard semantics live in apps/api/src/common/authz
+  // (requireScope). Shape is kept flat rather than promoting to a
+  // separate RoleGrant table — we want one SELECT per auth check.
+  floorIds              String[]  @default([])
+  zoneIds               String[]  @default([])
+  systemIds             String[]  @default([])
+  teamId                String?
+  contractorCompanyId   String?
+  tenantCompanyId       String?
+  // When true, task-oriented listings additionally filter to
+  // createdByUserId = actor.userId (TENANT_EMPLOYEE self-service pattern).
+  createdByScope        Boolean   @default(false)
+
   building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   role     Role     @relation(fields: [roleKey], references: [key], onDelete: Cascade)
 
   @@unique([buildingId, userId, roleKey])
   @@index([tenantId, buildingId])
+  @@index([teamId])
+  @@index([contractorCompanyId])
+  @@index([tenantCompanyId])
   @@map("building_role_assignments")
 }
 

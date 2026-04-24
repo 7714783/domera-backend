@@ -194,10 +194,56 @@ const PERMISSIONS = {
     'document.upload_certificate',
     'task.complete_vendor_scope',
   ],
-  external_engineer: ['building.read', 'recommendation.create', 'document.create'],
+  external_engineer: [
+    'building.read',
+    'recommendation.create',
+    'document.create',
+    // INIT-007 Phase 2: external engineer creates tasks and should see what
+    // they created even if not explicitly assigned back to them.
+    'tasks.view_created',
+  ],
   auditor: ['building.read', 'document.read', 'audit.read'],
   viewer: ['building.read', 'document.read'],
+  // INIT-007 Phase 2: finance controller generates reports + exports data
+  // for month-end close. report.export is split off from reports.view so
+  // we can GDPR-gate mass export separately.
+  finance_controller_export: null, // marker comment — actual grant below
 };
+
+// INIT-007 Phase 2 — wire new permissions onto existing roles where the
+// operational need is real *today*. Roles that need them but do not yet
+// exist (RECEPTION, TENANT_COMPANY_ADMIN, TENANT_EMPLOYEE, SECURITY,
+// CLEANING_MANAGER, CONTRACTOR_MANAGER) land in Phase 4-6.
+delete PERMISSIONS.finance_controller_export; // remove the marker key
+PERMISSIONS.finance_controller = [
+  ...PERMISSIONS.finance_controller,
+  'report.export',          // GDPR-gated separate from reports.view
+];
+PERMISSIONS.building_manager = [
+  ...PERMISSIONS.building_manager,
+  'report.export',          // manager sees building-wide exports
+  'security.incident.manage', // building manager owns security events in their building
+];
+PERMISSIONS.fire_safety_officer = [
+  ...PERMISSIONS.fire_safety_officer,
+  'security.incident.manage', // natural fit for fire/life-safety incidents
+];
+PERMISSIONS.org_admin = [
+  ...PERMISSIONS.org_admin,
+  'tasks.view_company',     // org admin sees org-wide cross-building task state
+];
+PERMISSIONS.workspace_admin = [
+  ...PERMISSIONS.workspace_admin,
+  'tasks.view_company',     // workspace-wide visibility
+  'report.export',
+];
+
+// The fifth new permission — tasks.cancel_own — has no existing role that
+// maps semantically. It will be wired in Phase 4 together with the
+// TENANT_EMPLOYEE role. Kept as a known future addition in this list so
+// the seed script does not forget to reserve it:
+const RESERVED_NEW_PERMISSIONS = ['tasks.cancel_own'];
+void RESERVED_NEW_PERMISSIONS;
 
 const CERTIFICATIONS = [
   {

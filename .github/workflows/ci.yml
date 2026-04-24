@@ -36,6 +36,15 @@ jobs:
           for f in prisma/rls/*.sql; do
             awk '/create policy|alter policy/ { if ($0 !~ /on /) { print "missing ON in: " $0; exit 1 } }' "$f"
           done
+      - name: Authz policy engine unit tests (INIT-007 Phase 3)
+        # Pure-TS unit tests for apps/api/src/common/authz — no DB, no
+        # network. 19 assertions cover every scope dimension + MFA step-up.
+        # Test imports compiled JS from ../dist so we tsc-build first.
+        run: |
+          npx tsc
+          node test/authz-policy.test.mjs
+        env:
+          NODE_OPTIONS: --no-warnings
 
   migrations-apply:
     name: Apply migrations on a clean Postgres (end-to-end)
