@@ -22,6 +22,7 @@
     "postinstall": "prisma generate",
     "lint": "echo \"todo: lint api\"",
     "test": "node test/auth-smoke.mjs",
+    "test:rls": "node test/rls-isolation-smoke.mjs",
     "typecheck": "tsc --noEmit"
   },
   "prisma": {

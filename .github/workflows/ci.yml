@@ -75,3 +75,80 @@ jobs:
           out="$(npx prisma migrate status 2>&1 || true)"
           echo "$out"
           echo "$out" | grep -q "Database schema is up to date" || { echo "drift"; exit 1; }
+
+  rls-smoke:
+    name: RLS + tenant-header breach probe (INIT-005 P1.4b)
+    runs-on: ubuntu-latest
+    needs: migrations-apply
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: domera_rls
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/domera_rls
+      DATABASE_URL_MIGRATOR: postgresql://postgres:postgres@localhost:5432/domera_rls
+      DATABASE_URL_APP: postgresql://domera_app:domera_app_pw@localhost:5432/domera_rls
+      JWT_SECRET: ci-rls-secret-not-for-prod
+      PORT: '4000'
+      API_BASE: http://127.0.0.1:4000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --no-audit --no-fund
+
+      - name: Prisma migrate deploy
+        run: npx prisma migrate deploy
+
+      - name: Apply raw-SQL migrations (002-007)
+        run: node prisma/migrations-sql/apply-migrations.mjs
+
+      - name: Apply RLS bundle (enable + split roles + force + public RPC)
+        # Sets app.migrator_password / app.app_password GUCs so 002_split_roles.sql
+        # picks them up via current_setting(). Then runs every prisma/rls/*.sql
+        # in order. apply-rls.mjs is idempotent.
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d domera_rls -c "ALTER DATABASE domera_rls SET app.migrator_password = 'postgres'"
+          PGPASSWORD=postgres psql -h localhost -U postgres -d domera_rls -c "ALTER DATABASE domera_rls SET app.app_password = 'domera_app_pw'"
+          node prisma/rls/apply-rls.mjs
+
+      - name: Build TypeScript
+        run: npx nest build
+
+      - name: Boot API in background
+        run: |
+          node dist/main.js > api.log 2>&1 &
+          echo $! > api.pid
+          # Poll /v1/health for up to 30s.
+          for i in $(seq 1 30); do
+            if curl -sf $API_BASE/v1/health > /dev/null; then echo "API up after ${i}s"; exit 0; fi
+            sleep 1
+          done
+          echo "--- api.log ---"; tail -200 api.log
+          exit 1
+
+      - name: Run RLS isolation smoke
+        run: node test/rls-isolation-smoke.mjs
+
+      - name: Tail API log on success
+        if: success()
+        run: tail -50 api.log || true
+
+      - name: Tail API log on failure
+        if: failure()
+        run: tail -200 api.log || true
+
+      - name: Stop API
+        if: always()
+        run: kill "$(cat api.pid)" || true
