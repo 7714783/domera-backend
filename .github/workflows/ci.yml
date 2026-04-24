@@ -130,6 +130,13 @@ jobs:
             003_force_rls.sql \
             004_public_qr_rpc.sql
 
+      - name: Seed reference tables (roles + permissions + document types)
+        # /v1/auth/register + /v1/onboarding/bootstrap rely on the Role
+        # reference rows (workspace_owner, building_manager, etc.). In PROD
+        # these are seeded once during deploy; in CI the fresh DB is empty
+        # so bootstrap fails with "role not found". Run the seed here.
+        run: node prisma/seeds/seed-reference.mjs
+
       - name: Re-grant tables to domera_migrator/domera_app (now that roles exist)
         # 007 + 008 wrap GRANTs in role-existence checks; on the first apply
         # the roles didn't exist so the GRANTs were skipped. apply-migrations
