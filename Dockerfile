@@ -38,6 +38,13 @@ COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/package.json ./
 
 EXPOSE 4000
+
+# Apply pending raw-SQL migrations on every start. Idempotent — files already
+# in _sql_migrations are skipped. Without this, freshly-added migrations in
+# prisma/migrations-sql/ never reach the running DB and the Prisma client
+# crashes when it expects columns the DB doesn't have. INIT-005 Phase 1 root
+# cause: 002/003/004/005 sat unapplied for weeks → /units, /locations, /unit-groups
+# all returned 500.
 # tini reaps zombie children (BullMQ workers, Prisma engine) on SIGTERM.
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["node", "dist/main.js"]
+CMD ["sh", "-c", "node prisma/migrations-sql/apply-migrations.mjs && node dist/main.js"]

@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const QRCode: any = require('qrcode');
@@ -7,8 +12,11 @@ import { MigratorPrismaService } from '../../prisma/prisma.migrator';
 
 function shortCode(bytes = 8): string {
   // URL-safe short code, ~12 chars.
-  return randomBytes(bytes).toString('base64')
-    .replace(/\+/g, '').replace(/\//g, '').replace(/=+$/g, '')
+  return randomBytes(bytes)
+    .toString('base64')
+    .replace(/\+/g, '')
+    .replace(/\//g, '')
+    .replace(/=+$/g, '')
     .slice(0, 12);
 }
 
@@ -78,8 +86,13 @@ export class CleaningQrService {
     const zoneByCode = new Map(zones.map((z) => [z.code, z]));
 
     const rowForLocation = (args: {
-      sourceKey: string; code: string; name: string; locationType: string;
-      floorId: string; buildingLocationId: string | null; unitId: string | null;
+      sourceKey: string;
+      code: string;
+      name: string;
+      locationType: string;
+      floorId: string;
+      buildingLocationId: string | null;
+      unitId: string | null;
     }) => {
       const zone = zoneByCode.get(args.code);
       const floor = floorById.get(args.floorId);
@@ -96,21 +109,33 @@ export class CleaningQrService {
         cleaningZoneId: zone?.id ?? null,
         contractorId: zone?.contractorId ?? null,
         hasCleaningZone: !!zone,
-        existingQrCount: zone ? (qrCountByZone.get(zone.id) || 0) : 0,
+        existingQrCount: zone ? qrCountByZone.get(zone.id) || 0 : 0,
       };
     };
 
     const rows = [
-      ...locations.map((l) => rowForLocation({
-        sourceKey: `location:${l.id}`, code: l.code, name: l.name,
-        locationType: l.locationType, floorId: l.floorId,
-        buildingLocationId: l.id, unitId: l.unitId,
-      })),
-      ...units.map((u) => rowForLocation({
-        sourceKey: `unit:${u.id}`, code: u.unitCode, name: u.unitCode,
-        locationType: u.unitType, floorId: u.floorId,
-        buildingLocationId: null, unitId: u.id,
-      })),
+      ...locations.map((l) =>
+        rowForLocation({
+          sourceKey: `location:${l.id}`,
+          code: l.code,
+          name: l.name,
+          locationType: l.locationType,
+          floorId: l.floorId,
+          buildingLocationId: l.id,
+          unitId: l.unitId,
+        }),
+      ),
+      ...units.map((u) =>
+        rowForLocation({
+          sourceKey: `unit:${u.id}`,
+          code: u.unitCode,
+          name: u.unitCode,
+          locationType: u.unitType,
+          floorId: u.floorId,
+          buildingLocationId: null,
+          unitId: u.id,
+        }),
+      ),
     ];
 
     // Keep pre-refactor CleaningZones visible (F1, WC-3, etc.) so the
@@ -121,11 +146,16 @@ export class CleaningQrService {
       const floor = z.floorId ? floorById.get(z.floorId) : null;
       rows.push({
         sourceKey: `zone:${z.id}`,
-        code: z.code, name: z.name, locationType: z.zoneType,
-        floorId: z.floorId ?? '', floorCode: floor?.floorCode ?? null,
+        code: z.code,
+        name: z.name,
+        locationType: z.zoneType,
+        floorId: z.floorId ?? '',
+        floorCode: floor?.floorCode ?? null,
         floorNumber: floor?.floorNumber ?? null,
-        buildingLocationId: null, unitId: null,
-        cleaningZoneId: z.id, contractorId: z.contractorId,
+        buildingLocationId: null,
+        unitId: null,
+        cleaningZoneId: z.id,
+        contractorId: z.contractorId,
         hasCleaningZone: true,
         existingQrCount: qrCountByZone.get(z.id) || 0,
       });
@@ -146,7 +176,11 @@ export class CleaningQrService {
    * in this building, it is reused. Called by `create` when the caller picked
    * a location that isn't yet registered in cleaning.
    */
-  private async ensureCleaningZoneFor(tenantId: string, buildingId: string, sourceKey: string): Promise<{ zoneId: string; locationId: string | null }> {
+  private async ensureCleaningZoneFor(
+    tenantId: string,
+    buildingId: string,
+    sourceKey: string,
+  ): Promise<{ zoneId: string; locationId: string | null }> {
     const [kind, id] = sourceKey.split(':');
     if (!kind || !id) throw new BadRequestException('invalid sourceKey');
 
@@ -158,14 +192,22 @@ export class CleaningQrService {
 
     let code: string, name: string, zoneType: string, floorId: string, locationId: string | null;
     if (kind === 'location') {
-      const loc = await this.prisma.buildingLocation.findFirst({ where: { id, tenantId, buildingId } });
+      const loc = await this.prisma.buildingLocation.findFirst({
+        where: { id, tenantId, buildingId },
+      });
       if (!loc) throw new NotFoundException('location not found');
-      code = loc.code; name = loc.name; floorId = loc.floorId; locationId = loc.id;
+      code = loc.code;
+      name = loc.name;
+      floorId = loc.floorId;
+      locationId = loc.id;
       zoneType = mapLocationTypeToZoneType(loc.locationType);
     } else if (kind === 'unit') {
       const u = await this.prisma.buildingUnit.findFirst({ where: { id, tenantId, buildingId } });
       if (!u) throw new NotFoundException('unit not found');
-      code = u.unitCode; name = u.unitCode; floorId = u.floorId; locationId = null;
+      code = u.unitCode;
+      name = u.unitCode;
+      floorId = u.floorId;
+      locationId = null;
       zoneType = mapLocationTypeToZoneType(u.unitType);
     } else {
       throw new BadRequestException(`unknown sourceKey kind: ${kind}`);
@@ -178,8 +220,12 @@ export class CleaningQrService {
 
     const zone = await this.prisma.cleaningZone.create({
       data: {
-        tenantId, buildingId, floorId,
-        code, name, zoneType,
+        tenantId,
+        buildingId,
+        floorId,
+        code,
+        name,
+        zoneType,
         locationId,
       },
     });
@@ -195,12 +241,18 @@ export class CleaningQrService {
     const format = opts.format === 'png' ? 'png' : 'svg';
     if (format === 'svg') {
       const svg = await QRCode.toString(qr.publicUrl, {
-        type: 'svg', margin: 2, errorCorrectionLevel: 'M', width: size,
+        type: 'svg',
+        margin: 2,
+        errorCorrectionLevel: 'M',
+        width: size,
       });
       return { mime: 'image/svg+xml', body: svg, filename: `cleaning-qr-${qr.code}.svg` };
     }
     const png = await QRCode.toBuffer(qr.publicUrl, {
-      type: 'png', margin: 2, errorCorrectionLevel: 'M', width: size,
+      type: 'png',
+      margin: 2,
+      errorCorrectionLevel: 'M',
+      width: size,
     });
     return { mime: 'image/png', body: png, filename: `cleaning-qr-${qr.code}.png` };
   }
@@ -212,14 +264,31 @@ export class CleaningQrService {
    *     canonical location wasn't yet registered in cleaning.
    *   - `zoneId` (legacy): direct CleaningZone id.
    */
-  async create(tenantId: string, body: {
-    buildingId: string; zoneId?: string; sourceKey?: string; locationId?: string; label: string;
-  }) {
+  async create(
+    tenantId: string,
+    body: {
+      buildingId: string;
+      zoneId?: string;
+      sourceKey?: string;
+      locationId?: string;
+      label: string;
+      // Intentionally not accepted — the public scan code is server-generated
+      // (collision-checked) and surfacing a client-supplied value would let
+      // callers conflict with each other or guess existing codes. Reject
+      // explicitly instead of silently dropping it.
+      code?: never;
+    },
+  ) {
     if (!body.buildingId || !body.label) {
       throw new BadRequestException('buildingId and label required');
     }
     if (!body.zoneId && !body.sourceKey) {
       throw new BadRequestException('sourceKey or zoneId required');
+    }
+    if ((body as any).code !== undefined) {
+      throw new BadRequestException(
+        'code is server-generated — omit the `code` field from the request body',
+      );
     }
 
     let zoneId = body.zoneId ?? null;
@@ -245,8 +314,13 @@ export class CleaningQrService {
     const publicUrl = `${base}/qr/cleaning/${code}`;
     return this.prisma.cleaningQrPoint.create({
       data: {
-        tenantId, buildingId: body.buildingId, zoneId: zone.id,
-        locationId, code, label: body.label, publicUrl,
+        tenantId,
+        buildingId: body.buildingId,
+        zoneId: zone.id,
+        locationId,
+        code,
+        label: body.label,
+        publicUrl,
       },
     });
   }
@@ -258,7 +332,10 @@ export class CleaningQrService {
     if (!qr || !qr.isActive) throw new NotFoundException('cleaning QR not found or inactive');
     const [zone, building] = await Promise.all([
       this.migrator.cleaningZone.findUnique({ where: { id: qr.zoneId } }),
-      this.migrator.building.findUnique({ where: { id: qr.buildingId }, select: { id: true, name: true } }),
+      this.migrator.building.findUnique({
+        where: { id: qr.buildingId },
+        select: { id: true, name: true },
+      }),
     ]);
     if (!zone || !building) throw new NotFoundException('zone/building not found');
 
@@ -274,7 +351,14 @@ export class CleaningQrService {
       building: { id: building.id, name: building.name },
       zone: { id: zone.id, name: zone.name, zoneType: zone.zoneType, code: zone.code },
       // Categories the user can pick from on the public form.
-      categories: ['regular_cleaning', 'urgent_cleaning', 'spill', 'restroom_issue', 'trash_overflow', 'other'],
+      categories: [
+        'regular_cleaning',
+        'urgent_cleaning',
+        'spill',
+        'restroom_issue',
+        'trash_overflow',
+        'other',
+      ],
     };
   }
 }
