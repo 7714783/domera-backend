@@ -140,19 +140,46 @@ export class TasksService {
     ) {
       throw new BadRequestException('evidence required');
     }
-    return this.transition(
-      tenantId,
-      id,
-      actor,
-      'completed',
-      ['open', 'in_progress', 'paused'],
-      {
-        lifecycleStage: 'completed',
-        completedAt: new Date(),
-        completedByUserId: actor,
-        result: body?.result ?? 'passed',
-        evidenceDocuments: body?.evidenceDocuments ?? task.evidenceDocuments ?? [],
+    return this.transition(tenantId, id, actor, 'completed', ['open', 'in_progress', 'paused'], {
+      lifecycleStage: 'completed',
+      completedAt: new Date(),
+      completedByUserId: actor,
+      result: body?.result ?? 'passed',
+      evidenceDocuments: body?.evidenceDocuments ?? task.evidenceDocuments ?? [],
+    });
+  }
+
+  // INIT-002 Phase 5 P1 — short on-site notes attached to a task. The mobile
+  // technician posts updates ("part replaced", "customer not home"), the web
+  // manager reads them in the task detail. No threading, no mentions.
+  async addNote(
+    tenantId: string,
+    taskId: string,
+    actorUserId: string,
+    body: { body?: string },
+  ) {
+    const text = body?.body?.trim();
+    if (!text) throw new BadRequestException('body required');
+    if (text.length > 4000) throw new BadRequestException('body must be <= 4000 chars');
+    const task = await this.prisma.taskInstance.findFirst({ where: { id: taskId, tenantId } });
+    if (!task) throw new NotFoundException('task not found');
+    return this.prisma.taskNote.create({
+      data: {
+        tenantId,
+        taskInstanceId: task.id,
+        authorUserId: actorUserId,
+        body: text,
       },
-    );
+    });
+  }
+
+  async listNotes(tenantId: string, taskId: string) {
+    const task = await this.prisma.taskInstance.findFirst({ where: { id: taskId, tenantId } });
+    if (!task) throw new NotFoundException('task not found');
+    const notes = await this.prisma.taskNote.findMany({
+      where: { taskInstanceId: task.id, tenantId },
+      orderBy: { createdAt: 'asc' },
+    });
+    return { total: notes.length, items: notes };
   }
 }

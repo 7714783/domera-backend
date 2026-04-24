@@ -44,7 +44,12 @@ export class TasksController {
     const actor = await uid(authHeader, this.auth);
     return this.tasks.list(
       tenantId,
-      { buildingId, status, assignee: assignee === 'me' ? 'me' : undefined, limit: limit ? Number(limit) : undefined },
+      {
+        buildingId,
+        status,
+        assignee: assignee === 'me' ? 'me' : undefined,
+        limit: limit ? Number(limit) : undefined,
+      },
       actor,
     );
   }
@@ -103,5 +108,29 @@ export class TasksController {
     const tenantId = resolveTenantId(tenantIdHeader);
     const actor = await uid(authHeader, this.auth);
     return this.tasks.complete(tenantId, id, actor, body);
+  }
+
+  // INIT-002 Phase 5 P1 — short on-site notes attached to a task.
+  @Get(':id/notes')
+  async listNotes(
+    @Param('id') id: string,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    const tenantId = resolveTenantId(tenantIdHeader);
+    await uid(authHeader, this.auth);
+    return this.tasks.listNotes(tenantId, id);
+  }
+
+  @Post(':id/notes')
+  async addNote(
+    @Param('id') id: string,
+    @Body() body: { body?: string },
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    const tenantId = resolveTenantId(tenantIdHeader);
+    const actor = await uid(authHeader, this.auth);
+    return this.tasks.addNote(tenantId, id, actor, body);
   }
 }

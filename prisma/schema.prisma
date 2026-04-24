@@ -731,11 +731,33 @@ model TaskInstance {
   planItem PpmPlanItem? @relation(fields: [planItemId], references: [id], onDelete: SetNull)
   workOrders WorkOrder[]
   executionLogs PpmExecutionLog[]
+  notes      TaskNote[]
 
   @@index([tenantId, buildingId, dueAt])
   @@index([status])
   @@index([lifecycleStage])
   @@map("task_instances")
+}
+
+// INIT-002 Phase 5 P1 — mobile-facing notes attached to a task. Lightweight
+// chat-style entries written by the technician on-site (problem ran late,
+// part replaced, customer not home). No threading, no mentions, no
+// reactions — explicit v1 scope. Tenant-scoped through TaskInstance which
+// already carries tenantId + buildingId; FK cascades clean up notes when
+// the parent task is deleted.
+model TaskNote {
+  id             String       @id @default(uuid())
+  tenantId       String
+  taskInstanceId String
+  authorUserId   String
+  body           String
+  createdAt      DateTime     @default(now())
+
+  task TaskInstance @relation(fields: [taskInstanceId], references: [id], onDelete: Cascade)
+
+  @@index([taskInstanceId, createdAt])
+  @@index([tenantId])
+  @@map("task_notes")
 }
 
 model PpmExecutionLog {
