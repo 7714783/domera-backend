@@ -47,8 +47,17 @@ function splitSql(sql) {
   for (let i = 0; i < sql.length; i++) {
     const c = sql[i];
     const next2 = sql.slice(i, i + 2);
-    if (!inSingle && next2 === '$$') { inDollar = !inDollar; buf += '$$'; i += 1; continue; }
-    if (!inDollar && c === "'") { inSingle = !inSingle; buf += c; continue; }
+    if (!inSingle && next2 === '$$') {
+      inDollar = !inDollar;
+      buf += '$$';
+      i += 1;
+      continue;
+    }
+    if (!inDollar && c === "'") {
+      inSingle = !inSingle;
+      buf += c;
+      continue;
+    }
     if (!inDollar && !inSingle && c === ';') {
       const t = buf.trim();
       if (t) parts.push(t);
@@ -64,23 +73,33 @@ function splitSql(sql) {
 
 async function run() {
   const url = process.env.DATABASE_URL_MIGRATOR || process.env.DATABASE_URL;
-  if (!url) { console.error('[migrate] DATABASE_URL_MIGRATOR or DATABASE_URL required'); process.exit(1); }
+  if (!url) {
+    console.error('[migrate] DATABASE_URL_MIGRATOR or DATABASE_URL required');
+    process.exit(1);
+  }
   const client = new PrismaClient({ datasources: { db: { url } } });
   try {
     await ensureTable(client);
     const dir = loadDir();
-    const files = fs.readdirSync(dir)
+    const files = fs
+      .readdirSync(dir)
       .filter((f) => f.endsWith('.sql'))
       .sort();
     const appliedRows = await client.$queryRawUnsafe('SELECT name FROM _sql_migrations');
     const applied = new Set(appliedRows.map((r) => r.name));
     let ran = 0;
     for (const f of files) {
-      if (applied.has(f)) { console.log(`[migrate] skip ${f} (already applied)`); continue; }
+      if (applied.has(f)) {
+        console.log(`[migrate] skip ${f} (already applied)`);
+        continue;
+      }
       console.log(`[migrate] apply ${f}`);
       const raw = fs.readFileSync(path.join(dir, f), 'utf8');
       // Strip full-line comments so the splitter doesn't see stray semicolons.
-      const stripped = raw.split('\n').filter((l) => !/^\s*--/.test(l)).join('\n');
+      const stripped = raw
+        .split('\n')
+        .filter((l) => !/^\s*--/.test(l))
+        .join('\n');
       const stmts = splitSql(stripped);
       // Run all statements + the tracking insert in one transaction so partial
       // failures roll back cleanly.
@@ -99,4 +118,7 @@ async function run() {
   }
 }
 
-run().catch((e) => { console.error('[migrate] failed', e); process.exit(1); });
+run().catch((e) => {
+  console.error('[migrate] failed', e);
+  process.exit(1);
+});
