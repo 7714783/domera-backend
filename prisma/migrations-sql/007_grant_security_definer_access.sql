@@ -16,9 +16,20 @@
 -- check; the missing piece was just the table-level grant.
 --
 -- Idempotent — re-applying GRANT is a no-op if already in place.
+--
+-- Order-of-apply caveat: this file is in prisma/migrations-sql/ which CI
+-- applies BEFORE prisma/rls/* (where domera_migrator is created). To stay
+-- applicable in both orders, we wrap the GRANTs in a role-existence check —
+-- no-op when the role hasn't been created yet (rls/* will fix the grants
+-- on its own in that case).
 
-GRANT ALL ON TABLE qr_locations TO domera_migrator;
-GRANT ALL ON TABLE buildings TO domera_migrator;
-GRANT ALL ON TABLE building_floors TO domera_migrator;
-GRANT ALL ON TABLE building_units TO domera_migrator;
-GRANT ALL ON TABLE service_requests TO domera_migrator;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'domera_migrator') THEN
+    EXECUTE 'GRANT ALL ON TABLE qr_locations TO domera_migrator';
+    EXECUTE 'GRANT ALL ON TABLE buildings TO domera_migrator';
+    EXECUTE 'GRANT ALL ON TABLE building_floors TO domera_migrator';
+    EXECUTE 'GRANT ALL ON TABLE building_units TO domera_migrator';
+    EXECUTE 'GRANT ALL ON TABLE service_requests TO domera_migrator';
+  END IF;
+END $$;

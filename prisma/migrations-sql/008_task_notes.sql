@@ -5,7 +5,9 @@
 -- part replaced, customer not home). Tenant-scoped via parent TaskInstance.
 -- FK ON DELETE CASCADE so removing a task removes its notes too.
 --
--- Idempotent.
+-- Idempotent. Role-aware: GRANTs + the RLS policy that uses
+-- app_current_tenant_id() only run if the matching role / function exists,
+-- so this file is safe to apply BEFORE prisma/rls/* in CI.
 
 CREATE TABLE IF NOT EXISTS "task_notes" (
   "id"             TEXT         NOT NULL DEFAULT gen_random_uuid()::text,
@@ -38,9 +40,34 @@ END $$;
 ALTER TABLE "task_notes" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "task_notes" FORCE  ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS task_notes_tenant_isolation ON "task_notes";
-CREATE POLICY task_notes_tenant_isolation ON "task_notes"
-  USING ("tenantId" = app_current_tenant_id())
-  WITH CHECK ("tenantId" = app_current_tenant_id());
 
-GRANT ALL ON TABLE "task_notes" TO domera_migrator;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "task_notes" TO domera_app;
+-- Policy uses app_current_tenant_id() created by prisma/rls/001_enable_rls.sql.
+-- If the function isn't there yet (CI applies migrations before rls/*),
+-- create a placeholder policy that we'll drop+recreate when rls/* runs.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'app_current_tenant_id') THEN
+    EXECUTE $POLICY$
+      CREATE POLICY task_notes_tenant_isolation ON "task_notes"
+        USING ("tenantId" = app_current_tenant_id())
+        WITH CHECK ("tenantId" = app_current_tenant_id())
+    $POLICY$;
+  ELSE
+    -- Default-deny placeholder. Replaced by the real policy when prisma/rls/
+    -- runs (it does DROP POLICY IF EXISTS first).
+    EXECUTE $POLICY$
+      CREATE POLICY task_notes_tenant_isolation ON "task_notes"
+        USING (false) WITH CHECK (false)
+    $POLICY$;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'domera_migrator') THEN
+    EXECUTE 'GRANT ALL ON TABLE "task_notes" TO domera_migrator';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'domera_app') THEN
+    EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "task_notes" TO domera_app';
+  END IF;
+END $$;
