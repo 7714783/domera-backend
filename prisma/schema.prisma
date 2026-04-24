@@ -2269,6 +2269,11 @@ model BuildingOccupantCompany {
   phone        String?
   email        String?
   notes        String?
+  // INIT-007 Phase 4 — TENANT_COMPANY_ADMIN link. When populated the
+  // referenced User gets RBAC grant TENANT_COMPANY_ADMIN with scope
+  // tenantCompanyId = this.id. Nullable so companies without a designated
+  // admin still work (requests stay at reception / manager visibility).
+  adminUserId  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -2279,6 +2284,7 @@ model BuildingOccupantCompany {
   settings    OccupantCompanySettings?
 
   @@index([tenantId, buildingId])
+  @@index([adminUserId])
   @@map("building_occupant_companies")
 }
 

@@ -92,6 +92,29 @@ const ROLES = [
     maxDelegatableScope: null,
   },
   { key: 'viewer', name: 'Viewer', scope: 'building', maxDelegatableScope: null },
+  // INIT-007 Phase 4 — self-service & reception roles. Scope is narrowed via
+  // BuildingRoleAssignment.tenantCompanyId + createdByScope (see migration
+  // 009). Caller-side hint: these roles should never be granted without a
+  // populated scope dimension — the policy engine will deny-by-default if
+  // they are, so least-privilege is preserved either way.
+  {
+    key: 'reception',
+    name: 'Reception Desk',
+    scope: 'building',
+    maxDelegatableScope: null,
+  },
+  {
+    key: 'tenant_company_admin',
+    name: 'Tenant Company Admin',
+    scope: 'building',
+    maxDelegatableScope: null,
+  },
+  {
+    key: 'tenant_employee',
+    name: 'Tenant Employee (self-service)',
+    scope: 'building',
+    maxDelegatableScope: null,
+  },
 ];
 
 const PERMISSIONS = {
@@ -238,12 +261,23 @@ PERMISSIONS.workspace_admin = [
   'report.export',
 ];
 
-// The fifth new permission — tasks.cancel_own — has no existing role that
-// maps semantically. It will be wired in Phase 4 together with the
-// TENANT_EMPLOYEE role. Kept as a known future addition in this list so
-// the seed script does not forget to reserve it:
-const RESERVED_NEW_PERMISSIONS = ['tasks.cancel_own'];
-void RESERVED_NEW_PERMISSIONS;
+// INIT-007 Phase 4 — wire permissions onto the new self-service roles.
+// Scope narrowing (tenantCompanyId, createdByScope) lives on the
+// BuildingRoleAssignment row, not in the permission list.
+PERMISSIONS.reception = [
+  'building.read',          // sees public building info
+  'tasks.view_created',     // sees only tickets they created
+];
+PERMISSIONS.tenant_company_admin = [
+  'building.read',
+  'tasks.view_company',     // sees all tickets of their occupant company
+  'document.read',          // sees tenant-company documents (gated by scope)
+];
+PERMISSIONS.tenant_employee = [
+  'building.read',
+  'tasks.view_created',     // only self-submitted tickets
+  'tasks.cancel_own',       // can cancel own tickets before assignment
+];
 
 const CERTIFICATIONS = [
   {

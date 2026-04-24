@@ -44,8 +44,10 @@ import { CleaningModule } from './modules/cleaning/cleaning.module';
 import { DocumentTemplatesModule } from './modules/document-templates/document-templates.module';
 import { RoundsModule } from './modules/rounds/rounds.module';
 import { AssetsModule } from './modules/assets/assets.module';
+import { OccupantsModule } from './modules/occupants/occupants.module';
 import { DevicesModule } from './modules/devices/devices.module';
 import { TasksModule } from './modules/tasks/tasks.module';
+import { TenantCompaniesModule } from './modules/tenant-companies/tenant-companies.module';
 
 @Module({
   imports: [
@@ -92,8 +94,10 @@ import { TasksModule } from './modules/tasks/tasks.module';
     DocumentTemplatesModule,
     RoundsModule,
     AssetsModule,
+    OccupantsModule,
     DevicesModule,
     TasksModule,
+    TenantCompaniesModule,
   ],
 })
 export class AppModule implements NestModule {
