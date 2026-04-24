@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BuildingsService } from '../buildings/buildings.service';
 
@@ -16,7 +16,9 @@ function validateEscalation(p: any): EscalationPolicy | null {
   if (!p) return null;
   if (typeof p !== 'object') throw new BadRequestException('escalationPolicy must be an object');
   if (!ALLOWED_ESCALATION_TYPES.includes(p.type)) {
-    throw new BadRequestException(`escalationPolicy.type must be one of ${ALLOWED_ESCALATION_TYPES.join(', ')}`);
+    throw new BadRequestException(
+      `escalationPolicy.type must be one of ${ALLOWED_ESCALATION_TYPES.join(', ')}`,
+    );
   }
   if (p.type === 'fixed_pct' && typeof p.ratePct !== 'number') {
     throw new BadRequestException('fixed_pct escalation requires ratePct');
@@ -62,32 +64,53 @@ export class LeasesService {
   }
 
   // ─── Allocations ──────────────────────────────────────────────
-  async addAllocation(tenantId: string, contractId: string, body: {
-    targetType: string; targetId: string;
-    monthlyAmount?: number; share?: number; currency?: string; notes?: string;
-  }) {
+  async addAllocation(
+    tenantId: string,
+    contractId: string,
+    body: {
+      targetType: string;
+      targetId: string;
+      monthlyAmount?: number;
+      share?: number;
+      currency?: string;
+      notes?: string;
+    },
+  ) {
     if (!ALLOWED_ALLOCATION_TARGETS.includes(body.targetType)) {
-      throw new BadRequestException(`targetType must be one of ${ALLOWED_ALLOCATION_TARGETS.join(', ')}`);
+      throw new BadRequestException(
+        `targetType must be one of ${ALLOWED_ALLOCATION_TARGETS.join(', ')}`,
+      );
     }
-    const contract = await this.prisma.buildingContract.findFirst({ where: { id: contractId, tenantId } });
+    const contract = await this.prisma.buildingContract.findFirst({
+      where: { id: contractId, tenantId },
+    });
     if (!contract) throw new NotFoundException('contract not found');
     // Validate target exists in this building
     if (body.targetType === 'unit') {
-      const u = await this.prisma.buildingUnit.findFirst({ where: { id: body.targetId, buildingId: contract.buildingId } });
+      const u = await this.prisma.buildingUnit.findFirst({
+        where: { id: body.targetId, buildingId: contract.buildingId },
+      });
       if (!u) throw new BadRequestException('unit not found in this building');
     } else if (body.targetType === 'parking_spot') {
-      const p = await this.prisma.parkingSpot.findFirst({ where: { id: body.targetId, buildingId: contract.buildingId } });
+      const p = await this.prisma.parkingSpot.findFirst({
+        where: { id: body.targetId, buildingId: contract.buildingId },
+      });
       if (!p) throw new BadRequestException('parking spot not found in this building');
     } else if (body.targetType === 'storage_unit') {
-      const s = await this.prisma.storageUnit.findFirst({ where: { id: body.targetId, buildingId: contract.buildingId } });
+      const s = await this.prisma.storageUnit.findFirst({
+        where: { id: body.targetId, buildingId: contract.buildingId },
+      });
       if (!s) throw new BadRequestException('storage unit not found in this building');
     }
     const share = typeof body.share === 'number' ? Math.max(0, Math.min(1, body.share)) : 1;
     const created = await this.prisma.leaseAllocation.create({
       data: {
-        tenantId, contractId,
-        targetType: body.targetType, targetId: body.targetId,
-        share, monthlyAmount: body.monthlyAmount ?? 0,
+        tenantId,
+        contractId,
+        targetType: body.targetType,
+        targetId: body.targetId,
+        share,
+        monthlyAmount: body.monthlyAmount ?? 0,
         currency: body.currency || contract.currency || 'ILS',
         notes: body.notes || null,
       },
@@ -100,7 +123,9 @@ export class LeasesService {
   }
 
   async removeAllocation(tenantId: string, allocationId: string) {
-    const a = await this.prisma.leaseAllocation.findFirst({ where: { id: allocationId, tenantId } });
+    const a = await this.prisma.leaseAllocation.findFirst({
+      where: { id: allocationId, tenantId },
+    });
     if (!a) throw new NotFoundException('allocation not found');
     await this.prisma.leaseAllocation.delete({ where: { id: allocationId } });
     // Recompute isLeased flag — clear if no more active allocations point at the same target
@@ -122,12 +147,15 @@ export class LeasesService {
       where: { tenantId, contractId },
       orderBy: { createdAt: 'asc' },
     });
-    const totalMonthly = items.reduce((sum, i) => sum + (i.monthlyAmount * i.share), 0);
+    const totalMonthly = items.reduce((sum, i) => sum + i.monthlyAmount * i.share, 0);
     return { contractId, items, totalMonthly };
   }
 
   // ─── Expiring documents (insurance / KYC / license) ───────────
-  async expiringDocuments(tenantId: string, params: { withinDays?: number; documentTypeKey?: string }) {
+  async expiringDocuments(
+    tenantId: string,
+    params: { withinDays?: number; documentTypeKey?: string },
+  ) {
     const days = Math.max(1, Math.min(365, params.withinDays ?? 60));
     const cutoff = new Date(Date.now() + days * 86400000);
     const where: any = {
@@ -139,8 +167,14 @@ export class LeasesService {
       where,
       orderBy: { expiresAt: 'asc' },
       select: {
-        id: true, title: true, documentType: true, documentTypeKey: true,
-        buildingId: true, expiresAt: true, expiryAlertedAt: true, ownerOrgId: true,
+        id: true,
+        title: true,
+        documentType: true,
+        documentTypeKey: true,
+        buildingId: true,
+        expiresAt: true,
+        expiryAlertedAt: true,
+        ownerOrgId: true,
         legalHold: true,
       },
       take: 200,

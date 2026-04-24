@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Post,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { InventoryService } from './inventory.service';
@@ -25,7 +33,8 @@ export class InventoryController {
   @Post('items')
   async upsertItem(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     await uid(ah, this.auth);
     return this.inv.upsertItem(resolveTenantId(th), body);
@@ -39,7 +48,8 @@ export class InventoryController {
   @Post('locations')
   async upsertLocation(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     await uid(ah, this.auth);
     return this.inv.upsertLocation(resolveTenantId(th), body);
@@ -62,14 +72,17 @@ export class InventoryController {
     @Headers('x-tenant-id') th?: string,
   ) {
     return this.inv.listMovements(resolveTenantId(th), {
-      itemId, workOrderId, limit: limit ? Number(limit) : undefined,
+      itemId,
+      workOrderId,
+      limit: limit ? Number(limit) : undefined,
     });
   }
 
   @Post('movements')
   async record(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.inv.recordMovement(resolveTenantId(th), await uid(ah, this.auth), body);
   }

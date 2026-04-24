@@ -1,4 +1,14 @@
-import { BadRequestException, Body, Controller, Get, Headers, Post, Query, Res, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Post,
+  Query,
+  Res,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
@@ -26,7 +36,8 @@ export class SsoController {
   @Post('providers')
   async upsertProvider(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.upsertProvider(resolveTenantId(th), await uid(ah, this.auth), body);
   }
@@ -36,13 +47,18 @@ export class SsoController {
     @Res() res: Response,
     @Query('redirectTo') redirectTo: string = '/',
     @Headers('x-tenant-id') th?: string,
-    @Headers('x-forwarded-host') host?: string,
-    @Headers('host') fallback?: string,
+    @Headers('x-forwarded-host') _host?: string,
+    @Headers('host') _fallback?: string,
   ) {
     const tenantId = resolveTenantId(th);
     const providerKey = (res.req.params as any).providerKey;
     const base = `${process.env.API_URL || 'http://localhost:4000'}`;
-    const { authorizeUrl } = await this.svc.buildAuthorizeUrl(tenantId, providerKey, redirectTo, base);
+    const { authorizeUrl } = await this.svc.buildAuthorizeUrl(
+      tenantId,
+      providerKey,
+      redirectTo,
+      base,
+    );
     return res.redirect(302, authorizeUrl);
   }
 

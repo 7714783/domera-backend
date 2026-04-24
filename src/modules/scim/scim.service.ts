@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -35,8 +40,12 @@ export class ScimService {
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
       select: {
-        id: true, label: true, isActive: true,
-        createdAt: true, lastUsedAt: true, revokedAt: true,
+        id: true,
+        label: true,
+        isActive: true,
+        createdAt: true,
+        lastUsedAt: true,
+        revokedAt: true,
       },
     });
   }
@@ -46,8 +55,10 @@ export class ScimService {
     const raw = `scim_${randomBytes(24).toString('hex')}`;
     await this.prisma.scimToken.create({
       data: {
-        tenantId, tokenHash: sha256(raw),
-        label, createdByUserId: actorUserId,
+        tenantId,
+        tokenHash: sha256(raw),
+        label,
+        createdByUserId: actorUserId,
       },
     });
     return { token: raw, label, note: 'Store this value — it will not be shown again.' };
@@ -74,7 +85,8 @@ export class ScimService {
       throw new UnauthorizedException('invalid or inactive SCIM token');
     }
     await this.prisma.scimToken.update({
-      where: { id: t.id }, data: { lastUsedAt: new Date() },
+      where: { id: t.id },
+      data: { lastUsedAt: new Date() },
     });
   }
 
@@ -84,7 +96,7 @@ export class ScimService {
     const skip = Math.max(startIndex - 1, 0);
 
     // SCIM filter: we support `userName eq "..."` and `emails.value eq "..."` (minimum RFC 7644)
-    let where: any = {
+    const where: any = {
       memberships: { some: { tenantId } },
     };
     if (filter) {
@@ -114,7 +126,12 @@ export class ScimService {
     const u = await this.prisma.user.findFirst({
       where: { id, memberships: { some: { tenantId } } },
     });
-    if (!u) throw new NotFoundException({ schemas: ['urn:ietf:params:scim:api:messages:2.0:Error'], detail: 'User not found', status: '404' });
+    if (!u)
+      throw new NotFoundException({
+        schemas: ['urn:ietf:params:scim:api:messages:2.0:Error'],
+        detail: 'User not found',
+        status: '404',
+      });
     return toScimUser(u, tenantId);
   }
 
@@ -127,17 +144,24 @@ export class ScimService {
 
     const existing = await this.prisma.user.findUnique({ where: { emailNormalized: email } });
     if (existing) {
-      const mem = await this.prisma.membership.findFirst({ where: { tenantId, userId: existing.id } });
+      const mem = await this.prisma.membership.findFirst({
+        where: { tenantId, userId: existing.id },
+      });
       if (!mem) {
-        await this.prisma.membership.create({ data: { tenantId, userId: existing.id, roleKey: 'workspace_member' } });
+        await this.prisma.membership.create({
+          data: { tenantId, userId: existing.id, roleKey: 'workspace_member' },
+        });
       }
       return toScimUser(existing, tenantId);
     }
 
     const user = await this.prisma.user.create({
       data: {
-        username: userName, email, emailNormalized: email,
-        displayName, status: active ? 'active' : 'suspended',
+        username: userName,
+        email,
+        emailNormalized: email,
+        displayName,
+        status: active ? 'active' : 'suspended',
         createdBy: 'scim',
       },
     });
