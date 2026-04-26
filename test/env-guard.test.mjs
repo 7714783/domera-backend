@@ -10,52 +10,62 @@ test('passes through when NODE_ENV is not production', () => {
   assert.equal(errs.length, 0);
 });
 
-test('catches missing JWT_SECRET in production', () => {
+test('catches missing JWT_SECRET as hard violation', () => {
   const errs = checkProdEnv({
     NODE_ENV: 'production',
     CORS_ORIGINS: 'https://app.domerahub.com',
     DATABASE_URL: 'postgres://x',
   });
-  assert.ok(errs.some((e) => e.variable === 'JWT_SECRET'));
+  const j = errs.find((e) => e.variable === 'JWT_SECRET');
+  assert.ok(j);
+  assert.equal(j.severity, 'hard');
 });
 
-test('catches dev sentinel JWT_SECRET in production', () => {
+test('catches dev sentinel JWT_SECRET as hard violation', () => {
   const errs = checkProdEnv({
     NODE_ENV: 'production',
     JWT_SECRET: 'dev-domera-secret-change-me',
     CORS_ORIGINS: 'https://app.domerahub.com',
     DATABASE_URL: 'postgres://x',
   });
-  assert.ok(errs.some((e) => e.variable === 'JWT_SECRET' && /sentinel/.test(e.reason)));
+  const j = errs.find((e) => e.variable === 'JWT_SECRET' && /sentinel/.test(e.reason));
+  assert.ok(j);
+  assert.equal(j.severity, 'hard');
 });
 
-test('catches short JWT_SECRET in production', () => {
+test('catches short JWT_SECRET as soft violation (recommend not require)', () => {
   const errs = checkProdEnv({
     NODE_ENV: 'production',
-    JWT_SECRET: 'too-short',
+    JWT_SECRET: 'too-short-but-not-empty',
     CORS_ORIGINS: 'https://app.domerahub.com',
     DATABASE_URL: 'postgres://x',
   });
-  assert.ok(errs.some((e) => e.variable === 'JWT_SECRET' && /\b32\b/.test(e.reason)));
+  const j = errs.find((e) => e.variable === 'JWT_SECRET');
+  assert.ok(j);
+  assert.equal(j.severity, 'soft');
 });
 
-test('catches wildcard CORS in production', () => {
+test('catches wildcard CORS as soft violation', () => {
   const errs = checkProdEnv({
     NODE_ENV: 'production',
     JWT_SECRET: 'a'.repeat(40),
     CORS_ORIGINS: '*',
     DATABASE_URL: 'postgres://x',
   });
-  assert.ok(errs.some((e) => e.variable === 'CORS_ORIGINS'));
+  const j = errs.find((e) => e.variable === 'CORS_ORIGINS');
+  assert.ok(j);
+  assert.equal(j.severity, 'soft');
 });
 
-test('catches missing DATABASE_URL in production', () => {
+test('catches missing DATABASE_URL as hard violation', () => {
   const errs = checkProdEnv({
     NODE_ENV: 'production',
     JWT_SECRET: 'a'.repeat(40),
     CORS_ORIGINS: 'https://app.domerahub.com',
   });
-  assert.ok(errs.some((e) => e.variable === 'DATABASE_URL'));
+  const d = errs.find((e) => e.variable === 'DATABASE_URL');
+  assert.ok(d);
+  assert.equal(d.severity, 'hard');
 });
 
 test('passes when all production env is valid', () => {
