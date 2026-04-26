@@ -7,13 +7,54 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { requireManager, resolveBuildingId } from '../../common/building.helpers';
 import { AssignmentResolverService } from '../assignment/assignment.resolver';
+import { ActorResolver } from '../../common/authz';
+
+// INIT-007 Phase 4 — narrowing list responses by tenantCompany /
+// createdByScope. Returns extra `where` keys to merge into the Prisma
+// query when the actor's role grants demand it.
+type ListNarrow = {
+  byCompany?: string;
+  bySelf?: string; // userId — caller picks the right column (submittedBy vs reportedBy)
+};
+
+const COMPANY_SCOPED_PERMS = ['tasks.view_company'];
 
 @Injectable()
 export class ReactiveService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly assignmentResolver: AssignmentResolverService,
+    private readonly actorResolver: ActorResolver,
   ) {}
+
+  // INIT-007 Phase 4 — derive list-narrow flags from the actor.
+  // Anonymous (no userId) gets no narrowing — controller-level guards or
+  // tenant context decide whether the call is allowed at all. This helper
+  // only NARROWS — never widens beyond what the controller already permits.
+  private async narrowFor(
+    tenantId: string,
+    actorUserId: string | null,
+    buildingId?: string,
+  ): Promise<ListNarrow> {
+    if (!actorUserId) return {};
+    const actor = await this.actorResolver.resolve({ tenantId, userId: actorUserId, buildingId });
+    if (actor.isSuperAdmin) return {};
+    const out: ListNarrow = {};
+    // tasks.view_all wins over tasks.view_company — if the persona can see
+    // everything in the building, don't constrain by tenantCompany.
+    const seesAll = actor.permissions.has('tasks.view_all');
+    if (
+      !seesAll &&
+      actor.scope.tenantCompanyId &&
+      COMPANY_SCOPED_PERMS.some((p) => actor.permissions.has(p))
+    ) {
+      out.byCompany = actor.scope.tenantCompanyId;
+    }
+    if (actor.scope.createdByScope === true) {
+      out.bySelf = actorUserId;
+    }
+    return out;
+  }
 
   private resolveBuildingId = (tenantId: string, idOrSlug: string) =>
     resolveBuildingId(this.prisma, tenantId, idOrSlug);
@@ -41,6 +82,7 @@ export class ReactiveService {
       floorId?: string;
       equipmentId?: string;
       reportedBy?: string;
+      tenantCompanyId?: string;
     },
   ) {
     if (!body.title || !body.severity || !body.origin)
@@ -68,6 +110,7 @@ export class ReactiveService {
         floorId: floorId || null,
         equipmentId: body.equipmentId || null,
         reportedBy: body.reportedBy || actorUserId || null,
+        tenantCompanyId: body.tenantCompanyId || null,
         assignedUserId: decision.userId,
         assignmentSource: decision.source,
         assignmentReason: decision.reason,
@@ -79,14 +122,18 @@ export class ReactiveService {
     tenantId: string,
     buildingIdOrSlug: string,
     filter?: { status?: string; severity?: string },
+    actorUserId?: string | null,
   ) {
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    const narrow = await this.narrowFor(tenantId, actorUserId ?? null, buildingId);
     return this.prisma.incident.findMany({
       where: {
         tenantId,
         buildingId,
         status: filter?.status || undefined,
         severity: filter?.severity || undefined,
+        ...(narrow.byCompany ? { tenantCompanyId: narrow.byCompany } : {}),
+        ...(narrow.bySelf ? { reportedBy: narrow.bySelf } : {}),
       },
       orderBy: [{ severity: 'asc' }, { reportedAt: 'desc' }],
     });
@@ -139,6 +186,7 @@ export class ReactiveService {
       photoKey?: string;
       submittedBy?: string;
       submitterContact?: string;
+      tenantCompanyId?: string;
     },
   ) {
     if (!body.category) throw new BadRequestException('category required');
@@ -166,6 +214,7 @@ export class ReactiveService {
         photoKey: body.photoKey || null,
         submittedBy: body.submittedBy || actorUserId || null,
         submitterContact: body.submitterContact || null,
+        tenantCompanyId: body.tenantCompanyId || null,
         assignedUserId: decision.userId,
         assignmentSource: decision.source,
         assignmentReason: decision.reason,
@@ -194,14 +243,18 @@ export class ReactiveService {
     tenantId: string,
     buildingIdOrSlug: string,
     filter?: { status?: string; category?: string },
+    actorUserId?: string | null,
   ) {
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+    const narrow = await this.narrowFor(tenantId, actorUserId ?? null, buildingId);
     return this.prisma.serviceRequest.findMany({
       where: {
         tenantId,
         buildingId,
         status: filter?.status || undefined,
         category: filter?.category || undefined,
+        ...(narrow.byCompany ? { tenantCompanyId: narrow.byCompany } : {}),
+        ...(narrow.bySelf ? { submittedBy: narrow.bySelf } : {}),
       },
       orderBy: { createdAt: 'desc' },
     });

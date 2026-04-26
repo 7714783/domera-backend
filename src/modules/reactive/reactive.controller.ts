@@ -28,13 +28,15 @@ export class ReactiveController {
 
   // Incidents
   @Get('buildings/:id/incidents')
-  listIncidents(
+  async listIncidents(
     @Param('id') id: string,
     @Query('status') status?: string,
     @Query('severity') severity?: string,
     @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
-    return this.reactive.listIncidents(resolveTenantId(th), id, { status, severity });
+    const user = ah ? await uid(ah, this.auth).catch(() => null) : null;
+    return this.reactive.listIncidents(resolveTenantId(th), id, { status, severity }, user);
   }
 
   @Post('buildings/:id/incidents')
@@ -94,13 +96,15 @@ export class ReactiveController {
 
   // Service requests
   @Get('buildings/:id/service-requests')
-  listSR(
+  async listSR(
     @Param('id') id: string,
     @Query('status') status?: string,
     @Query('category') category?: string,
     @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
-    return this.reactive.listServiceRequests(resolveTenantId(th), id, { status, category });
+    const user = ah ? await uid(ah, this.auth).catch(() => null) : null;
+    return this.reactive.listServiceRequests(resolveTenantId(th), id, { status, category }, user);
   }
 
   @Post('buildings/:id/service-requests')

@@ -102,13 +102,19 @@ async function run() {
         .join('\n');
       const stmts = splitSql(stripped);
       // Run all statements + the tracking insert in one transaction so partial
-      // failures roll back cleanly.
-      await client.$transaction(async (tx) => {
-        for (const stmt of stmts) {
-          await tx.$executeRawUnsafe(stmt);
-        }
-        await tx.$executeRaw`INSERT INTO _sql_migrations (name) VALUES (${f})`;
-      });
+      // failures roll back cleanly. Bumped maxWait/timeout from defaults
+      // (2s/5s) because larger migrations (DO $$ blocks, multiple ALTER TABLEs
+      // with RLS policies and grants) reliably hit the 5s ceiling and roll
+      // back silently — caller then thinks it applied but tables are missing.
+      await client.$transaction(
+        async (tx) => {
+          for (const stmt of stmts) {
+            await tx.$executeRawUnsafe(stmt);
+          }
+          await tx.$executeRaw`INSERT INTO _sql_migrations (name) VALUES (${f})`;
+        },
+        { maxWait: 30000, timeout: 120000 },
+      );
       console.log(`[migrate]   ${stmts.length} statements applied`);
       ran += 1;
     }

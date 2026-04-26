@@ -1,16 +1,32 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MigratorPrismaService } from '../../prisma/prisma.migrator';
+import { ActorResolver } from '../../common/authz';
 import { CleaningActor, canAssign, canChangeStatus, filterForActor } from './cleaning.access';
 
 const VALID_PRIORITIES = ['low', 'normal', 'high', 'urgent'];
-const VALID_CATEGORIES = ['regular_cleaning', 'urgent_cleaning', 'spill', 'restroom_issue', 'trash_overflow', 'other'];
+const VALID_CATEGORIES = [
+  'regular_cleaning',
+  'urgent_cleaning',
+  'spill',
+  'restroom_issue',
+  'trash_overflow',
+  'other',
+];
 const VALID_SOURCES = ['dashboard', 'qr', 'admin', 'dispatcher'];
 const TERMINAL = new Set(['done', 'rejected', 'cancelled']);
 
 function sanitizeText(s: string | undefined | null, maxLen = 2000): string | null {
   if (!s) return null;
-  return s.trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, maxLen);
+  return s
+    .trim()
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .slice(0, maxLen);
 }
 
 @Injectable()
@@ -18,9 +34,22 @@ export class CleaningRequestService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly migrator: MigratorPrismaService,
+    private readonly actorResolver: ActorResolver,
   ) {}
 
-  async list(actor: CleaningActor, params: { status?: string; priority?: string; contractorId?: string; zoneId?: string; source?: string; buildingId?: string; take?: number; skip?: number }) {
+  async list(
+    actor: CleaningActor,
+    params: {
+      status?: string;
+      priority?: string;
+      contractorId?: string;
+      zoneId?: string;
+      source?: string;
+      buildingId?: string;
+      take?: number;
+      skip?: number;
+    },
+  ) {
     const where: any = { ...filterForActor(actor) };
     if (params.status) where.status = params.status;
     if (params.priority) where.priority = params.priority;
@@ -29,20 +58,48 @@ export class CleaningRequestService {
     if (params.buildingId && typeof where.buildingId === 'object') {
       // Respect actor scope when user filters by buildingId
       const list = (where.buildingId as any).in as string[] | undefined;
-      if (list && !list.includes(params.buildingId)) throw new ForbiddenException('building out of scope');
+      if (list && !list.includes(params.buildingId))
+        throw new ForbiddenException('building out of scope');
       where.buildingId = params.buildingId;
     }
     if (params.contractorId) {
       const cur = where.contractorId;
-      if (cur && typeof cur === 'string' && cur !== params.contractorId) throw new ForbiddenException('contractor out of scope');
-      if (cur && typeof cur === 'object' && !(cur.in as string[]).includes(params.contractorId)) throw new ForbiddenException('contractor out of scope');
+      if (cur && typeof cur === 'string' && cur !== params.contractorId)
+        throw new ForbiddenException('contractor out of scope');
+      if (cur && typeof cur === 'object' && !(cur.in as string[]).includes(params.contractorId))
+        throw new ForbiddenException('contractor out of scope');
       where.contractorId = params.contractorId;
     }
     if (params.zoneId) where.zoneId = params.zoneId;
+
+    // INIT-007 Phase 4 — narrow by tenantCompany / created-by-self if the
+    // actor's role demands it. tasks.view_all bypasses tasks.view_company.
+    // Skip for platform_admin (already returns full base scope).
+    if (actor.kind !== 'platform_admin' && actor.userId) {
+      const a = await this.actorResolver.resolve({
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+      });
+      if (!a.isSuperAdmin) {
+        const seesAll = a.permissions.has('tasks.view_all');
+        if (!seesAll && a.scope.tenantCompanyId && a.permissions.has('tasks.view_company')) {
+          where.tenantCompanyId = a.scope.tenantCompanyId;
+        }
+        if (a.scope.createdByScope === true) {
+          where.createdByUserId = actor.userId;
+        }
+      }
+    }
+
     const take = Math.min(Math.max(params.take || 50, 1), 200);
     const skip = Math.max(params.skip || 0, 0);
     const [items, total] = await Promise.all([
-      this.prisma.cleaningRequest.findMany({ where, take, skip, orderBy: [{ requestedAt: 'desc' }] }),
+      this.prisma.cleaningRequest.findMany({
+        where,
+        take,
+        skip,
+        orderBy: [{ requestedAt: 'desc' }],
+      }),
       this.prisma.cleaningRequest.count({ where }),
     ]);
     return { total, items };
@@ -54,26 +111,48 @@ export class CleaningRequestService {
     });
     if (!req) throw new NotFoundException('request not found');
     const [comments, history, attachments, zone] = await Promise.all([
-      this.prisma.cleaningRequestComment.findMany({ where: { requestId: id }, orderBy: { createdAt: 'asc' } }),
-      this.prisma.cleaningRequestHistory.findMany({ where: { requestId: id }, orderBy: { createdAt: 'asc' } }),
-      this.prisma.cleaningRequestAttachment.findMany({ where: { requestId: id }, orderBy: { createdAt: 'asc' } }),
+      this.prisma.cleaningRequestComment.findMany({
+        where: { requestId: id },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.cleaningRequestHistory.findMany({
+        where: { requestId: id },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.cleaningRequestAttachment.findMany({
+        where: { requestId: id },
+        orderBy: { createdAt: 'asc' },
+      }),
       this.prisma.cleaningZone.findUnique({ where: { id: req.zoneId } }),
     ]);
     return { ...req, zone, comments, history, attachments };
   }
 
   // Internal create (dashboard / admin) — actor-scoped.
-  async internalCreate(actor: CleaningActor, body: {
-    buildingId: string; zoneId: string; title: string; description?: string;
-    category: string; priority?: string; source?: string;
-    contractorId?: string; assignedStaffId?: string; dueAt?: string;
-  }) {
+  async internalCreate(
+    actor: CleaningActor,
+    body: {
+      buildingId: string;
+      zoneId: string;
+      title: string;
+      description?: string;
+      category: string;
+      priority?: string;
+      source?: string;
+      contractorId?: string;
+      assignedStaffId?: string;
+      dueAt?: string;
+    },
+  ) {
     this.validateCreateBody(body);
-    const zone = await this.prisma.cleaningZone.findFirst({ where: { id: body.zoneId, tenantId: actor.tenantId, buildingId: body.buildingId } });
+    const zone = await this.prisma.cleaningZone.findFirst({
+      where: { id: body.zoneId, tenantId: actor.tenantId, buildingId: body.buildingId },
+    });
     if (!zone) throw new NotFoundException('zone not found');
 
     const { contractorId, assignedStaffId, status, assignedAt } = await this.computeAssignment({
-      tenantId: actor.tenantId, zone,
+      tenantId: actor.tenantId,
+      zone,
       overrideContractorId: body.contractorId,
       overrideStaffId: body.assignedStaffId,
     });
@@ -96,7 +175,12 @@ export class CleaningRequestService {
         dueAt: body.dueAt ? new Date(body.dueAt) : null,
       },
     });
-    await this.logHistory(actor.tenantId, created.id, 'created', 'user', actor.userId, { source: created.source, contractorId, assignedStaffId, status });
+    await this.logHistory(actor.tenantId, created.id, 'created', 'user', actor.userId, {
+      source: created.source,
+      contractorId,
+      assignedStaffId,
+      status,
+    });
     return created;
   }
 
@@ -104,15 +188,27 @@ export class CleaningRequestService {
   // Uses the migrator client because the public HTTP path has no tenant
   // context and the app role is NOBYPASSRLS + FORCE RLS.
   async publicCreate(body: {
-    tenantId: string; buildingId: string; zoneId: string; qrPointId?: string;
-    title: string; description?: string; category: string; priority?: string;
-    guestName?: string; guestPhone?: string;
+    tenantId: string;
+    buildingId: string;
+    zoneId: string;
+    qrPointId?: string;
+    title: string;
+    description?: string;
+    category: string;
+    priority?: string;
+    guestName?: string;
+    guestPhone?: string;
   }) {
     this.validateCreateBody(body);
-    const zone = await this.migrator.cleaningZone.findFirst({ where: { id: body.zoneId, tenantId: body.tenantId, buildingId: body.buildingId } });
+    const zone = await this.migrator.cleaningZone.findFirst({
+      where: { id: body.zoneId, tenantId: body.tenantId, buildingId: body.buildingId },
+    });
     if (!zone) throw new NotFoundException('zone not found');
 
-    const { contractorId, assignedStaffId, status, assignedAt } = await this.computeAssignment({ tenantId: body.tenantId, zone }, this.migrator);
+    const { contractorId, assignedStaffId, status, assignedAt } = await this.computeAssignment(
+      { tenantId: body.tenantId, zone },
+      this.migrator,
+    );
 
     const created = await this.migrator.cleaningRequest.create({
       data: {
@@ -133,7 +229,12 @@ export class CleaningRequestService {
         assignedAt: assignedAt || null,
       },
     });
-    await this.logHistoryOn(this.migrator, body.tenantId, created.id, 'created', 'guest', null, { source: 'qr', contractorId, assignedStaffId, status });
+    await this.logHistoryOn(this.migrator, body.tenantId, created.id, 'created', 'guest', null, {
+      source: 'qr',
+      contractorId,
+      assignedStaffId,
+      status,
+    });
     // Return a minimal object — never leak internal ids to the public caller.
     return {
       ok: true,
@@ -145,7 +246,9 @@ export class CleaningRequestService {
   }
 
   async changeStatus(actor: CleaningActor, id: string, to: string) {
-    const req = await this.prisma.cleaningRequest.findFirst({ where: { id, ...filterForActor(actor) } as any });
+    const req = await this.prisma.cleaningRequest.findFirst({
+      where: { id, ...filterForActor(actor) } as any,
+    });
     if (!req) throw new NotFoundException('request not found');
     if (!canChangeStatus(actor, req.status, to)) {
       throw new ForbiddenException(`transition ${req.status}→${to} not allowed for ${actor.kind}`);
@@ -156,28 +259,47 @@ export class CleaningRequestService {
     if (to === 'done' || to === 'rejected' || to === 'cancelled') data.resolvedAt = now;
     if (to === 'done') data.closedByUserId = actor.userId;
     if (to === 'assigned' && req.status === 'in_progress') {
-      data.assignedStaffId = null; data.startedAt = null;
+      data.assignedStaffId = null;
+      data.startedAt = null;
     }
     const updated = await this.prisma.cleaningRequest.update({ where: { id }, data });
-    await this.logHistory(actor.tenantId, id, `status.${req.status}_to_${to}`, 'user', actor.userId, {});
+    await this.logHistory(
+      actor.tenantId,
+      id,
+      `status.${req.status}_to_${to}`,
+      'user',
+      actor.userId,
+      {},
+    );
     return updated;
   }
 
-  async assign(actor: CleaningActor, id: string, body: { contractorId?: string; assignedStaffId?: string }) {
+  async assign(
+    actor: CleaningActor,
+    id: string,
+    body: { contractorId?: string; assignedStaffId?: string },
+  ) {
     if (!canAssign(actor)) throw new ForbiddenException('cannot assign');
-    const req = await this.prisma.cleaningRequest.findFirst({ where: { id, ...filterForActor(actor) } as any });
+    const req = await this.prisma.cleaningRequest.findFirst({
+      where: { id, ...filterForActor(actor) } as any,
+    });
     if (!req) throw new NotFoundException('request not found');
-    if (TERMINAL.has(req.status)) throw new BadRequestException(`request is ${req.status}; cannot reassign`);
+    if (TERMINAL.has(req.status))
+      throw new BadRequestException(`request is ${req.status}; cannot reassign`);
 
     let contractorId = body.contractorId ?? req.contractorId;
-    let assignedStaffId = body.assignedStaffId ?? null;
+    const assignedStaffId = body.assignedStaffId ?? null;
 
     if (contractorId) {
-      const c = await this.prisma.cleaningContractor.findFirst({ where: { id: contractorId, tenantId: actor.tenantId } });
+      const c = await this.prisma.cleaningContractor.findFirst({
+        where: { id: contractorId, tenantId: actor.tenantId },
+      });
       if (!c) throw new NotFoundException('contractor not found');
     }
     if (assignedStaffId) {
-      const s = await this.prisma.cleaningStaff.findFirst({ where: { id: assignedStaffId, tenantId: actor.tenantId } });
+      const s = await this.prisma.cleaningStaff.findFirst({
+        where: { id: assignedStaffId, tenantId: actor.tenantId },
+      });
       if (!s) throw new NotFoundException('staff not found');
       if (contractorId && s.contractorId !== contractorId) {
         throw new BadRequestException('staff does not belong to contractor');
@@ -194,12 +316,17 @@ export class CleaningRequestService {
         assignedAt: assignedStaffId ? new Date() : req.assignedAt,
       },
     });
-    await this.logHistory(actor.tenantId, id, 'assigned', 'user', actor.userId, { contractorId, assignedStaffId });
+    await this.logHistory(actor.tenantId, id, 'assigned', 'user', actor.userId, {
+      contractorId,
+      assignedStaffId,
+    });
     return updated;
   }
 
   async addComment(actor: CleaningActor, id: string, body: { body: string; isInternal?: boolean }) {
-    const req = await this.prisma.cleaningRequest.findFirst({ where: { id, ...filterForActor(actor) } as any });
+    const req = await this.prisma.cleaningRequest.findFirst({
+      where: { id, ...filterForActor(actor) } as any,
+    });
     if (!req) throw new NotFoundException('request not found');
     const text = sanitizeText(body.body);
     if (!text || text.length < 1) throw new BadRequestException('body required');
@@ -212,26 +339,38 @@ export class CleaningRequestService {
         isInternal: !!body.isInternal,
       },
     });
-    await this.logHistory(actor.tenantId, id, 'comment.added', 'user', actor.userId, { isInternal: !!body.isInternal });
+    await this.logHistory(actor.tenantId, id, 'comment.added', 'user', actor.userId, {
+      isInternal: !!body.isInternal,
+    });
     return c;
   }
 
   // ── Helpers ────────────────────────────────────────────
-  private validateCreateBody(body: { title?: string; category?: string; priority?: string; source?: string }) {
+  private validateCreateBody(body: {
+    title?: string;
+    category?: string;
+    priority?: string;
+    source?: string;
+  }) {
     if (!body.title) throw new BadRequestException('title required');
     if (!body.category || !VALID_CATEGORIES.includes(body.category)) {
       throw new BadRequestException(`category must be one of ${VALID_CATEGORIES.join(', ')}`);
     }
-    if (body.priority && !VALID_PRIORITIES.includes(body.priority)) throw new BadRequestException('invalid priority');
-    if (body.source && !VALID_SOURCES.includes(body.source)) throw new BadRequestException('invalid source');
+    if (body.priority && !VALID_PRIORITIES.includes(body.priority))
+      throw new BadRequestException('invalid priority');
+    if (body.source && !VALID_SOURCES.includes(body.source))
+      throw new BadRequestException('invalid source');
   }
 
-  private async computeAssignment(params: {
-    tenantId: string;
-    zone: { contractorId: string | null; supervisorStaffId: string | null };
-    overrideContractorId?: string;
-    overrideStaffId?: string;
-  }, client: { cleaningStaff: { findUnique: (args: any) => Promise<any> } } = this.prisma as any) {
+  private async computeAssignment(
+    params: {
+      tenantId: string;
+      zone: { contractorId: string | null; supervisorStaffId: string | null };
+      overrideContractorId?: string;
+      overrideStaffId?: string;
+    },
+    client: { cleaningStaff: { findUnique: (args: any) => Promise<any> } } = this.prisma as any,
+  ) {
     let contractorId = params.overrideContractorId ?? params.zone.contractorId ?? null;
     let assignedStaffId = params.overrideStaffId ?? null;
 
@@ -247,20 +386,43 @@ export class CleaningRequestService {
     return { contractorId, assignedStaffId, status, assignedAt };
   }
 
-  private async logHistory(tenantId: string, requestId: string, action: string, actorType: string, actorId: string | null, payload: any) {
+  private async logHistory(
+    tenantId: string,
+    requestId: string,
+    action: string,
+    actorType: string,
+    actorId: string | null,
+    payload: any,
+  ) {
     await this.prisma.cleaningRequestHistory.create({
       data: {
-        tenantId, requestId, action, actorType,
-        actorId, payloadJson: payload as any,
+        tenantId,
+        requestId,
+        action,
+        actorType,
+        actorId,
+        payloadJson: payload as any,
       },
     });
   }
 
-  private async logHistoryOn(client: any, tenantId: string, requestId: string, action: string, actorType: string, actorId: string | null, payload: any) {
+  private async logHistoryOn(
+    client: any,
+    tenantId: string,
+    requestId: string,
+    action: string,
+    actorType: string,
+    actorId: string | null,
+    payload: any,
+  ) {
     await client.cleaningRequestHistory.create({
       data: {
-        tenantId, requestId, action, actorType,
-        actorId, payloadJson: payload as any,
+        tenantId,
+        requestId,
+        action,
+        actorType,
+        actorId,
+        payloadJson: payload as any,
       },
     });
   }

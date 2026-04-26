@@ -1612,12 +1612,17 @@ model Incident {
   assignmentSource String?
   assignmentReason String?
   floorId          String?
+  // INIT-007 Phase 4 — TenantCompany scope. Lets a TENANT_COMPANY_ADMIN
+  // see only their own company's incidents and a TENANT_EMPLOYEE see
+  // only the ones they created. NULL = not associated with any company.
+  tenantCompanyId  String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   @@index([tenantId, buildingId, status])
   @@index([severity])
   @@index([assignedUserId])
+  @@index([tenantCompanyId])
   @@map("incidents")
 }
 
@@ -1641,12 +1646,14 @@ model ServiceRequest {
   assignmentSource String?
   assignmentReason String?
   floorId          String?
+  tenantCompanyId  String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   @@index([tenantId, buildingId, status])
   @@index([qrLocationId])
   @@index([assignedUserId])
+  @@index([tenantCompanyId])
   @@map("service_requests")
 }
 
@@ -2877,6 +2884,7 @@ model CleaningRequest {
   assignmentSource    String?
   assignmentReason    String?
   floorId             String?
+  tenantCompanyId     String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -2886,6 +2894,7 @@ model CleaningRequest {
   @@index([zoneId])
   @@index([dueAt])
   @@index([assignedUserId])
+  @@index([tenantCompanyId])
   @@map("cleaning_requests")
 }
 
