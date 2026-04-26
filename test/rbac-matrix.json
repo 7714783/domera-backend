@@ -1,0 +1,199 @@
+{
+  "_comment": [
+    "INIT-007 Phase 7 — declarative authorization matrix.",
+    "",
+    "Each row: a role + permission + (optional) scope dimensions on the actor",
+    "and resource. expectedAccess: 'allow' or one of the AuthorizationError",
+    "codes ('MISSING_PERMISSION', 'CROSS_TENANT_ACCESS', 'BUILDING_SCOPE_VIOLATION',",
+    "'FLOOR_SCOPE_VIOLATION', 'ZONE_SCOPE_VIOLATION', 'SYSTEM_SCOPE_VIOLATION',",
+    "'CONTRACTOR_SCOPE_VIOLATION', 'TENANT_COMPANY_SCOPE_VIOLATION',",
+    "'TEAM_SCOPE_VIOLATION', 'CREATED_BY_SCOPE_VIOLATION', 'STEP_UP_REQUIRED').",
+    "",
+    "Test runs each row through policy.ts authorize(). A regression in the",
+    "policy engine (or in seed permissions) flips one of the expected outcomes",
+    "and the row turns CI red — pointing at the exact role + dimension that",
+    "drifted."
+  ],
+  "rows": [
+    {
+      "name": "workspace_owner can manage workspace anywhere in tenant",
+      "actor": { "role": "workspace_owner", "permissions": ["workspace.manage"] },
+      "permission": "workspace.manage",
+      "resource": { "tenantId": "t1" },
+      "expectedAccess": "allow"
+    },
+    {
+      "name": "workspace_owner cannot reach across tenants",
+      "actor": {
+        "role": "workspace_owner",
+        "permissions": ["workspace.manage"],
+        "scope": { "tenantId": "t1" }
+      },
+      "permission": "workspace.manage",
+      "resource": { "tenantId": "t2" },
+      "expectedAccess": "CROSS_TENANT_ACCESS"
+    },
+    {
+      "name": "building_manager assigns tasks in own building",
+      "actor": {
+        "role": "building_manager",
+        "permissions": ["task.assign"],
+        "scope": { "buildingIds": ["b1"] }
+      },
+      "permission": "task.assign",
+      "resource": { "tenantId": "t1", "buildingId": "b1" },
+      "expectedAccess": "allow"
+    },
+    {
+      "name": "building_manager cannot assign in another building",
+      "actor": {
+        "role": "building_manager",
+        "permissions": ["task.assign"],
+        "scope": { "buildingIds": ["b1"] }
+      },
+      "permission": "task.assign",
+      "resource": { "tenantId": "t1", "buildingId": "b2" },
+      "expectedAccess": "BUILDING_SCOPE_VIOLATION"
+    },
+    {
+      "name": "cleaner with no permission cannot assign",
+      "actor": { "role": "cleaner", "permissions": ["task.read_assigned"] },
+      "permission": "task.assign",
+      "resource": { "tenantId": "t1", "buildingId": "b1" },
+      "expectedAccess": "MISSING_PERMISSION"
+    },
+    {
+      "name": "cleaner sees only own floor (Phase 1 scope)",
+      "actor": {
+        "role": "cleaner",
+        "permissions": ["task.read_assigned"],
+        "scope": { "floorIds": ["f1"] }
+      },
+      "permission": "task.read_assigned",
+      "resource": { "tenantId": "t1", "buildingId": "b1", "floorId": "f1" },
+      "expectedAccess": "allow"
+    },
+    {
+      "name": "cleaner blocked when floor outside grant",
+      "actor": {
+        "role": "cleaner",
+        "permissions": ["task.read_assigned"],
+        "scope": { "floorIds": ["f1"] }
+      },
+      "permission": "task.read_assigned",
+      "resource": { "tenantId": "t1", "buildingId": "b1", "floorId": "f2" },
+      "expectedAccess": "FLOOR_SCOPE_VIOLATION"
+    },
+    {
+      "name": "tenant_employee with createdByScope sees own ticket",
+      "actor": {
+        "role": "tenant_employee",
+        "permissions": ["tasks.view_created"],
+        "userId": "u1",
+        "scope": { "createdByScope": true }
+      },
+      "permission": "tasks.view_created",
+      "resource": { "tenantId": "t1", "buildingId": "b1", "createdByUserId": "u1" },
+      "expectedAccess": "allow"
+    },
+    {
+      "name": "tenant_employee cannot see someone else's ticket",
+      "actor": {
+        "role": "tenant_employee",
+        "permissions": ["tasks.view_created"],
+        "userId": "u1",
+        "scope": { "createdByScope": true }
+      },
+      "permission": "tasks.view_created",
+      "resource": { "tenantId": "t1", "buildingId": "b1", "createdByUserId": "u2" },
+      "expectedAccess": "CREATED_BY_SCOPE_VIOLATION"
+    },
+    {
+      "name": "tenant_company_admin sees company tickets",
+      "actor": {
+        "role": "tenant_company_admin",
+        "permissions": ["tasks.view_company"],
+        "scope": { "tenantCompanyId": "tc1" }
+      },
+      "permission": "tasks.view_company",
+      "resource": { "tenantId": "t1", "buildingId": "b1", "tenantCompanyId": "tc1" },
+      "expectedAccess": "allow"
+    },
+    {
+      "name": "tenant_company_admin blocked across companies",
+      "actor": {
+        "role": "tenant_company_admin",
+        "permissions": ["tasks.view_company"],
+        "scope": { "tenantCompanyId": "tc1" }
+      },
+      "permission": "tasks.view_company",
+      "resource": { "tenantId": "t1", "buildingId": "b1", "tenantCompanyId": "tc2" },
+      "expectedAccess": "TENANT_COMPANY_SCOPE_VIOLATION"
+    },
+    {
+      "name": "contractor_manager sees own company tasks (Phase 6)",
+      "actor": {
+        "role": "contractor_manager",
+        "permissions": ["tasks.view_company", "task.assign"],
+        "scope": { "contractorCompanyId": "cc1" }
+      },
+      "permission": "task.assign",
+      "resource": { "tenantId": "t1", "buildingId": "b1", "contractorCompanyId": "cc1" },
+      "expectedAccess": "allow"
+    },
+    {
+      "name": "contractor_manager blocked across contractor companies",
+      "actor": {
+        "role": "contractor_manager",
+        "permissions": ["tasks.view_company", "task.assign"],
+        "scope": { "contractorCompanyId": "cc1" }
+      },
+      "permission": "task.assign",
+      "resource": { "tenantId": "t1", "buildingId": "b1", "contractorCompanyId": "cc2" },
+      "expectedAccess": "CONTRACTOR_SCOPE_VIOLATION"
+    },
+    {
+      "name": "security can manage incidents (Phase 5)",
+      "actor": { "role": "security", "permissions": ["security.incident.manage"] },
+      "permission": "security.incident.manage",
+      "resource": { "tenantId": "t1", "buildingId": "b1" },
+      "expectedAccess": "allow"
+    },
+    {
+      "name": "security blocked from arbitrary role assignment",
+      "actor": { "role": "security", "permissions": ["security.incident.manage"] },
+      "permission": "role.assign",
+      "resource": { "tenantId": "t1", "buildingId": "b1" },
+      "expectedAccess": "MISSING_PERMISSION"
+    },
+    {
+      "name": "cleaning_manager sees all cleaning tasks (Phase 5)",
+      "actor": {
+        "role": "cleaning_manager",
+        "permissions": ["tasks.view_all", "task.assign"]
+      },
+      "permission": "task.assign",
+      "resource": { "tenantId": "t1", "buildingId": "b1" },
+      "expectedAccess": "allow"
+    },
+    {
+      "name": "step-up MFA required",
+      "actor": {
+        "role": "workspace_owner",
+        "permissions": ["role.assign"],
+        "mfaLevel": "password"
+      },
+      "permission": "role.assign",
+      "resource": { "tenantId": "t1", "buildingId": "b1" },
+      "options": { "requireMfa": true },
+      "expectedAccess": "STEP_UP_REQUIRED"
+    },
+    {
+      "name": "super admin bypass passes everything",
+      "actor": { "role": "platform_admin", "isSuperAdmin": true, "permissions": [] },
+      "permission": "role.assign",
+      "resource": { "tenantId": "t1", "buildingId": "b1" },
+      "expectedAccess": "allow"
+    }
+  ]
+}
