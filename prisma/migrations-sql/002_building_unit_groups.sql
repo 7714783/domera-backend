@@ -42,7 +42,13 @@ ALTER TABLE "building_units"
 ALTER TABLE "building_unit_groups" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "building_unit_groups" FORCE  ROW LEVEL SECURITY;
 
+-- INIT-008 Phase 1 — GUC name fix. The runtime sets `app.current_tenant_id`
+-- (see apps/api/src/prisma/prisma.service.ts) and the policies in
+-- prisma/rls/001_enable_rls.sql read the same name. The original 002 used
+-- `app.tenant_id` which silently evaluated to NULL → default-deny on
+-- building_unit_groups. Migration 011 rewrites the live PROD policy; this
+-- file is kept in sync so fresh CI runs (migrations-apply) match.
 DROP POLICY IF EXISTS tenant_isolation ON "building_unit_groups";
 CREATE POLICY tenant_isolation ON "building_unit_groups"
-  USING ("tenantId" = current_setting('app.tenant_id', true))
-  WITH CHECK ("tenantId" = current_setting('app.tenant_id', true));
+  USING ("tenantId" = current_setting('app.current_tenant_id', true))
+  WITH CHECK ("tenantId" = current_setting('app.current_tenant_id', true));

@@ -36,6 +36,20 @@ jobs:
           for f in prisma/rls/*.sql; do
             awk '/create policy|alter policy/ { if ($0 !~ /on /) { print "missing ON in: " $0; exit 1 } }' "$f"
           done
+      - name: Guard against GUC name drift (INIT-008 Phase 1)
+        # Every RLS policy MUST use app.current_tenant_id — that's what the
+        # Prisma extension sets via set_config. An older generation of
+        # migrations used app.tenant_id and silently evaluated to NULL →
+        # default-deny. This guard fails the build if anyone reintroduces
+        # the wrong name in raw-SQL migrations or rls/*.sql files. Matching
+        # comments that document the old name are excluded via awk.
+        run: |
+          bad=$(grep -rnE "current_setting\('app\.tenant_id'" prisma/ | grep -v '^--' || true)
+          if [ -n "$bad" ]; then
+            echo "RLS GUC name drift — use app.current_tenant_id, not app.tenant_id:"
+            echo "$bad"
+            exit 1
+          fi
       - name: Authz policy engine unit tests (INIT-007 Phase 3)
         # Pure-TS unit tests for apps/api/src/common/authz — no DB, no
         # network. 19 assertions cover every scope dimension + MFA step-up.

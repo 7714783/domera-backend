@@ -39,7 +39,8 @@ ALTER TABLE "occupant_company_settings"
 ALTER TABLE "occupant_company_settings" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "occupant_company_settings" FORCE  ROW LEVEL SECURITY;
 
+-- INIT-008 Phase 1 — GUC name fix (same story as 002_building_unit_groups).
 DROP POLICY IF EXISTS tenant_isolation ON "occupant_company_settings";
 CREATE POLICY tenant_isolation ON "occupant_company_settings"
-  USING ("tenantId" = current_setting('app.tenant_id', true))
-  WITH CHECK ("tenantId" = current_setting('app.tenant_id', true));
+  USING ("tenantId" = current_setting('app.current_tenant_id', true))
+  WITH CHECK ("tenantId" = current_setting('app.current_tenant_id', true));

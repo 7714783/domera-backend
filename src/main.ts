@@ -1,6 +1,7 @@
-// Autoload .env BEFORE any Nest imports so Prisma + config consumers see
-// DATABASE_URL on first instantiation. In Railway / hosted envs the vars
-// come straight from the runtime, so dotenv is a no-op there.
+// Autoload .env BEFORE any module imports so Prisma + config consumers see
+// DATABASE_URL on first instantiation. Searches the monorepo root (two
+// levels up from apps/api/dist) — works whether run via `nest start` or
+// `node dist/main.js`.
 import { config as loadDotenv } from 'dotenv';
 import { resolve } from 'node:path';
 
@@ -12,28 +13,37 @@ for (const p of [
   loadDotenv({ path: p });
 }
 
-import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { assertProdEnv } from './common/env-guard';
 
 async function bootstrap() {
-  const log = new Logger('bootstrap');
+  // INIT-008 Phase 3 — fail fast in PROD if env is incomplete or
+  // dev-defaults are still in place. Dev / test stay permissive.
+  assertProdEnv();
+
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.setGlobalPrefix('v1');
+
+  // Security headers baseline (CSP / HSTS / X-Content-Type-Options /
+  // Referrer-Policy / X-Frame-Options). Disable contentSecurityPolicy
+  // because Nest is JSON-only — CSP belongs on the frontend (Next.js)
+  // where we actually render HTML. Helmet's other defaults are safe.
+  app.use(helmet({ contentSecurityPolicy: false }));
 
   const corsOrigins = process.env.CORS_ORIGINS
     ? process.env.CORS_ORIGINS.split(',')
         .map((s) => s.trim())
         .filter(Boolean)
     : true;
-  app.enableCors({ origin: corsOrigins, credentials: true });
+  app.enableCors({
+    origin: corsOrigins,
+    credentials: true,
+  });
 
-  const port = Number(process.env.PORT) || 4000;
-  // Bind to 0.0.0.0 so Railway / Docker ingress can reach the container —
-  // Nest's default IPv6 bind (::) isn't always proxied on PaaS runners.
-  await app.listen(port, '0.0.0.0');
-  log.log(`listening on 0.0.0.0:${port} (healthcheck: GET /v1/health)`);
+  await app.listen(process.env.PORT || 4000);
 }
 
 void bootstrap();
