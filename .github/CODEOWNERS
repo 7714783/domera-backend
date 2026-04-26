@@ -1,0 +1,37 @@
+# CODEOWNERS — architecture-sensitive paths require @architecture review.
+#
+# Pinned by docs/architecture/platform-development-contract.md § 10.
+# A PR touching any of these paths cannot merge without a review from
+# someone in the @architecture team.
+#
+# Wildcard catch-all is intentionally absent — non-listed paths can be
+# reviewed by any team-member.
+
+# ── Domain modules ────────────────────────────────────────────
+apps/api/src/modules/                       @architecture
+apps/api/src/common/authz/                  @architecture
+apps/api/src/common/tenant.middleware.ts    @architecture
+apps/api/src/common/tenant-context.ts       @architecture
+apps/api/src/common/tenant.utils.ts         @architecture
+
+# ── Schema + migrations + RLS (one-way doors) ─────────────────
+apps/api/prisma/                            @architecture
+
+# ── Architecture docs ─────────────────────────────────────────
+docs/architecture/                          @architecture
+docs/modules/                                @architecture
+
+# ── Build + CI gates ──────────────────────────────────────────
+.github/workflows/                          @architecture
+.github/pull_request_template.md            @architecture
+.github/CODEOWNERS                          @architecture
+
+# ── Test gates ────────────────────────────────────────────────
+apps/api/test/ssot-ownership.test.mjs       @architecture
+apps/api/test/module-boundaries.test.mjs    @architecture
+apps/api/test/state-machine.test.mjs        @architecture
+apps/api/test/event-contract.test.mjs       @architecture
+apps/api/test/rbac-matrix.test.mjs          @architecture
+apps/api/test/rbac-matrix.json              @architecture
+apps/api/test/rls.migration.test.mjs        @architecture
+apps/api/test/locations.contract.mjs        @architecture
