@@ -49,6 +49,7 @@ import { DevicesModule } from './modules/devices/devices.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { TenantCompaniesModule } from './modules/tenant-companies/tenant-companies.module';
 import { AssignmentModule } from './modules/assignment/assignment.module';
+import { ContractorCompaniesModule } from './modules/contractor-companies/contractor-companies.module';
 
 @Module({
   imports: [
@@ -100,6 +101,7 @@ import { AssignmentModule } from './modules/assignment/assignment.module';
     TasksModule,
     TenantCompaniesModule,
     AssignmentModule,
+    ContractorCompaniesModule,
   ],
 })
 export class AppModule implements NestModule {

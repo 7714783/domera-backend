@@ -700,6 +700,8 @@ model TaskInstance {
   lifecycleStage           String   @default("scheduled")
   executionMode            String?
   performerOrgId           String?
+  // INIT-007 Phase 6 — universal contractor scope. NULL on legacy rows.
+  contractorCompanyId      String?
   dueAt                    DateTime
   completedAt              DateTime?
   completedByUserId        String?
@@ -736,6 +738,7 @@ model TaskInstance {
   @@index([tenantId, buildingId, dueAt])
   @@index([status])
   @@index([lifecycleStage])
+  @@index([contractorCompanyId])
   @@map("task_instances")
 }
 
@@ -1454,21 +1457,26 @@ model AcceptancePack {
 }
 
 model WorkOrder {
-  id             String    @id @default(uuid())
-  tenantId       String
-  buildingId     String
-  taskInstanceId String?
-  vendorOrgId    String?
-  contractId     String?
-  status         String    @default("dispatched")
-  dueAt          DateTime
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id                  String    @id @default(uuid())
+  tenantId            String
+  buildingId          String
+  taskInstanceId      String?
+  vendorOrgId         String?
+  // INIT-007 Phase 6 — universal contractor scope. Populated either
+  // from the issuing flow (manager picks a ContractorCompany) or
+  // backfilled from vendorOrgId via a bridge in the seed.
+  contractorCompanyId String?
+  contractId          String?
+  status              String    @default("dispatched")
+  dueAt               DateTime
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   building Building     @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   task     TaskInstance? @relation(fields: [taskInstanceId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, buildingId, status])
+  @@index([contractorCompanyId])
   @@map("work_orders")
 }
 
@@ -2762,21 +2770,56 @@ model SignedUrl {
 // from PPM/maintenance — a cleaning request is NOT a TaskInstance.
 // ═══════════════════════════════════════════════════════════════════
 model CleaningContractor {
-  id         String   @id @default(uuid())
-  tenantId   String
-  buildingId String
-  name       String
-  legalName  String?
-  phone      String?
-  email      String?
-  isActive   Boolean  @default(true)
-  notes      String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  tenantId            String
+  buildingId          String
+  // INIT-007 Phase 6 — link to the universal ContractorCompany. NULL on
+  // legacy rows; new rows (created via /v1/contractor-companies) get
+  // populated automatically. Lets the policy engine treat cleaning +
+  // technical + security contractors with one scope dimension.
+  contractorCompanyId String?
+  name                String
+  legalName           String?
+  phone               String?
+  email               String?
+  isActive            Boolean  @default(true)
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@unique([buildingId, name])
   @@index([tenantId, buildingId, isActive])
+  @@index([contractorCompanyId])
   @@map("cleaning_contractors")
+}
+
+// INIT-007 Phase 6 — universal ContractorCompany.
+//
+// Cleaning has had its own CleaningContractor model since INIT-001;
+// technical + security work has been routed through Organization (with
+// type="vendor") via WorkOrder.vendorOrgId / TaskInstance.performerOrgId.
+// That parallel modelling makes scope hard: a CONTRACTOR_MANAGER cannot
+// say "I manage company X across all domains". This model unifies them
+// — every domain-specific contractor (CleaningContractor, future
+// TechnicalContractor, SecurityContractor) carries a contractorCompanyId
+// pointing here, and TaskInstance + WorkOrder gain the same FK so role
+// scope = { contractorCompanyId } narrows everything.
+model ContractorCompany {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  legalName String?
+  domain    String   // cleaning | technical | security | generic
+  phone     String?
+  email     String?
+  isActive  Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, name])
+  @@index([tenantId, domain, isActive])
+  @@map("contractor_companies")
 }
 
 model CleaningRole {

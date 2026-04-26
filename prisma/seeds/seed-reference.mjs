@@ -135,6 +135,16 @@ const ROLES = [
     scope: 'building',
     maxDelegatableScope: null,
   },
+  // INIT-007 Phase 6 — universal contractor manager. Scope-narrowed via
+  // BuildingRoleAssignment.contractorCompanyId. Lets a contractor company
+  // owner see + assign tasks across all buildings their company services
+  // (cleaning, technical, security — all unified through ContractorCompany).
+  {
+    key: 'contractor_manager',
+    name: 'Contractor Manager',
+    scope: 'building',
+    maxDelegatableScope: null,
+  },
 ];
 
 const PERMISSIONS = {
@@ -319,6 +329,17 @@ PERMISSIONS.security = [
   'security.incident.manage',
   'tasks.create',           // can open incidents/SR
   'tasks.view_assigned',    // sees own patrol/incident tasks
+  'document.upload_evidence',
+];
+
+// INIT-007 Phase 6 — CONTRACTOR_MANAGER manages a single ContractorCompany
+// across all buildings the company services. Scope narrows via
+// BuildingRoleAssignment.contractorCompanyId on every grant.
+PERMISSIONS.contractor_manager = [
+  'building.read',
+  'tasks.view_company',     // sees all tasks of their contractor company
+  'task.assign',            // assigns own staff to tasks
+  'workorder.read_assigned',
   'document.upload_evidence',
 ];
 
