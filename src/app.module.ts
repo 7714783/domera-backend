@@ -48,6 +48,7 @@ import { OccupantsModule } from './modules/occupants/occupants.module';
 import { DevicesModule } from './modules/devices/devices.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { TenantCompaniesModule } from './modules/tenant-companies/tenant-companies.module';
+import { AssignmentModule } from './modules/assignment/assignment.module';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import { TenantCompaniesModule } from './modules/tenant-companies/tenant-compani
     DevicesModule,
     TasksModule,
     TenantCompaniesModule,
+    AssignmentModule,
   ],
 })
 export class AppModule implements NestModule {

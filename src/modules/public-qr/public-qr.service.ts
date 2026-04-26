@@ -3,6 +3,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantContext } from '../../common/tenant-context';
+import { AssignmentResolverService } from '../assignment/assignment.resolver';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -22,7 +23,10 @@ type ResolvedQr = {
 
 @Injectable()
 export class PublicQrService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly assignmentResolver: AssignmentResolverService,
+  ) {}
 
   /** Resolve a public QR id via SECURITY DEFINER RPC (no tenant context). */
   private async resolveRaw(qrId: string): Promise<ResolvedQr> {
@@ -34,7 +38,9 @@ export class PublicQrService {
     return rows[0] as ResolvedQr;
   }
 
-  private async fetchBuildingPublic(bid: string): Promise<{ id: string; slug: string; name: string; city: string | null } | null> {
+  private async fetchBuildingPublic(
+    bid: string,
+  ): Promise<{ id: string; slug: string; name: string; city: string | null } | null> {
     const rows: any[] = await (this.prisma as any).$queryRawUnsafe(
       `select * from public_qr_building('${bid.replace(/'/g, "''")}')`,
     );
@@ -55,29 +61,48 @@ export class PublicQrService {
       building: building
         ? { id: building.id, slug: building.slug, name: building.name, city: building.city }
         : null,
-      categories: ['cleaning', 'technical', 'complaint', 'safety', 'elevator', 'parking', 'restroom', 'other'],
+      categories: [
+        'cleaning',
+        'technical',
+        'complaint',
+        'safety',
+        'elevator',
+        'parking',
+        'restroom',
+        'other',
+      ],
     };
   }
 
   /** Anonymous submission, scoped to the QR's tenant + building. */
-  async submit(qrId: string, body: {
-    category?: string;
-    priority?: 'low' | 'normal' | 'high';
-    description?: string;
-    photoKey?: string;
-    submitterContact?: string;
-  }) {
+  async submit(
+    qrId: string,
+    body: {
+      category?: string;
+      priority?: 'low' | 'normal' | 'high';
+      description?: string;
+      photoKey?: string;
+      submitterContact?: string;
+    },
+  ) {
     if (!body?.category) throw new BadRequestException('category required');
     const qr = await this.resolveRaw(qrId);
 
     // Run the write under the resolved tenant context so RLS applies.
     return TenantContext.run({ tenantId: qr.tenantId }, async () => {
+      const decision = await this.assignmentResolver.resolve({
+        tenantId: qr.tenantId,
+        buildingId: qr.buildingId,
+        floorId: qr.floorId,
+        roleKey: 'technician',
+      });
       return this.prisma.serviceRequest.create({
         data: {
           tenantId: qr.tenantId,
           buildingId: qr.buildingId,
           qrLocationId: qr.qrId,
           unitId: qr.unitId || null,
+          floorId: qr.floorId || null,
           category: body.category!,
           priority: body.priority || 'normal',
           status: 'new',
@@ -85,6 +110,9 @@ export class PublicQrService {
           photoKey: body.photoKey || null,
           submittedBy: null, // anonymous
           submitterContact: body.submitterContact || null,
+          assignedUserId: decision.userId,
+          assignmentSource: decision.source,
+          assignmentReason: decision.reason,
         },
         select: { id: true, status: true, createdAt: true },
       });

@@ -1,52 +1,93 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { requireManager, resolveBuildingId } from '../../common/building.helpers';
+import { AssignmentResolverService } from '../assignment/assignment.resolver';
 
 @Injectable()
 export class ReactiveService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly assignmentResolver: AssignmentResolverService,
+  ) {}
 
-  private async resolveBuildingId(tenantId: string, idOrSlug: string): Promise<string> {
-    const b = await this.prisma.building.findFirst({
-      where: { tenantId, OR: [{ id: idOrSlug }, { slug: idOrSlug }] },
-      select: { id: true },
-    });
-    if (!b) throw new NotFoundException('building not found');
-    return b.id;
-  }
+  private resolveBuildingId = (tenantId: string, idOrSlug: string) =>
+    resolveBuildingId(this.prisma, tenantId, idOrSlug);
 
-  private async assertManager(tenantId: string, actorUserId: string, buildingId: string) {
-    const ws = await this.prisma.membership.findFirst({
-      where: { tenantId, userId: actorUserId, roleKey: { in: ['workspace_owner', 'workspace_admin', 'org_admin'] } },
+  // Reactive workflow lets maintenance_coordinator + finance_controller act
+  // as building managers on incidents/service-requests (they dispatch + close
+  // these) — pass them as extraBuildingRoles to the shared guard.
+  private assertManager = (tenantId: string, actorUserId: string, buildingId: string) =>
+    requireManager(this.prisma, tenantId, actorUserId, {
+      buildingId,
+      extraBuildingRoles: ['maintenance_coordinator', 'finance_controller'],
     });
-    if (ws) return;
-    const br = await this.prisma.buildingRoleAssignment.findFirst({
-      where: { tenantId, userId: actorUserId, buildingId, roleKey: { in: ['building_manager', 'chief_engineer', 'maintenance_coordinator', 'finance_controller'] } },
-    });
-    if (!br) throw new ForbiddenException('not authorized for this building');
-  }
 
   // ─── Incidents ─────────────────────────────────────────────
   async createIncident(
-    tenantId: string, actorUserId: string | null, buildingIdOrSlug: string,
-    body: { title: string; description?: string; severity: 'P1'|'P2'|'P3'|'P4'; origin: string; unitId?: string; equipmentId?: string; reportedBy?: string },
+    tenantId: string,
+    actorUserId: string | null,
+    buildingIdOrSlug: string,
+    body: {
+      title: string;
+      description?: string;
+      severity: 'P1' | 'P2' | 'P3' | 'P4';
+      origin: string;
+      unitId?: string;
+      floorId?: string;
+      equipmentId?: string;
+      reportedBy?: string;
+    },
   ) {
-    if (!body.title || !body.severity || !body.origin) throw new BadRequestException('title, severity, origin required');
+    if (!body.title || !body.severity || !body.origin)
+      throw new BadRequestException('title, severity, origin required');
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+
+    const floorId = await this.deriveFloorId(tenantId, body.floorId, body.unitId);
+    const decision = await this.assignmentResolver.resolve({
+      tenantId,
+      buildingId,
+      floorId,
+      roleKey: 'technician',
+    });
+
     return this.prisma.incident.create({
       data: {
-        tenantId, buildingId,
-        title: body.title, description: body.description || null,
-        severity: body.severity, origin: body.origin, status: 'new',
-        unitId: body.unitId || null, equipmentId: body.equipmentId || null,
+        tenantId,
+        buildingId,
+        title: body.title,
+        description: body.description || null,
+        severity: body.severity,
+        origin: body.origin,
+        status: 'new',
+        unitId: body.unitId || null,
+        floorId: floorId || null,
+        equipmentId: body.equipmentId || null,
         reportedBy: body.reportedBy || actorUserId || null,
+        assignedUserId: decision.userId,
+        assignmentSource: decision.source,
+        assignmentReason: decision.reason,
       },
     });
   }
 
-  async listIncidents(tenantId: string, buildingIdOrSlug: string, filter?: { status?: string; severity?: string }) {
+  async listIncidents(
+    tenantId: string,
+    buildingIdOrSlug: string,
+    filter?: { status?: string; severity?: string },
+  ) {
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
     return this.prisma.incident.findMany({
-      where: { tenantId, buildingId, status: filter?.status || undefined, severity: filter?.severity || undefined },
+      where: {
+        tenantId,
+        buildingId,
+        status: filter?.status || undefined,
+        severity: filter?.severity || undefined,
+      },
       orderBy: [{ severity: 'asc' }, { reportedAt: 'desc' }],
     });
   }
@@ -57,12 +98,15 @@ export class ReactiveService {
     await this.assertManager(tenantId, actorUserId, inc.buildingId);
     if (inc.ackedAt) return inc;
     return this.prisma.incident.update({
-      where: { id }, data: { status: 'triaged', ackedAt: new Date() },
+      where: { id },
+      data: { status: 'triaged', ackedAt: new Date() },
     });
   }
 
   async resolveIncident(
-    tenantId: string, actorUserId: string, id: string,
+    tenantId: string,
+    actorUserId: string,
+    id: string,
     body: { rootCause: string; preventiveAction?: string },
   ) {
     if (!body.rootCause) throw new BadRequestException('rootCause required to archive an incident');
@@ -82,37 +126,91 @@ export class ReactiveService {
 
   // ─── Service requests ──────────────────────────────────────
   async createServiceRequest(
-    tenantId: string, actorUserId: string | null, buildingIdOrSlug: string,
-    body: { category: string; priority?: 'low'|'normal'|'high'; description?: string; unitId?: string; qrLocationId?: string; photoKey?: string; submittedBy?: string; submitterContact?: string },
+    tenantId: string,
+    actorUserId: string | null,
+    buildingIdOrSlug: string,
+    body: {
+      category: string;
+      priority?: 'low' | 'normal' | 'high';
+      description?: string;
+      unitId?: string;
+      floorId?: string;
+      qrLocationId?: string;
+      photoKey?: string;
+      submittedBy?: string;
+      submitterContact?: string;
+    },
   ) {
     if (!body.category) throw new BadRequestException('category required');
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
+
+    const floorId = await this.deriveFloorId(tenantId, body.floorId, body.unitId);
+    const decision = await this.assignmentResolver.resolve({
+      tenantId,
+      buildingId,
+      floorId,
+      roleKey: 'technician',
+    });
+
     return this.prisma.serviceRequest.create({
       data: {
-        tenantId, buildingId,
+        tenantId,
+        buildingId,
         category: body.category,
         priority: body.priority || 'normal',
         status: 'new',
         description: body.description || null,
         unitId: body.unitId || null,
+        floorId: floorId || null,
         qrLocationId: body.qrLocationId || null,
         photoKey: body.photoKey || null,
         submittedBy: body.submittedBy || actorUserId || null,
         submitterContact: body.submitterContact || null,
+        assignedUserId: decision.userId,
+        assignmentSource: decision.source,
+        assignmentReason: decision.reason,
       },
     });
   }
 
-  async listServiceRequests(tenantId: string, buildingIdOrSlug: string, filter?: { status?: string; category?: string }) {
+  // Best-effort floorId derivation: explicit body.floorId wins, otherwise
+  // try to find it from the unit. Returns null when nothing is known —
+  // resolver still works, it just skips floor-specific candidates.
+  private async deriveFloorId(
+    tenantId: string,
+    floorId: string | undefined | null,
+    unitId: string | undefined | null,
+  ): Promise<string | null> {
+    if (floorId) return floorId;
+    if (!unitId) return null;
+    const unit = await this.prisma.buildingUnit.findFirst({
+      where: { id: unitId, tenantId },
+      select: { floorId: true },
+    });
+    return unit?.floorId || null;
+  }
+
+  async listServiceRequests(
+    tenantId: string,
+    buildingIdOrSlug: string,
+    filter?: { status?: string; category?: string },
+  ) {
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
     return this.prisma.serviceRequest.findMany({
-      where: { tenantId, buildingId, status: filter?.status || undefined, category: filter?.category || undefined },
+      where: {
+        tenantId,
+        buildingId,
+        status: filter?.status || undefined,
+        category: filter?.category || undefined,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async resolveServiceRequest(
-    tenantId: string, actorUserId: string, id: string,
+    tenantId: string,
+    actorUserId: string,
+    id: string,
     body: { resolutionCode: string; note?: string },
   ) {
     if (!body.resolutionCode) throw new BadRequestException('resolutionCode required');
@@ -125,21 +223,73 @@ export class ReactiveService {
     });
   }
 
+  // ─── Manual (re)assignment of incidents + service-requests ───
+  // Used by the triage manager-queue UI when the auto-resolver returns
+  // null (assignmentSource === 'manager_queue') or when the manager
+  // overrides the auto-pick. Idempotent — assigning the same user is a no-op.
+  async assignIncident(
+    tenantId: string,
+    actorUserId: string,
+    id: string,
+    body: { userId: string },
+  ) {
+    if (!body?.userId) throw new BadRequestException('userId required');
+    const inc = await this.prisma.incident.findFirst({ where: { id, tenantId } });
+    if (!inc) throw new NotFoundException('incident not found');
+    await this.assertManager(tenantId, actorUserId, inc.buildingId);
+    return this.prisma.incident.update({
+      where: { id },
+      data: {
+        assignedUserId: body.userId,
+        assignmentSource: 'manager.manual',
+        assignmentReason: `manually assigned by ${actorUserId}`,
+      },
+    });
+  }
+
+  async assignServiceRequest(
+    tenantId: string,
+    actorUserId: string,
+    id: string,
+    body: { userId: string },
+  ) {
+    if (!body?.userId) throw new BadRequestException('userId required');
+    const sr = await this.prisma.serviceRequest.findFirst({ where: { id, tenantId } });
+    if (!sr) throw new NotFoundException('service request not found');
+    await this.assertManager(tenantId, actorUserId, sr.buildingId);
+    return this.prisma.serviceRequest.update({
+      where: { id },
+      data: {
+        assignedUserId: body.userId,
+        assignmentSource: 'manager.manual',
+        assignmentReason: `manually assigned by ${actorUserId}`,
+      },
+    });
+  }
+
   // ─── Convert intake → WorkOrder ────────────────────────────
   async convertToWorkOrder(
-    tenantId: string, actorUserId: string,
-    body: { source: 'incident' | 'service_request'; sourceId: string; vendorOrgId?: string; dueAt?: string },
+    tenantId: string,
+    actorUserId: string,
+    body: {
+      source: 'incident' | 'service_request';
+      sourceId: string;
+      vendorOrgId?: string;
+      dueAt?: string;
+    },
   ) {
     if (!body.source || !body.sourceId) throw new BadRequestException('source + sourceId required');
-    const rec = body.source === 'incident'
-      ? await this.prisma.incident.findFirst({ where: { id: body.sourceId, tenantId } })
-      : await this.prisma.serviceRequest.findFirst({ where: { id: body.sourceId, tenantId } });
+    const rec =
+      body.source === 'incident'
+        ? await this.prisma.incident.findFirst({ where: { id: body.sourceId, tenantId } })
+        : await this.prisma.serviceRequest.findFirst({ where: { id: body.sourceId, tenantId } });
     if (!rec) throw new NotFoundException('source not found');
     await this.assertManager(tenantId, actorUserId, rec.buildingId);
 
     const wo = await this.prisma.workOrder.create({
       data: {
-        tenantId, buildingId: rec.buildingId,
+        tenantId,
+        buildingId: rec.buildingId,
         vendorOrgId: body.vendorOrgId || null,
         status: 'dispatched',
         dueAt: body.dueAt ? new Date(body.dueAt) : new Date(Date.now() + 7 * 86400000),
@@ -147,19 +297,38 @@ export class ReactiveService {
     });
 
     if (body.source === 'incident') {
-      await this.prisma.incident.update({ where: { id: rec.id }, data: { status: 'dispatched', workOrderId: wo.id } });
+      await this.prisma.incident.update({
+        where: { id: rec.id },
+        data: { status: 'dispatched', workOrderId: wo.id },
+      });
     } else {
-      await this.prisma.serviceRequest.update({ where: { id: rec.id }, data: { status: 'dispatched', workOrderId: wo.id } });
+      await this.prisma.serviceRequest.update({
+        where: { id: rec.id },
+        data: { status: 'dispatched', workOrderId: wo.id },
+      });
     }
     return wo;
   }
 
   // ─── Quote / PO / Completion ───────────────────────────────
   async createQuote(
-    tenantId: string, actorUserId: string,
-    body: { buildingIdOrSlug: string; workOrderId?: string; vendorOrgId?: string; title: string; description?: string; amount: number; currency?: string; validUntil?: string; revisionOf?: string; documentId?: string },
+    tenantId: string,
+    actorUserId: string,
+    body: {
+      buildingIdOrSlug: string;
+      workOrderId?: string;
+      vendorOrgId?: string;
+      title: string;
+      description?: string;
+      amount: number;
+      currency?: string;
+      validUntil?: string;
+      revisionOf?: string;
+      documentId?: string;
+    },
   ) {
-    if (!body.title || body.amount === undefined) throw new BadRequestException('title, amount required');
+    if (!body.title || body.amount === undefined)
+      throw new BadRequestException('title, amount required');
     const buildingId = await this.resolveBuildingId(tenantId, body.buildingIdOrSlug);
     await this.assertManager(tenantId, actorUserId, buildingId);
 
@@ -172,12 +341,15 @@ export class ReactiveService {
 
     return this.prisma.quote.create({
       data: {
-        tenantId, buildingId,
+        tenantId,
+        buildingId,
         workOrderId: body.workOrderId || null,
         vendorOrgId: body.vendorOrgId || null,
         requesterUserId: actorUserId,
-        title: body.title, description: body.description || null,
-        amount: body.amount, currency: body.currency || 'ILS',
+        title: body.title,
+        description: body.description || null,
+        amount: body.amount,
+        currency: body.currency || 'ILS',
         validUntil: body.validUntil ? new Date(body.validUntil) : null,
         status: 'received',
         revisionOf: body.revisionOf || null,
@@ -188,8 +360,21 @@ export class ReactiveService {
   }
 
   async issuePurchaseOrder(
-    tenantId: string, actorUserId: string,
-    body: { quoteId?: string; workOrderId?: string; buildingIdOrSlug: string; poNumber?: string; vendorOrgId?: string; budgetLineId?: string; amount: number; currency?: string; expectedDeliveryAt?: string; capexOpex?: 'capex'|'opex'; notes?: string },
+    tenantId: string,
+    actorUserId: string,
+    body: {
+      quoteId?: string;
+      workOrderId?: string;
+      buildingIdOrSlug: string;
+      poNumber?: string;
+      vendorOrgId?: string;
+      budgetLineId?: string;
+      amount: number;
+      currency?: string;
+      expectedDeliveryAt?: string;
+      capexOpex?: 'capex' | 'opex';
+      notes?: string;
+    },
   ) {
     if (body.amount === undefined) throw new BadRequestException('amount required');
     const buildingId = await this.resolveBuildingId(tenantId, body.buildingIdOrSlug);
@@ -199,17 +384,21 @@ export class ReactiveService {
     if (body.quoteId) {
       quote = await this.prisma.quote.findFirst({ where: { id: body.quoteId, tenantId } });
       if (!quote) throw new BadRequestException('quote not found');
-      if (quote.status !== 'approved') throw new BadRequestException('quote must be approved before issuing PO');
+      if (quote.status !== 'approved')
+        throw new BadRequestException('quote must be approved before issuing PO');
       // SoD: PO issuer must not be the quote requester.
       if (quote.requesterUserId === actorUserId) {
-        throw new ForbiddenException('separation_of_duties: quote requester cannot issue the PO for their own quote');
+        throw new ForbiddenException(
+          'separation_of_duties: quote requester cannot issue the PO for their own quote',
+        );
       }
     }
 
     const poNumber = body.poNumber || `PO-${Date.now()}`;
     const po = await this.prisma.purchaseOrder.create({
       data: {
-        tenantId, buildingId,
+        tenantId,
+        buildingId,
         poNumber,
         quoteId: body.quoteId || null,
         workOrderId: body.workOrderId || quote?.workOrderId || null,
@@ -226,19 +415,26 @@ export class ReactiveService {
     });
 
     if (quote) {
-      await this.prisma.quote.update({ where: { id: quote.id }, data: { approvalRequestId: quote.approvalRequestId || null } });
+      await this.prisma.quote.update({
+        where: { id: quote.id },
+        data: { approvalRequestId: quote.approvalRequestId || null },
+      });
     }
     return po;
   }
 
   async recordCompletion(
-    tenantId: string, actorUserId: string,
+    tenantId: string,
+    actorUserId: string,
     body: {
       buildingIdOrSlug: string;
       workOrderId?: string;
       taskInstanceId?: string;
       completedAt?: string;
-      labourHours?: number; labourCost?: number; materialsCost?: number; downtimeMinutes?: number;
+      labourHours?: number;
+      labourCost?: number;
+      materialsCost?: number;
+      downtimeMinutes?: number;
       serviceReportDocumentId?: string;
       photoDocumentIds?: string[];
       notes?: string;
@@ -249,16 +445,23 @@ export class ReactiveService {
 
     // Hard-stop: if linked WO has an associated PO and no evidence, block.
     if (body.workOrderId) {
-      const po = await this.prisma.purchaseOrder.findFirst({ where: { workOrderId: body.workOrderId, status: { in: ['issued', 'in_progress'] } } });
-      const hasEvidence = !!body.serviceReportDocumentId || (body.photoDocumentIds && body.photoDocumentIds.length > 0);
+      const po = await this.prisma.purchaseOrder.findFirst({
+        where: { workOrderId: body.workOrderId, status: { in: ['issued', 'in_progress'] } },
+      });
+      const hasEvidence =
+        !!body.serviceReportDocumentId ||
+        (body.photoDocumentIds && body.photoDocumentIds.length > 0);
       if (po && !hasEvidence) {
-        throw new BadRequestException('external work with PO cannot be closed without completion documents');
+        throw new BadRequestException(
+          'external work with PO cannot be closed without completion documents',
+        );
       }
     }
 
     return this.prisma.completionRecord.create({
       data: {
-        tenantId, buildingId,
+        tenantId,
+        buildingId,
         workOrderId: body.workOrderId || null,
         taskInstanceId: body.taskInstanceId || null,
         completedByUserId: actorUserId,
@@ -287,7 +490,8 @@ export class ReactiveService {
   async triageQueue(tenantId: string, params: { buildingId?: string; status?: string } = {}) {
     const openIncidentStatuses = ['new', 'triaged', 'dispatched'];
     const openSrStatuses = ['new', 'triaged', 'dispatched'];
-    const filterStatus = params.status && params.status !== 'open' ? [params.status] : openIncidentStatuses;
+    const filterStatus =
+      params.status && params.status !== 'open' ? [params.status] : openIncidentStatuses;
 
     const where: any = { tenantId, status: { in: filterStatus } };
     if (params.buildingId) where.buildingId = params.buildingId;
@@ -301,7 +505,9 @@ export class ReactiveService {
       this.prisma.serviceRequest.findMany({
         where: {
           ...where,
-          status: { in: params.status && params.status !== 'open' ? [params.status] : openSrStatuses },
+          status: {
+            in: params.status && params.status !== 'open' ? [params.status] : openSrStatuses,
+          },
         },
         orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
         take: 200,
@@ -334,10 +540,17 @@ export class ReactiveService {
       const resolveDueAt = new Date(openedAt + sla.resolve * 3600000);
       return {
         kind: 'incident' as const,
-        id: i.id, title: i.title, description: i.description,
-        severity: i.severity, priority: null, category: i.origin,
+        id: i.id,
+        title: i.title,
+        description: i.description,
+        severity: i.severity,
+        priority: null,
+        category: i.origin,
         status: i.status,
-        buildingId: i.buildingId, buildingName: b?.name || null, buildingSlug: b?.slug || null,
+        buildingId: i.buildingId,
+        buildingName: b?.name || null,
+        buildingSlug: b?.slug || null,
+        floorId: i.floorId || null,
         reportedAt: i.reportedAt.toISOString(),
         reportedBy: i.reportedBy,
         ackedAt: i.ackedAt ? i.ackedAt.toISOString() : null,
@@ -346,6 +559,9 @@ export class ReactiveService {
         ageMinutes: Math.round((now - openedAt) / 60000),
         ackBreached: !i.ackedAt && now > ackDueAt.getTime(),
         slaBreached: now > resolveDueAt.getTime(),
+        assignedUserId: i.assignedUserId || null,
+        assignmentSource: i.assignmentSource || null,
+        assignmentReason: i.assignmentReason || null,
       };
     });
 
@@ -357,10 +573,17 @@ export class ReactiveService {
       const resolveDueAt = new Date(openedAt + sla.resolve * 3600000);
       return {
         kind: 'service_request' as const,
-        id: r.id, title: r.category, description: r.description,
-        severity: null, priority: r.priority, category: r.category,
+        id: r.id,
+        title: r.category,
+        description: r.description,
+        severity: null,
+        priority: r.priority,
+        category: r.category,
         status: r.status,
-        buildingId: r.buildingId, buildingName: b?.name || null, buildingSlug: b?.slug || null,
+        buildingId: r.buildingId,
+        buildingName: b?.name || null,
+        buildingSlug: b?.slug || null,
+        floorId: r.floorId || null,
         reportedAt: r.createdAt.toISOString(),
         reportedBy: r.submittedBy,
         ackedAt: null,
@@ -369,6 +592,9 @@ export class ReactiveService {
         ageMinutes: Math.round((now - openedAt) / 60000),
         ackBreached: now > ackDueAt.getTime(),
         slaBreached: now > resolveDueAt.getTime(),
+        assignedUserId: r.assignedUserId || null,
+        assignmentSource: r.assignmentSource || null,
+        assignmentReason: r.assignmentReason || null,
       };
     });
 
@@ -382,7 +608,9 @@ export class ReactiveService {
       buckets: {
         total: items.length,
         breached: items.filter((i) => i.slaBreached).length,
-        dueSoon: items.filter((i) => !i.slaBreached && new Date(i.resolveDueAt).getTime() - now < 4 * 3600000).length,
+        dueSoon: items.filter(
+          (i) => !i.slaBreached && new Date(i.resolveDueAt).getTime() - now < 4 * 3600000,
+        ).length,
         newUnacked: items.filter((i) => i.status === 'new').length,
         bySeverity: {
           P1: incidentItems.filter((i) => i.severity === 'P1').length,

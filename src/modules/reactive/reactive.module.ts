@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { AssignmentModule } from '../assignment/assignment.module';
 import { ReactiveController } from './reactive.controller';
 import { ReactiveService } from './reactive.service';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, AssignmentModule],
   controllers: [ReactiveController],
   providers: [ReactiveService],
   exports: [ReactiveService],

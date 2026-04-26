@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { ReactiveService } from './reactive.service';
@@ -30,8 +39,10 @@ export class ReactiveController {
 
   @Post('buildings/:id/incidents')
   async createIncident(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const user = ah ? await uid(ah, this.auth).catch(() => null) : null;
     return this.reactive.createIncident(resolveTenantId(th), user, id, body);
@@ -40,15 +51,43 @@ export class ReactiveController {
   @Post('incidents/:id/ack')
   async ackIncident(
     @Param('id') id: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.reactive.ackIncident(resolveTenantId(th), await uid(ah, this.auth), id);
   }
 
+  @Post('incidents/:id/assign')
+  async assignIncident(
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
+  ) {
+    return this.reactive.assignIncident(resolveTenantId(th), await uid(ah, this.auth), id, body);
+  }
+
+  @Post('service-requests/:id/assign')
+  async assignSR(
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
+  ) {
+    return this.reactive.assignServiceRequest(
+      resolveTenantId(th),
+      await uid(ah, this.auth),
+      id,
+      body,
+    );
+  }
+
   @Post('incidents/:id/resolve')
   async resolveIncident(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.reactive.resolveIncident(resolveTenantId(th), await uid(ah, this.auth), id, body);
   }
@@ -66,8 +105,10 @@ export class ReactiveController {
 
   @Post('buildings/:id/service-requests')
   async createSR(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const user = ah ? await uid(ah, this.auth).catch(() => null) : null;
     return this.reactive.createServiceRequest(resolveTenantId(th), user, id, body);
@@ -75,10 +116,17 @@ export class ReactiveController {
 
   @Post('service-requests/:id/resolve')
   async resolveSR(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
-    return this.reactive.resolveServiceRequest(resolveTenantId(th), await uid(ah, this.auth), id, body);
+    return this.reactive.resolveServiceRequest(
+      resolveTenantId(th),
+      await uid(ah, this.auth),
+      id,
+      body,
+    );
   }
 
   // Triage queue (portfolio-wide, SLA-aware)
@@ -95,7 +143,8 @@ export class ReactiveController {
   @Post('work-orders/from-intake')
   async convertToWO(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.reactive.convertToWorkOrder(resolveTenantId(th), await uid(ah, this.auth), body);
   }
@@ -104,7 +153,8 @@ export class ReactiveController {
   @Post('quotes')
   async createQuote(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.reactive.createQuote(resolveTenantId(th), await uid(ah, this.auth), body);
   }
@@ -112,7 +162,8 @@ export class ReactiveController {
   @Post('purchase-orders')
   async issuePO(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.reactive.issuePurchaseOrder(resolveTenantId(th), await uid(ah, this.auth), body);
   }
@@ -120,7 +171,8 @@ export class ReactiveController {
   @Post('completions')
   async recordCompletion(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.reactive.recordCompletion(resolveTenantId(th), await uid(ah, this.auth), body);
   }

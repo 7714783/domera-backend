@@ -1604,11 +1604,20 @@ model Incident {
   rootCause        String?
   preventiveAction String?
   workOrderId      String?
+  // INIT-004 — auto-assignment outcome captured at create time.
+  // assignedUserId points at the resolved User; assignmentSource records
+  // why ('auto' / 'manager' / 'self' / 'unassigned'); assignmentReason is
+  // human-readable ("primary cleaner present" / "all coverers absent").
+  assignedUserId   String?
+  assignmentSource String?
+  assignmentReason String?
+  floorId          String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   @@index([tenantId, buildingId, status])
   @@index([severity])
+  @@index([assignedUserId])
   @@map("incidents")
 }
 
@@ -1627,11 +1636,17 @@ model ServiceRequest {
   submitterContact String?
   resolutionCode   String?
   workOrderId      String?
+  // INIT-004 — auto-assignment outcome (same shape as Incident).
+  assignedUserId   String?
+  assignmentSource String?
+  assignmentReason String?
+  floorId          String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   @@index([tenantId, buildingId, status])
   @@index([qrLocationId])
+  @@index([assignedUserId])
   @@map("service_requests")
 }
 
@@ -2128,10 +2143,58 @@ model BuildingFloor {
   building Building       @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   units    BuildingUnit[]
   systems  BuildingSystem[]
+  floorAssignments FloorAssignment[]
 
   @@unique([buildingId, floorCode])
   @@index([tenantId, buildingId, floorNumber])
   @@map("building_floors")
+}
+
+// INIT-004 Phase 1 — narrows "who covers floor X for role Y in building Z".
+// Resolver chain (apps/api/src/modules/assignment) reads this in step 1
+// when a CleaningRequest / Incident / ServiceRequest is created with a
+// known floorId, before considering today's availability and team-wide
+// fallbacks. UNIQUE keeps the same person from being double-counted on
+// one floor for one role — we still allow many people per floor (just one
+// row each) and we allow `primary` to mark the preferred coverer.
+model FloorAssignment {
+  id         String   @id @default(uuid())
+  tenantId   String
+  buildingId String
+  floorId    String
+  userId     String
+  roleKey    String
+  primary    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  createdBy  String?
+
+  floor BuildingFloor @relation(fields: [floorId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, floorId, userId, roleKey])
+  @@index([buildingId, floorId, roleKey])
+  @@index([userId])
+  @@map("floor_assignments")
+}
+
+// INIT-004 Phase 1 — daily availability toggle. Resolver reads "is this
+// user usable today?" before assigning. NULL row for (user, today) means
+// "default — present" (no row needed for normal days). Manager only
+// inserts when someone is absent. UNIQUE on (user, date) keeps history
+// honest if the toggle flips during the day.
+model UserAvailability {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String
+  date      DateTime @db.Date
+  status    String   // present | absent | on_leave | sick
+  reason    String?
+  setBy     String?
+  setAt     DateTime @default(now())
+
+  @@unique([tenantId, userId, date])
+  @@index([userId, date])
+  @@index([tenantId, date, status])
+  @@map("user_availability")
 }
 
 model BuildingUnit {
@@ -2805,6 +2868,15 @@ model CleaningRequest {
   resolvedAt          DateTime?
   dueAt               DateTime?
   closedByUserId      String?
+  // INIT-004 — auto-assignment context. Cleaning already has
+  // assignedStaffId pointing at CleaningStaff (cleaning-specific
+  // hierarchy). assignedUserId points at the platform User who got
+  // routed via the resolver — null when the resolver chose a
+  // CleaningStaff member who is not yet bound to a User account.
+  assignedUserId      String?
+  assignmentSource    String?
+  assignmentReason    String?
+  floorId             String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -2813,6 +2885,7 @@ model CleaningRequest {
   @@index([assignedStaffId, status])
   @@index([zoneId])
   @@index([dueAt])
+  @@index([assignedUserId])
   @@map("cleaning_requests")
 }
 
