@@ -14,6 +14,12 @@ jobs:
   validate:
     name: Validate (typecheck + prisma)
     runs-on: ubuntu-latest
+    # Job-level env so postinstall (npm ci → prisma generate) and every
+    # subsequent step sees DATABASE_URL. Per-step env was unreliable after
+    # the Prisma 6.19 update — the deprecation warning on
+    # `package.json#prisma` flagged a subtle env-resolution change.
+    env:
+      DATABASE_URL: 'postgresql://user:pass@localhost:5432/ci'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,12 +28,8 @@ jobs:
           cache: 'npm'
       - run: npm ci --no-audit --no-fund
       - name: Prisma validate
-        env:
-          DATABASE_URL: postgresql://user:pass@localhost:5432/ci
         run: npx prisma validate
       - name: Prisma generate
-        env:
-          DATABASE_URL: postgresql://user:pass@localhost:5432/ci
         run: npx prisma generate
       - name: TypeScript typecheck
         run: npm run typecheck
@@ -63,6 +65,9 @@ jobs:
   migrations-apply:
     name: Apply migrations on a clean Postgres (end-to-end)
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/domera_ci'
+      DATABASE_URL_MIGRATOR: 'postgresql://postgres:postgres@localhost:5432/domera_ci'
     services:
       postgres:
         image: postgres:16
@@ -84,16 +89,10 @@ jobs:
           cache: 'npm'
       - run: npm ci --no-audit --no-fund
       - name: Prisma migrate deploy
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/domera_ci
         run: npx prisma migrate deploy
       - name: Raw-SQL migrations
-        env:
-          DATABASE_URL_MIGRATOR: postgresql://postgres:postgres@localhost:5432/domera_ci
         run: node prisma/migrations-sql/apply-migrations.mjs
       - name: migrate status must be clean
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/domera_ci
         run: |
           out="$(npx prisma migrate status 2>&1 || true)"
           echo "$out"
