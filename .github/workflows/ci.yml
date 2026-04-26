@@ -5,64 +5,267 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_call: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.11.0'
+
 jobs:
-  validate:
-    name: Validate (typecheck + prisma)
+  install:
+    name: Install & cache deps
     runs-on: ubuntu-latest
+    outputs:
+      store-path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
-      - run: npm ci --no-audit --no-fund
-      - name: Prisma validate
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      - id: pnpm-store
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+      - run: pnpm install --frozen-lockfile
+
+  typecheck:
+    name: Typecheck (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    needs: install
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, frontend, mobile]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Prisma generate (api only)
+        if: matrix.app == 'api'
+        run: pnpm --filter @domera/api exec prisma generate
+      - run: pnpm --filter @domera/${{ matrix.app }} typecheck
+
+  lint:
+    name: Lint (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    needs: install
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, frontend, mobile]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @domera/${{ matrix.app }} lint
+
+  unit-tests:
+    name: Unit tests (api)
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      # node:test + --experimental-strip-types (Node 22+) — no Jest dependency.
+      # Pure-logic tests: helpers, occupant filters, ppm-setup rules, cleaning
+      # request transitions. New test files matching test/*.test.mjs are picked
+      # up automatically by the glob in apps/api/package.json.
+      - run: pnpm --filter @domera/api test
+
+  e2e:
+    name: E2E (Playwright / chromium)
+    runs-on: ubuntu-latest
+    needs: [typecheck, lint, unit-tests]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Install chromium only (skip WebKit/Firefox to save minutes)
+        run: pnpm --filter @domera/frontend exec playwright install --with-deps chromium
+      # playwright.config.ts boots `next dev` via webServer{} — no manual
+      # api required for public-facing tests (they hit client-rendered markup).
+      - name: Run Playwright
         env:
-          DATABASE_URL: postgresql://user:pass@localhost:5432/ci
-        run: npx prisma validate
-      - name: Prisma generate
-        env:
-          DATABASE_URL: postgresql://user:pass@localhost:5432/ci
-        run: npx prisma generate
-      - name: TypeScript typecheck
-        run: npm run typecheck
+          CI: '1'
+        run: pnpm --filter @domera/frontend e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: apps/frontend/playwright-report
+          retention-days: 7
+
+  build:
+    name: Build (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    needs: [typecheck, lint, unit-tests, e2e]
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Prisma generate (api only)
+        if: matrix.app == 'api'
+        run: pnpm --filter @domera/api exec prisma generate
+      - run: pnpm --filter @domera/${{ matrix.app }} build
+
+  prisma-validate:
+    name: Prisma schema + RLS SQL validate
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @domera/api exec prisma validate
       - name: Syntax-check RLS SQL
         run: |
-          for f in prisma/rls/*.sql; do
+          for f in apps/api/prisma/rls/*.sql; do
+            echo "→ $f"
+            # trivial sanity: every CREATE/ALTER POLICY line has a matching ON <table>
             awk '/create policy|alter policy/ { if ($0 !~ /on /) { print "missing ON in: " $0; exit 1 } }' "$f"
           done
-      - name: Guard against RLS GUC name drift (INIT-008 Phase 1)
-        # Every RLS policy MUST use app.current_tenant_id — that's what the
-        # Prisma extension sets via set_config. An older generation of
-        # migrations used app.tenant_id and silently evaluated to NULL →
-        # default-deny. This guard fails the build if anyone reintroduces
-        # the wrong name in raw-SQL migrations or rls/*.sql files. Inline
-        # comments documenting the old name are excluded.
+      - name: Fail if `prisma db push` leaks into scripts
         run: |
-          bad=$(grep -rnE "current_setting\('app\.tenant_id'" prisma/ | grep -v '^--' || true)
-          if [ -n "$bad" ]; then
-            echo "RLS GUC name drift — use app.current_tenant_id, not app.tenant_id:"
-            echo "$bad"
+          # Explicit allowlist: the only script allowed to reference db push is the
+          # sandbox-only escape hatch `db:push:sandbox`. Everything else is a regression.
+          if grep -RIn --include='package.json' --exclude-dir=node_modules --exclude-dir=gh 'prisma db push' . \
+              | grep -v '"db:push:sandbox"'; then
+            echo "Unexpected reference to 'prisma db push'. Use prisma migrate deploy. See docs/architecture/database-migrations.md."
             exit 1
           fi
-      - name: Authz policy engine unit tests (INIT-007 Phase 3)
-        # Pure-TS unit tests for apps/api/src/common/authz — no DB, no
-        # network. 19 assertions cover every scope dimension + MFA step-up.
-        # Test imports compiled JS from ../dist so we tsc-build first.
+      - name: Raw-SQL migrations — filenames well-formed
         run: |
-          npx tsc
-          node test/authz-policy.test.mjs
-        env:
-          NODE_OPTIONS: --no-warnings
+          # Filenames must match NNN_name.sql so the lexical-order runner stays deterministic.
+          for f in apps/api/prisma/migrations-sql/*.sql; do
+            base="$(basename "$f")"
+            if ! echo "$base" | grep -Eq '^[0-9]{3}_[a-z0-9_]+\.sql$'; then
+              echo "Bad raw-SQL migration filename: $base (expected NNN_lower_snake.sql)"
+              exit 1
+            fi
+          done
+      - name: RLS GUC name guard — only `app.current_tenant_id` is allowed
+        run: |
+          # The runtime PrismaService sets `app.current_tenant_id`; using the
+          # legacy `app.tenant_id` GUC name silently default-denies (the
+          # original 002/003 bug fixed by migration 011 / INIT-008 Phase 1).
+          # This guard prevents the wrong name from re-entering any new SQL.
+          BAD=$(grep -rnE "current_setting\\('app\\.tenant_id'" \
+            apps/api/prisma/migrations-sql/ \
+            apps/api/prisma/rls/ 2>/dev/null || true)
+          if [ -n "$BAD" ]; then
+            echo "::error::Wrong RLS GUC name detected — use app.current_tenant_id, not app.tenant_id"
+            echo "$BAD"
+            exit 1
+          fi
+          echo "✓ no app.tenant_id occurrences in SQL"
+
+  format:
+    name: Prettier format check
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      # Strict: the codebase is Prettier-normalised. Run `pnpm run format`
+      # locally to fix drift before committing.
+      - run: pnpm run format:check
+
+  i18n:
+    name: i18n structure check (en / ru / he)
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      # Hard fail: every namespace must have the same key tree across en/ru/he.
+      - run: pnpm run i18n:check
+      # Warn-only: grep for common hardcoded-UI-string anti-patterns.
+      - run: pnpm run i18n:audit || true
 
   migrations-apply:
     name: Apply migrations on a clean Postgres (end-to-end)
     runs-on: ubuntu-latest
+    needs: install
+    # Spin up the same Postgres major version used in prod. Uses a throwaway
+    # database so `prisma migrate deploy` + raw-SQL + RLS run on a known-empty
+    # state. If migrations are broken (syntax error, missing dependency, out-of-
+    # order file), this job fails — blocking merge before it reaches prod.
     services:
       postgres:
         image: postgres:16
@@ -78,137 +281,44 @@ jobs:
           --health-retries=10
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
-      - run: npm ci --no-audit --no-fund
-      - name: Prisma migrate deploy
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Provision split RLS roles
         env:
+          DATABASE_URL_SUPER: postgresql://postgres:postgres@localhost:5432/domera_ci
+        run: pnpm --filter @domera/api db:rls
+      - name: Apply Prisma migrations (migrate deploy)
+        env:
+          # Superuser for CI — in prod this would be DATABASE_URL_MIGRATOR (BYPASSRLS).
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/domera_ci
-        run: npx prisma migrate deploy
-      - name: Raw-SQL migrations
+        run: pnpm --filter @domera/api db:migrate:deploy
+      - name: Apply raw-SQL migrations
         env:
           DATABASE_URL_MIGRATOR: postgresql://postgres:postgres@localhost:5432/domera_ci
-        run: node prisma/migrations-sql/apply-migrations.mjs
+        run: pnpm --filter @domera/api db:migrate:sql
       - name: migrate status must be clean
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/domera_ci
         run: |
-          out="$(npx prisma migrate status 2>&1 || true)"
+          out="$(pnpm --silent --filter @domera/api exec prisma migrate status 2>&1 || true)"
           echo "$out"
-          echo "$out" | grep -q "Database schema is up to date" || { echo "drift"; exit 1; }
-
-  rls-smoke:
-    name: RLS + tenant-header breach probe (INIT-005 P1.4b)
-    runs-on: ubuntu-latest
-    needs: migrations-apply
-    services:
-      postgres:
-        image: postgres:16
+          echo "$out" | grep -q "Database schema is up to date" || { echo "migrations drifted"; exit 1; }
+      - name: Seed demo building (idempotent)
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: domera_rls
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd="pg_isready -U postgres"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-    env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/domera_rls
-      DATABASE_URL_MIGRATOR: postgresql://postgres:postgres@localhost:5432/domera_rls
-      # Password matches the default in 002_split_roles.sql when no
-      # app.app_password GUC is set — keeps the apply step credential-free.
-      DATABASE_URL_APP: postgresql://domera_app:domera_app@localhost:5432/domera_rls
-      JWT_SECRET: ci-rls-secret-not-for-prod
-      PORT: '4000'
-      API_BASE: http://127.0.0.1:4000
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-      - run: npm ci --no-audit --no-fund
-
-      - name: Prisma migrate deploy
-        run: npx prisma migrate deploy
-
-      - name: Apply raw-SQL migrations
-        run: node prisma/migrations-sql/apply-migrations.mjs
-
-      - name: Apply RLS bundle in order (enable → split roles → force → public RPC)
-        # 002_split_roles.sql reads optional GUCs app.migrator_password +
-        # app.app_password via current_setting(...,true) and falls back to
-        # 'domera_migrator' / 'domera_app' literal passwords. We want the
-        # fallback (DATABASE_URL_APP above uses 'domera_app' as the password)
-        # so no extra plumbing needed. Files passed explicitly so the script
-        # doesn't default to running only 001.
-        run: |
-          node prisma/rls/apply-rls.mjs \
-            001_enable_rls.sql \
-            002_split_roles.sql \
-            003_force_rls.sql \
-            004_public_qr_rpc.sql
-
-      - name: Seed reference tables (roles + permissions + document types)
-        # /v1/auth/register + /v1/onboarding/bootstrap rely on the Role
-        # reference rows (workspace_owner, building_manager, etc.). In PROD
-        # these are seeded once during deploy; in CI the fresh DB is empty
-        # so bootstrap fails with "role not found". Run the seed here.
-        run: node prisma/seeds/seed-reference.mjs
-
-      - name: Re-grant tables to domera_migrator/domera_app (now that roles exist)
-        # 007 + 008 wrap GRANTs in role-existence checks; on the first apply
-        # the roles didn't exist so the GRANTs were skipped. apply-migrations
-        # tracks each file as applied so it won't re-run them. Replay just
-        # the GRANT blocks here as plain SQL so domera_app + domera_migrator
-        # can read what the RLS bundle now expects them to.
-        run: |
-          node -e "
-          const { PrismaClient } = require('@prisma/client');
-          const p = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL_MIGRATOR } } });
-          (async () => {
-            // Grants from 007 (public-QR SECURITY DEFINER path)
-            for (const t of ['qr_locations','buildings','building_floors','building_units','service_requests']) {
-              await p.\$executeRawUnsafe('GRANT ALL ON TABLE ' + t + ' TO domera_migrator');
-            }
-            // Grants from 008 (task_notes)
-            await p.\$executeRawUnsafe('GRANT ALL ON TABLE \"task_notes\" TO domera_migrator');
-            await p.\$executeRawUnsafe('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE \"task_notes\" TO domera_app');
-            console.log('grants OK');
-            await p.\$disconnect();
-          })().catch(e => { console.error(e.message); process.exit(1); });
-          "
-
-      - name: Build TypeScript
-        run: npx nest build
-
-      - name: Boot API in background
-        run: |
-          node dist/main.js > api.log 2>&1 &
-          echo $! > api.pid
-          # Poll /v1/health for up to 30s.
-          for i in $(seq 1 30); do
-            if curl -sf $API_BASE/v1/health > /dev/null; then echo "API up after ${i}s"; exit 0; fi
-            sleep 1
-          done
-          echo "--- api.log ---"; tail -200 api.log
-          exit 1
-
-      - name: Run RLS isolation smoke
-        run: node test/rls-isolation-smoke.mjs
-
-      - name: Tail API log on success
-        if: success()
-        run: tail -50 api.log || true
-
-      - name: Tail API log on failure
-        if: failure()
-        run: tail -200 api.log || true
-
-      - name: Stop API
-        if: always()
-        run: kill "$(cat api.pid)" || true
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/domera_ci
+        run: pnpm --filter @domera/api seed
+      - name: RLS cross-tenant isolation (live DB)
+        # Proves the app role cannot see another tenant's rows after
+        # SET app.tenant_id. apply-rls.mjs provisioned the split roles
+        # earlier in this job.
+        env:
+          DATABASE_URL_SUPER: postgresql://postgres:postgres@localhost:5432/domera_ci
+          DATABASE_URL: postgresql://domera_app:domera_app@localhost:5432/domera_ci
+        run: pnpm --filter @domera/api test:rls

@@ -1,0 +1,66 @@
+name: contract-smoke
+
+# Runs the contract test suite against a deployed environment (PROD by
+# default, override via `api_base` workflow_dispatch input). Pollutes
+# the target with a handful of throwaway tenants/buildings per run —
+# acceptable cost for catching regressions early.
+#
+# Triggers:
+#   - Nightly at 03:00 UTC (06:00 Asia/Jerusalem) — soft enough to land
+#     before the operations team starts the day.
+#   - Manual via the Actions tab so an engineer can re-run after a
+#     fix without waiting for the cron.
+#
+# Push-trigger is intentionally OFF — Railway redeploy lags behind a
+# main push by ~2-3 min, and we don't want a contract test to fail
+# during the propagation window. Use the manual trigger after deploy
+# completes if you need an immediate run.
+#
+# Jobs are independent — adding a new contract test is a new step,
+# never a new job.
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # 03:00 UTC daily
+  workflow_dispatch:
+    inputs:
+      api_base:
+        description: 'API base URL to probe (default https://api.domerahub.com)'
+        required: false
+        default: 'https://api.domerahub.com'
+
+concurrency:
+  group: contract-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+  API_BASE: ${{ github.event.inputs.api_base || 'https://api.domerahub.com' }}
+
+jobs:
+  locations-contract:
+    name: Locations contract — closes INIT-005 P0
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Probe target reachability
+        run: |
+          echo "Target: $API_BASE"
+          curl -sSf "$API_BASE/v1/health" -m 10 || {
+            echo "::warning::API_BASE unreachable; skipping contract test."
+            exit 0
+          }
+      - name: Run locations contract
+        env:
+          API_BASE: ${{ env.API_BASE }}
+        run: node apps/api/test/locations.contract.mjs
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Locations contract test failed against $API_BASE."
+          echo "If this is the first failure after a deploy, the deploy may have"
+          echo "regressed the GET /v1/buildings/:id/locations contract. See"
+          echo "docs/architecture/modules-inventory-2026-04-26.md → #11 Locations."

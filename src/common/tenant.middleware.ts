@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, NestMiddleware } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NestMiddleware,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { NextFunction, Request, Response } from 'express';
 import * as jwt from 'jsonwebtoken';
 // Use the BYPASSRLS client — this check runs BEFORE TenantContext is set,
@@ -80,6 +85,18 @@ export class TenantMiddleware implements NestMiddleware {
       } catch {
         payload = null;
       }
+    }
+
+    // CRITICAL — non-bypass paths require a valid bearer token. Without this
+    // guard, the listLocations / listUnits / listFloors etc. controllers
+    // happily returned tenant data to any caller who knew (or guessed) a
+    // tenant UUID via the X-Tenant-Id header. Discovered while tightening
+    // the locations contract test 2026-04-26 — `curl -H "X-Tenant-Id:
+    // <uuid>" $API/v1/buildings/<slug>/units` returned 152 unit rows on
+    // PROD with no auth. The fix is uniform: bypass paths declare their
+    // own no-auth contract; everything else REQUIRES a valid session.
+    if (!payload?.sub) {
+      throw new UnauthorizedException('Authentication required for tenant-scoped routes');
     }
 
     // Resolve effective tenantId.

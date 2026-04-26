@@ -160,7 +160,10 @@
 - **Статус:** 🟢 ready (повышено 2026-04-26 после live-теста + contract test)
 - **DoR:** ✅ backend / ✅ real-data / ✅ DB / ✅ tenant / ✅ RBAC / ✅ **happy-path** / ✅ no-mock
 - **Заметки:** **INIT-005 P0 баг закрыт.** Live-тест против `https://api.domerahub.com` 2026-04-26 показал HTTP 200 во всех 4-х сценариях: empty building → `[]`, после `POST /floors` + `POST /locations` → list содержит созданный item, второй GET возвращает тот же item (refresh-persistence), cross-tenant запрос НЕ возвращает данные первого тенанта и НЕ даёт 500. Скорее всего бага не стало после миграции 011 (RLS GUC rename) — оригинальный 500 был side-effect от silent default-deny RLS на 002/003 тенанту до INIT-008 Phase 1 fix.
-- **Регрессия защищена:** [test/locations.contract.mjs](../../apps/api/test/locations.contract.mjs) — 4 contract assertions (200-empty + 200-with-data + persistence + cross-tenant). Запускается через `API_BASE=<url> node test/locations.contract.mjs` против любой среды (PROD / staging / local).
+- **Регрессия защищена** трёхслойно (апдейт #3 2026-04-26):
+  1. [test/locations.contract.mjs](../../apps/api/test/locations.contract.mjs) — 6 contract assertions (200-empty / 200-with-data / persistence / cross-tenant strict 404 / forged-tenant strict 403 / **no-auth strict 401**).
+  2. [.github/workflows/contract-smoke.yml](../../.github/workflows/contract-smoke.yml) — nightly cron (03:00 UTC) + manual trigger; запускает все contract-тесты против PROD автоматически. Push-trigger выключен намеренно (Railway redeploy lag → false negatives).
+  3. CI grep guard в `prisma-validate` job на запрет `current_setting('app.tenant_id'` в любом SQL-файле — оригинальная причина 500 на 002/003 миграциях.
 - **Что осталось:** edit / delete UI (после save можно только создать новую локацию через API). Это не P0 / не блокер MVP.
 
 ### 12. Этажи (Floors)
@@ -380,6 +383,18 @@
 - **#20 Cleaning:** 🟢 → 🟡 (правило DoR: не подключён к unified Tasks inbox = частичный для общей операционной логики).
 - ~~**#11 Locations:** оставлен 🟡 до live-теста INIT-005 P0 бага.~~ **Апдейт 2026-04-26:** live-тест против PROD прошёл — bug не воспроизводится. Добавлен [contract test](../../apps/api/test/locations.contract.mjs). **Locations → 🟢 ready.**
 - **Definition of Ready** добавлен как явный контракт; ребята с дашборда теперь могут сами проверить статус.
+
+### Апдейт #3 (2026-04-26) — auth-bypass на listing endpoints
+
+**Pre-existing security finding** обнаружен при ужесточении cross-tenant assertion для locations contract:
+
+`curl -H "X-Tenant-Id: <uuid>" https://api.domerahub.com/v1/buildings/<slug>/units` без Authorization header возвращал `200` с реальными данными тенанта. Воспроизведено: 152 unit-row из тенанта `b412c6af-...` без какой-либо аутентификации.
+
+**Корневая причина.** [TenantMiddleware](../../apps/api/src/common/tenant.middleware.ts) до фикса проверял membership только когда BOTH token AND header присутствуют (`if (token && header && payload?.sub && !payload.superadmin)`). Когда токена нет — request проваливался дальше, контроллер просто фильтровал по tenantId из header и возвращал данные. Класс уязвимости: **Broken Authentication (OWASP A07).**
+
+**Фикс.** TenantMiddleware теперь требует валидную JWT-сессию для **всех non-bypass paths**. Если `payload?.sub` отсутствует → `UnauthorizedException(401)` до того как контроллер запустится. BYPASS_PATHS (auth/login, register, refresh, me, health, public-qr, metrics, sso/callback) сохраняют свой no-auth контракт.
+
+**Защита от регрессий.** В contract-тесте теперь явная assertion: `no-auth + valid X-Tenant-Id → strict 401`. Если кто-то ослабит middleware — nightly CI поймает.
 
 ### Приоритеты — что делать дальше
 

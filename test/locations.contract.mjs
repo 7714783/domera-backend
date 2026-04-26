@@ -151,23 +151,38 @@ await test('refresh: second GET returns same data (row persisted)', async () => 
   assert.ok(r.body.find((x) => x.id === createdLocationId), 'location still present');
 });
 
-await test('cross-tenant isolation: tenant B cannot see A locations', async () => {
+await test('cross-tenant authenticated → strict 404 (B token + B tenantId hits A slug)', async () => {
   const B = await bootstrapTenant('B');
   const headersB = { Authorization: `Bearer ${B.token}`, 'X-Tenant-Id': B.tenantId };
-
-  // B's call to A's slug must NOT return A's data and must NOT 500.
   const r = await call(`/v1/buildings/${A.slug}/locations`, { headers: headersB });
-  // Acceptable outcomes: 404 (slug not in B's tenant) or 200 with [].
-  // A 500 is a hard failure.
-  assert.notEqual(r.status, 500, `cross-tenant must not 500: ${r.text}`);
-  if (r.status === 200) {
-    assert.ok(Array.isArray(r.body));
-    assert.equal(
-      r.body.find((x) => x.id === createdLocationId),
-      undefined,
-      'B must NOT see A.location',
-    );
-  }
+  // Tightened 2026-04-26: explicit 404 (slug not found in B's tenant) is the
+  // expected behaviour. 200 [] used to be tolerated but allowed silent
+  // tenant-scope drift; if the resolver ever stopped applying tenantId
+  // filtering, the test would still pass with []. Now any non-404 (incl. 200
+  // with body) is a regression.
+  assert.equal(r.status, 404, `expected strict 404, got HTTP ${r.status}: ${r.text}`);
+});
+
+await test('cross-tenant with forged X-Tenant-Id header → strict 403', async () => {
+  // B's token + A's tenantId header. Middleware must reject before the
+  // controller ever runs because B has no membership in A's tenant.
+  const B = await bootstrapTenant('B-forge');
+  const r = await call(`/v1/buildings/${A.slug}/locations`, {
+    headers: { Authorization: `Bearer ${B.token}`, 'X-Tenant-Id': A.tenantId },
+  });
+  assert.equal(r.status, 403, `expected 403 on forged tenant header, got ${r.status}: ${r.text}`);
+});
+
+await test('no-auth + valid X-Tenant-Id → strict 401 (catches auth bypass)', async () => {
+  // CRITICAL regression: prior to the 2026-04-26 middleware fix this returned
+  // 200 with real tenant data — anyone with a guessed tenant UUID could read
+  // every listing endpoint without authenticating. The fix in
+  // src/common/tenant.middleware.ts now demands a valid session for all
+  // non-bypass paths. This test pins it.
+  const r = await call(`/v1/buildings/${A.slug}/locations`, {
+    headers: { 'X-Tenant-Id': A.tenantId },
+  });
+  assert.equal(r.status, 401, `expected 401, got ${r.status}: ${r.text}`);
 });
 
 console.log(`\nlocations.contract: ${passed} passed, ${failed} failed`);
