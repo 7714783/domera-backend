@@ -1,15 +1,42 @@
-# Domera — карта модулей (2026-04-26)
+# Domera — карта модулей (2026-04-26, валидация 2026-04-26 v2)
 
 > Полная инвентаризация всех существующих модулей системы в стиле 23-секционной таксономии.
 > Каждый модуль: роль, что делает, где живёт в коде, статус, явные оговорки.
 >
+> **Валидация v2 (2026-04-26):** все 🟢-модули прогнаны через Definition of Ready
+> (см. секцию ниже). Cleaning понижен до 🟡 — не подключён к unified Tasks
+> inbox, что делает его частичным с точки зрения общей операционной логики.
+> Locations остаётся 🟡 — INIT-005 P0 баг (`GET /v1/buildings/:id/locations`
+> → 500) требует ручной перепроверки; код выглядит чистым по статике, но без
+> live-теста после INIT-008 миграций статус не понижается до ready.
+>
 > Легенда статусов:
-> - 🟢 **ready** — backend + frontend оба завершены, реальные данные сквозь все слои
-> - 🟡 **partial** — backend готов, frontend частично или показывает ограниченный набор
+> - 🟢 **ready** — проходит все 7 пунктов Definition of Ready
+> - 🟡 **partial** — backend есть, но проваливается на одном из пунктов DoR
 > - 🔴 **missing** — нет реализации либо frontend = stub
 >
 > Источник истины: [docs/architecture/entity-ownership-ssot.md](entity-ownership-ssot.md).
 > Sidebar nav: [apps/frontend/src/components/domera/app-shell.tsx](../../apps/frontend/src/components/domera/app-shell.tsx).
+
+## Definition of Ready
+
+Модуль считается 🟢 **ready** только если выполнены ВСЕ 7 пунктов:
+
+1. **Backend endpoint работает** — реальный controller метод, возвращает валидный JSON
+2. **Frontend использует реальные данные** — `apiRequest` / `useEffect` фетч, никаких хардкоженных моков в production UI
+3. **Данные сохраняются в БД** — write-эндпоинт + Prisma `.create/.update` + UI вызывает его
+4. **Данные не пересекаются между tenant** — RLS policy ИЛИ `where: { tenantId }` на каждом запросе
+5. **Доступ ограничен RBAC** — `requireManager()` / `authorize()` / role-check ИЛИ explicit deny-by-default
+6. **Есть ручной happy-path test** — путь «открыть страницу → создать → refresh → данные на месте» воспроизводится
+7. **Нет mock/demo данных в production UI** — Storybook fixtures допустимы только в `**/__fixtures__/`
+
+Если хоть один пункт failed → **🟡 partial** + явная заметка в "Заметки" модуля что именно не выполнено.
+
+Дополнительные правила для специальных случаев:
+- **#6 Tasks** остаётся 🟡 пока не агрегирует cleaning + reactive в один inbox.
+- **#23 Admin UI** остаётся 🔴 пока не построен frontend для SSO/SCIM/MFA/webhooks.
+- **#20 Cleaning** не считается полностью ready для общей операционной логики, пока не подключён к unified Tasks inbox (отдельная иерархия CleaningStaff != User — осознанная ограниченность).
+- **#11 Locations** остаётся 🟡 пока вручную не подтверждён (или починен) INIT-005 P0 баг с 500-ответом.
 
 ---
 
@@ -131,7 +158,9 @@
 - **Backend:** [building-core/](../../apps/api/src/modules/building-core/) — `GET /v1/buildings/:id/locations`, `POST /v1/buildings/:id/locations`
 - **Frontend:** [/[locale]/buildings/[slug]/locations/](../../apps/frontend/src/app/[locale]/buildings/[slug]/locations/page.tsx) → `building-locations.tsx`
 - **Статус:** 🟡 partial
-- **Заметки:** Create/list работает; edit/delete + точная привязка к этажу неполна. **Известный баг (INIT-005):** `GET /v1/buildings/:id/locations` иногда даёт 500 — нужно investigate.
+- **DoR:** ✅ backend / ✅ real-data / ✅ DB / ✅ tenant / ✅ RBAC / ❌ **happy-path** / ✅ no-mock
+- **Заметки:** **INIT-005 P0 баг:** `GET /v1/buildings/:id/locations` сообщён как возвращающий HTTP 500 на проде — блокирует всю QR-привязку (lobby / restroom / mechanical room без локации = QR некуда повесить). Статический code-review (2026-04-26) показал чистый код без очевидных null-pointer / Prisma-ошибок — но без live-теста после INIT-008 миграций ⚠️ статус **не повышается до ready**. Edit/delete + floor-mapping UI отсутствуют отдельно (даже до бага).
+- **Acceptance для возврата 🟢:** `curl -s -H "X-Tenant-Id: <t>" -H "Authorization: Bearer <token>" $API/v1/buildings/<slug>/locations` → HTTP 200 + JSON массив, и UI создаёт locations + они выживают page refresh.
 
 ### 12. Этажи (Floors)
 
@@ -226,8 +255,9 @@
 
 - **Backend:** [apps/api/src/modules/cleaning/](../../apps/api/src/modules/cleaning/) — `GET/POST /v1/cleaning/requests`, `PATCH /v1/cleaning/requests/:id/{status,assign}`, zones, qr-points, staff CRUD; public `POST /v1/public/cleaning/qr/:code/request`
 - **Frontend:** [/[locale]/cleaning/](../../apps/frontend/src/app/[locale]/cleaning/page.tsx) (portfolio) + [/[locale]/buildings/[slug]/cleaning/](../../apps/frontend/src/app/[locale]/buildings/[slug]/cleaning/page.tsx) (per-building) + cleaning QR form
-- **Статус:** 🟢 ready
-- **Заметки:** Параллельная иерархия `CleaningContractor → CleaningStaff` (boss/manager/supervisor/cleaner). НЕ подключён к глобальному auto-resolver — это осознанный compromise (CleaningStaff отдельная модель от User).
+- **Статус:** 🟡 partial (понижено 2026-04-26 валидацией v2)
+- **DoR:** ✅ backend / ✅ real-data / ✅ DB / ✅ tenant / ✅ RBAC / ✅ happy-path / ✅ no-mock — ❌ **не подключён к unified Tasks inbox (#6)**
+- **Заметки:** В изоляции модуль работает полноценно — assignment + lifecycle + QR + RBAC. Но в общей операционной логике cleaning-задачи живут в отдельной странице, а не в едином inbox техника, который уже частично собирает PPM. Параллельная иерархия `CleaningContractor → CleaningStaff` (boss/manager/supervisor/cleaner) — отдельная модель от User; auto-resolver INIT-004 целенаправленно не задействует её. Чтобы вернуть 🟢: либо построить bridge `CleaningStaff.userId` → User и слить задачи в `/v1/tasks/inbox`, либо добавить cleaning-источник в инбокс через явный union в backend.
 
 ### 21. Документы здания (Building Documents)
 
@@ -337,24 +367,74 @@
 
 ---
 
-## ИТОГ
+## ИТОГ — после валидации v2 (2026-04-26)
 
-- **23 секции таксономии:** 16 🟢 + 6 🟡 + 1 🔴 (Admin UI)
-- **Backend модулей всего:** 31 (включая инфраструктурные + domain-расширения вне таксономии)
-- **Frontend stubs:** 0 (последний — AssetsPage — починен 2026-04-26)
-- **CI guards:** RLS isolation + RBAC matrix + SSOT ownership + RBAC matrix coverage — все зелёные
+- **23 секции таксономии:** 15 🟢 + 7 🟡 + 1 🔴
+- **Backend модулей всего:** 31
+- **Frontend stubs в production UI:** 0 (последний — AssetsPage — починен 2026-04-26)
+- **CI guards:** RLS isolation + RBAC matrix + SSOT ownership — все зелёные
 
-### Критический gap
+### Что изменилось при валидации v2
 
-🔴 **#23 Admin UI** — backend готов на 100% (SSO, SCIM, MFA, webhooks), frontend = stub. Нужен отдельный sprint.
+- **#20 Cleaning:** 🟢 → 🟡 (правило DoR: не подключён к unified Tasks inbox = частичный для общей операционной логики).
+- **#11 Locations:** оставлен 🟡 до live-теста INIT-005 P0 бага. Code-review чистый, но без `curl` против прода статус не повышается.
+- **Definition of Ready** добавлен как явный контракт; ребята с дашборда теперь могут сами проверить статус.
 
-### Главный operational gap
+### Приоритеты — что делать дальше
 
-🟡 **#6 Tasks** — единый user-inbox PPM + Cleaning + Reactive не сведён. Сейчас задачи в трёх местах. Решение: добавить `/v1/tasks/inbox` агрегатор + переписать tasks-page.tsx. Оценка: 1-2 дня.
+**P0 — блокеры для production-trust:**
 
-### Visualisation gaps (низкий приоритет)
+1. **#11 Locations 500 bug (INIT-005)** — `curl` против прода + если упало — починить + добавить контракт-тест. **Блокирует QR-привязку всех non-leasable пространств** (lobby, restroom, mechanical room).
 
-- #12 Floors — нет floor-plan SVG/canvas
-- #14 Elevators — нет «лифт + его инспекции» single-card view
-- #17 Systems — нет parent→child иерархии
-- #21 Building Documents — нет UI для Document↔Asset link
+**P1 — главный operational gap:**
+
+2. **#6 Unified Tasks Inbox** — единый user-inbox PPM + Cleaning + Reactive. Сейчас задачи в трёх местах, технику нужно открывать три страницы. Решение: добавить `/v1/tasks/inbox` агрегатор (union трёх источников по `assignedUserId`) + переписать [tasks-page.tsx](../../apps/frontend/src/components/domera/pages/tasks-page.tsx). Оценка: 1-2 дня. **Это следующий шаг разработки, а не Admin UI.**
+
+**P2 — отложено:**
+
+3. **#23 Admin UI** — backend готов (SSO/SCIM/MFA/webhooks), нужен sprint UI. Не блокирует операции; можно через API.
+4. **#12 Floors** — floor-plan SVG/canvas (visualisation only)
+5. **#14 Elevators** — «лифт + его инспекции» single-card view
+6. **#17 Systems** — parent→child иерархия MEP
+7. **#21 Building Documents** — UI для Document ↔ Asset link
+
+---
+
+## Manual Happy-Path Test (DoR criterion #6)
+
+Воспроизводимый сквозной тест после любых migrations / refactors. Все шаги выполняются от свежего рабочего пространства.
+
+### Подготовка
+
+```bash
+# Запустить backend + frontend локально (или указать на test environment)
+pnpm --filter @domera/api dev
+pnpm --filter @domera/frontend dev
+# Открыть http://localhost:3000/ru/login
+```
+
+### Тестовый сценарий
+
+| # | Шаг | Где | Ожидание |
+|---|---|---|---|
+| 1 | Зарегистрировать нового пользователя | `/ru/register` | Редирект на /setup |
+| 2 | Создать здание | `/ru/setup` (bootstrap form) | Редирект на /dashboard, в sidebar появляется building |
+| 3 | Создать этажи (3 этажа) | `/ru/buildings/<slug>/floors` → "Add floor" × 3 | После refresh — 3 этажа на месте |
+| 4 | Создать помещения (2 на этаж) | `/ru/buildings/<slug>/locations` → "Add location" | **⚠️ INIT-005 чек:** GET locations НЕ возвращает 500 |
+| 5 | Создать актив (Чиллер) | `/ru/buildings/<slug>/assets` → "New asset" | Актив появляется в `/ru/assets` (portfolio) после refresh |
+| 6 | Создать PPM программу | `/ru/buildings/<slug>/ppm/wizard` → выбрать "HVAC quarterly" | Программа в списке + автоматически сгенерированные TaskInstance |
+| 7 | Создать cleaning request | `/ru/buildings/<slug>/cleaning` → "Create request" | Request в списке со статусом `new` |
+| 8 | Создать reactive request (incident) | `/ru/buildings/<slug>/incidents` или через QR | Request попадает в `/ru/triage` |
+| 9 | Открыть Tasks inbox | `/ru/tasks` | **❌ известный gap:** показывает только PPM-задачи, cleaning + reactive отсутствуют |
+| 10 | Проверить ролевую матрицу: manager / technician / cleaner | Создать через `/ru/buildings/<slug>/team` × 3 ролей | Каждый видит свой набор страниц в sidebar (persona switcher INIT-007 P8) |
+
+### Acceptance
+
+- Шаги 1-8 + 10 проходят без ошибок 500
+- После refresh каждой страницы данные на месте
+- Cross-tenant: создать второго пользователя в другом workspace, убедиться что он НЕ видит данные первого
+- Шаг 9 ожидаемо падает на cleaning + reactive — это и есть P1 gap
+
+### Failed-step → блокер
+
+Если падает любой из шагов 1-8 или 10 — это P0, статус соответствующего модуля **должен быть понижен до 🟡 в этом документе** до починки.
