@@ -66,8 +66,15 @@ export class TenantMiddleware implements NestMiddleware {
   constructor(private readonly prisma: MigratorPrismaService) {}
 
   async use(req: Request, _res: Response, next: NextFunction) {
-    const path = req.path || req.url || '';
-    const bypass = BYPASS_PATHS.some((p) => path.startsWith(p));
+    // `req.originalUrl` always contains the FULL path including the `/v1/`
+    // global prefix. `req.path` inside Nest middleware drops the prefix
+    // (because `app.setGlobalPrefix('v1')` mounts the router under `/v1`),
+    // so bypass entries declared as `/v1/health`, `/v1/auth/login` never
+    // matched. The bug was latent — bypass-check failure used to fall
+    // through harmlessly; after INIT-005 hardening the failure throws
+    // 401 immediately, which broke /v1/health probing in CI rls-smoke.
+    const fullPath = (req.originalUrl || req.url || '').split('?')[0];
+    const bypass = BYPASS_PATHS.some((p) => fullPath.startsWith(p));
 
     // Bypass paths (auth, health, public) run without tenant context.
     if (bypass) {
