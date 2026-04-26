@@ -27,10 +27,14 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci --no-audit --no-fund
-      - name: Prisma validate
-        run: npx prisma validate
+      # postinstall was removed from package.json (it failed under Prisma 6.19
+      # in CI even with job-level DATABASE_URL — race with setup-node hook).
+      # Run prisma generate explicitly here so subsequent steps that import
+      # the generated client (typecheck, env-guard test) compile.
       - name: Prisma generate
         run: npx prisma generate
+      - name: Prisma validate
+        run: npx prisma validate
       - name: TypeScript typecheck
         run: npm run typecheck
       - name: Syntax-check RLS SQL
