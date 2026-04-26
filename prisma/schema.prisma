@@ -1983,6 +1983,13 @@ model Entrance {
   @@map("entrances")
 }
 
+// ─── DEPRECATED — DO NOT USE ──────────────────────────────────────────
+// `Floor` and `Unit` were the original P1 entity model. Replaced by
+// `BuildingFloor` + `BuildingUnit` (the building-core SSOT) in INIT-001.
+// No writers remain in the codebase as of 2026-04-26. Tables stay in PROD
+// (empty) until a future cleanup migration drops them. New code MUST use
+// BuildingFloor / BuildingUnit. Cross-module readers MUST NOT reach for
+// these models — the audit job will start failing CI when they do.
 model Floor {
   id         String @id @default(uuid())
   tenantId   String
@@ -2001,6 +2008,7 @@ model Floor {
   @@map("floors")
 }
 
+/// @deprecated — use BuildingUnit. See note above Floor model.
 model Unit {
   id         String @id @default(uuid())
   tenantId   String

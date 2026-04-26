@@ -1,4 +1,11 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { PpmService } from '../ppm/ppm.service';
@@ -14,16 +21,21 @@ export class OnboardingService {
   ) {}
 
   private slugify(input: string): string {
-    return input
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .slice(0, 60) || 'entity';
+    return (
+      input
+        .toLowerCase()
+        .trim()
+        .replace(/[^\w\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .slice(0, 60) || 'entity'
+    );
   }
 
-  async createWorkspace(actorUserId: string, body: { name: string; slug?: string; timezone?: string; locale?: string }) {
+  async createWorkspace(
+    actorUserId: string,
+    body: { name: string; slug?: string; timezone?: string; locale?: string },
+  ) {
     if (!body.name) throw new BadRequestException('name required');
     const user = await this.prisma.user.findUnique({ where: { id: actorUserId } });
     if (!user) throw new NotFoundException('user not found');
@@ -50,10 +62,18 @@ export class OnboardingService {
     });
 
     await this.audit.write({
-      tenantId: tenant.id, actor: actorUserId, role: 'workspace_owner',
-      action: 'Workspace created', entity: tenant.slug, entityType: 'workspace',
-      building: '', ip: '127.0.0.1', sensitive: false,
-      eventType: 'workspace.created', resourceType: 'workspace', resourceId: tenant.id,
+      tenantId: tenant.id,
+      actor: actorUserId,
+      role: 'workspace_owner',
+      action: 'Workspace created',
+      entity: tenant.slug,
+      entityType: 'workspace',
+      building: '',
+      ip: '127.0.0.1',
+      sensitive: false,
+      eventType: 'workspace.created',
+      resourceType: 'workspace',
+      resourceId: tenant.id,
     });
 
     return tenant;
@@ -61,16 +81,28 @@ export class OnboardingService {
 
   async createOrganization(
     actorUserId: string,
-    body: { tenantId: string; name: string; slug?: string; type: 'owner' | 'management_company' | 'vendor' | 'consultant' },
+    body: {
+      tenantId: string;
+      name: string;
+      slug?: string;
+      type: 'owner' | 'management_company' | 'vendor' | 'consultant';
+    },
   ) {
-    if (!body.name || !body.tenantId || !body.type) throw new BadRequestException('name, tenantId, type required');
+    if (!body.name || !body.tenantId || !body.type)
+      throw new BadRequestException('name, tenantId, type required');
     const membership = await this.prisma.membership.findFirst({
-      where: { tenantId: body.tenantId, userId: actorUserId, roleKey: { in: ['workspace_owner', 'workspace_admin', 'org_admin'] } },
+      where: {
+        tenantId: body.tenantId,
+        userId: actorUserId,
+        roleKey: { in: ['workspace_owner', 'workspace_admin', 'org_admin'] },
+      },
     });
     if (!membership) throw new ForbiddenException('not authorized in this workspace');
 
     const slug = this.slugify(body.slug || body.name);
-    const existing = await this.prisma.organization.findFirst({ where: { tenantId: body.tenantId, slug } });
+    const existing = await this.prisma.organization.findFirst({
+      where: { tenantId: body.tenantId, slug },
+    });
     if (existing) throw new ConflictException('organization slug already taken in this workspace');
 
     const org = await this.prisma.organization.create({
@@ -90,10 +122,18 @@ export class OnboardingService {
     });
 
     await this.audit.write({
-      tenantId: body.tenantId, actor: actorUserId, role: 'org_admin',
-      action: 'Organization created', entity: org.slug, entityType: 'organization',
-      building: '', ip: '127.0.0.1', sensitive: false,
-      eventType: 'organization.created', resourceType: 'organization', resourceId: org.id,
+      tenantId: body.tenantId,
+      actor: actorUserId,
+      role: 'org_admin',
+      action: 'Organization created',
+      entity: org.slug,
+      entityType: 'organization',
+      building: '',
+      ip: '127.0.0.1',
+      sensitive: false,
+      eventType: 'organization.created',
+      resourceType: 'organization',
+      resourceId: org.id,
     });
 
     return org;
@@ -126,15 +166,34 @@ export class OnboardingService {
       supportedLanguages?: string[];
       entrances?: Array<{ name: string; number?: string }>;
       floors?: Array<{ number: number; entranceName?: string; label?: string }>;
-      units?: Array<{ number: string; unitType: string; floorNumber?: number; area?: number; rooms?: number }>;
+      units?: Array<{
+        number: string;
+        unitType: string;
+        floorNumber?: number;
+        area?: number;
+        rooms?: number;
+      }>;
       settings?: { currency?: string; billingCycle?: string; taxRules?: unknown; locale?: string };
     },
   ) {
-    if (!body.name || !body.tenantId || !body.addressLine1 || !body.city || !body.countryCode || !body.timezone) {
-      throw new BadRequestException('name, tenantId, addressLine1, city, countryCode, timezone required');
+    if (
+      !body.name ||
+      !body.tenantId ||
+      !body.addressLine1 ||
+      !body.city ||
+      !body.countryCode ||
+      !body.timezone
+    ) {
+      throw new BadRequestException(
+        'name, tenantId, addressLine1, city, countryCode, timezone required',
+      );
     }
     const membership = await this.prisma.membership.findFirst({
-      where: { tenantId: body.tenantId, userId: actorUserId, roleKey: { in: ['workspace_owner', 'workspace_admin', 'org_admin'] } },
+      where: {
+        tenantId: body.tenantId,
+        userId: actorUserId,
+        roleKey: { in: ['workspace_owner', 'workspace_admin', 'org_admin'] },
+      },
     });
     if (!membership) throw new ForbiddenException('not authorized in this workspace');
 
@@ -144,13 +203,18 @@ export class OnboardingService {
     });
     if (conflict) throw new ConflictException('building slug already taken in this workspace');
 
-    const entrancesInput = (body.entrances && body.entrances.length)
-      ? body.entrances
-      : Array.from({ length: body.entrancesCount || 0 }, (_, i) => ({ name: `Entrance ${i + 1}`, number: String(i + 1) }));
+    const entrancesInput =
+      body.entrances && body.entrances.length
+        ? body.entrances
+        : Array.from({ length: body.entrancesCount || 0 }, (_, i) => ({
+            name: `Entrance ${i + 1}`,
+            number: String(i + 1),
+          }));
 
-    const floorsInput: Array<{ number: number; entranceName?: string; label?: string }> = (body.floors && body.floors.length)
-      ? body.floors
-      : Array.from({ length: body.floorsCount || 0 }, (_, i) => ({ number: i + 1 }));
+    const floorsInput: Array<{ number: number; entranceName?: string; label?: string }> =
+      body.floors && body.floors.length
+        ? body.floors
+        : Array.from({ length: body.floorsCount || 0 }, (_, i) => ({ number: i + 1 }));
 
     const building = await this.prisma.$transaction(async (tx) => {
       const created = await tx.building.create({
@@ -167,11 +231,17 @@ export class OnboardingService {
           lat: body.lat ?? null,
           lng: body.lng ?? null,
           timezone: body.timezone,
-          type: body.type || (body.buildingType === 'office' ? 'Office' : body.buildingType === 'residential' ? 'Residential' : 'Commercial'),
+          type:
+            body.type ||
+            (body.buildingType === 'office'
+              ? 'Office'
+              : body.buildingType === 'residential'
+                ? 'Residential'
+                : 'Commercial'),
           buildingType: body.buildingType || null,
           yearBuilt: body.yearBuilt ?? null,
           floorsCount: body.floorsCount ?? floorsInput.length ?? null,
-          unitsCount: body.unitsCount ?? (body.units?.length ?? null),
+          unitsCount: body.unitsCount ?? body.units?.length ?? null,
           entrancesCount: body.entrancesCount ?? entrancesInput.length ?? null,
           liftsCount: body.liftsCount ?? null,
           annualKwh: body.annualKwh ?? null,
@@ -186,7 +256,12 @@ export class OnboardingService {
       const entranceByName = new Map<string, string>();
       for (const e of entrancesInput) {
         const row = await tx.entrance.create({
-          data: { tenantId: body.tenantId, buildingId: created.id, name: e.name, number: e.number || null },
+          data: {
+            tenantId: body.tenantId,
+            buildingId: created.id,
+            name: e.name,
+            number: e.number || null,
+          },
         });
         entranceByName.set(e.name, row.id);
       }
@@ -195,7 +270,13 @@ export class OnboardingService {
       for (const f of floorsInput) {
         const entranceId = f.entranceName ? entranceByName.get(f.entranceName) || null : null;
         const row = await tx.floor.create({
-          data: { tenantId: body.tenantId, buildingId: created.id, entranceId, number: f.number, label: f.label || null },
+          data: {
+            tenantId: body.tenantId,
+            buildingId: created.id,
+            entranceId,
+            number: f.number,
+            label: f.label || null,
+          },
         });
         floorNumberToId.set(f.number, row.id);
       }
@@ -218,16 +299,23 @@ export class OnboardingService {
       if (liftsCount > 0) {
         const root = await tx.asset.create({
           data: {
-            tenantId: body.tenantId, buildingId: created.id, name: 'Vertical Transport',
-            class: 'system', systemType: 'vertical_transport', createdBy: `user:${actorUserId}`,
+            tenantId: body.tenantId,
+            buildingId: created.id,
+            name: 'Vertical Transport',
+            class: 'system',
+            systemType: 'vertical_transport',
+            createdBy: `user:${actorUserId}`,
           },
         });
         for (let i = 0; i < liftsCount; i++) {
           await tx.asset.create({
             data: {
-              tenantId: body.tenantId, buildingId: created.id, parentAssetId: root.id,
+              tenantId: body.tenantId,
+              buildingId: created.id,
+              parentAssetId: root.id,
               name: `Lift ${String.fromCharCode(65 + (i % 26))}${i >= 26 ? Math.floor(i / 26) : ''}`,
-              class: 'lift', systemType: 'vertical_transport',
+              class: 'lift',
+              systemType: 'vertical_transport',
               createdBy: `user:${actorUserId}`,
             },
           });
@@ -248,16 +336,22 @@ export class OnboardingService {
       if (body.organizationId) {
         await tx.buildingMandate.create({
           data: {
-            tenantId: body.tenantId, buildingId: created.id, organizationId: body.organizationId,
-            mandateType: 'owner', effectiveFrom: new Date(),
+            tenantId: body.tenantId,
+            buildingId: created.id,
+            organizationId: body.organizationId,
+            mandateType: 'owner',
+            effectiveFrom: new Date(),
           },
         });
       }
 
       await tx.buildingRoleAssignment.create({
         data: {
-          tenantId: body.tenantId, buildingId: created.id, userId: actorUserId,
-          roleKey: 'building_manager', delegatedBy: actorUserId,
+          tenantId: body.tenantId,
+          buildingId: created.id,
+          userId: actorUserId,
+          roleKey: 'building_manager',
+          delegatedBy: actorUserId,
         },
       });
 
@@ -265,13 +359,23 @@ export class OnboardingService {
         // Inside a Prisma transaction — must use tx client directly to stay in
         // the same transactional context. Shape matches AuditService.write().
         data: {
-          tenantId: body.tenantId, buildingId: created.id, actor: actorUserId, role: 'workspace_owner',
-          action: 'Building created', entity: created.slug, entityType: 'building',
-          building: created.name, ip: '127.0.0.1', eventType: 'building.created',
-          resourceType: 'building', resourceId: created.id,
+          tenantId: body.tenantId,
+          buildingId: created.id,
+          actor: actorUserId,
+          role: 'workspace_owner',
+          action: 'Building created',
+          entity: created.slug,
+          entityType: 'building',
+          building: created.name,
+          ip: '127.0.0.1',
+          eventType: 'building.created',
+          resourceType: 'building',
+          resourceId: created.id,
           metadata: {
-            entrances: entrancesInput.length, floors: floorsInput.length,
-            units: body.units?.length || 0, lifts: liftsCount,
+            entrances: entrancesInput.length,
+            floors: floorsInput.length,
+            units: body.units?.length || 0,
+            lifts: liftsCount,
           },
         },
       });
@@ -284,16 +388,24 @@ export class OnboardingService {
     // but doesn't roll back the building.
     try {
       await this.ppm.seedPendingPlanItemsForBuilding({
-        tenantId: body.tenantId, buildingId: building.id, actorUserId,
+        tenantId: body.tenantId,
+        buildingId: building.id,
+        actorUserId,
       });
     } catch (e) {
-      this.logger.warn(`PPM seed failed for onboarded building ${building.id}: ${(e as Error).message}`);
+      this.logger.warn(
+        `PPM seed failed for onboarded building ${building.id}: ${(e as Error).message}`,
+      );
     }
 
+    // Counts read from the CANONICAL building-core models (BuildingFloor +
+    // BuildingUnit). The legacy `Floor`/`Unit` tables are deprecated and
+    // never written to — counting them always returned 0 and made the
+    // onboarding response look broken even when the bootstrap succeeded.
     const stats = {
       entrances: await this.prisma.entrance.count({ where: { buildingId: building.id } }),
-      floors: await this.prisma.floor.count({ where: { buildingId: building.id } }),
-      units: await this.prisma.unit.count({ where: { buildingId: building.id } }),
+      floors: await this.prisma.buildingFloor.count({ where: { buildingId: building.id } }),
+      units: await this.prisma.buildingUnit.count({ where: { buildingId: building.id } }),
       lifts: await this.prisma.asset.count({ where: { buildingId: building.id, class: 'lift' } }),
     };
     return { ...building, stats };
@@ -311,8 +423,16 @@ export class OnboardingService {
       workspaceName?: string;
     },
   ) {
-    if (!body.buildingName || !body.addressLine1 || !body.city || !body.countryCode || !body.timezone) {
-      throw new BadRequestException('buildingName, addressLine1, city, countryCode, timezone required');
+    if (
+      !body.buildingName ||
+      !body.addressLine1 ||
+      !body.city ||
+      !body.countryCode ||
+      !body.timezone
+    ) {
+      throw new BadRequestException(
+        'buildingName, addressLine1, city, countryCode, timezone required',
+      );
     }
 
     const user = await this.prisma.user.findUnique({ where: { id: actorUserId } });
@@ -381,10 +501,18 @@ export class OnboardingService {
       });
 
       await this.audit.write({
-        tenantId, actor: actorUserId, role: 'workspace_owner',
-        action: 'Workspace auto-provisioned', entity: tenant.slug, entityType: 'workspace',
-        building: '', ip: '127.0.0.1', sensitive: false,
-        eventType: 'workspace.created', resourceType: 'workspace', resourceId: tenant.id,
+        tenantId,
+        actor: actorUserId,
+        role: 'workspace_owner',
+        action: 'Workspace auto-provisioned',
+        entity: tenant.slug,
+        entityType: 'workspace',
+        building: '',
+        ip: '127.0.0.1',
+        sensitive: false,
+        eventType: 'workspace.created',
+        resourceType: 'workspace',
+        resourceId: tenant.id,
       });
     }
 
@@ -439,10 +567,18 @@ export class OnboardingService {
     },
   ) {
     const membership = await this.prisma.membership.findFirst({
-      where: { tenantId, userId: actorUserId, roleKey: { in: ['workspace_owner', 'workspace_admin', 'org_admin'] } },
+      where: {
+        tenantId,
+        userId: actorUserId,
+        roleKey: { in: ['workspace_owner', 'workspace_admin', 'org_admin'] },
+      },
     });
     const buildingRole = await this.prisma.buildingRoleAssignment.findFirst({
-      where: { tenantId, userId: actorUserId, roleKey: { in: ['building_manager', 'chief_engineer'] } },
+      where: {
+        tenantId,
+        userId: actorUserId,
+        roleKey: { in: ['building_manager', 'chief_engineer'] },
+      },
     });
     if (!membership && !buildingRole) throw new ForbiddenException('not authorized');
 
@@ -460,14 +596,17 @@ export class OnboardingService {
           yearBuilt: patch.yearBuilt !== undefined ? patch.yearBuilt : building.yearBuilt,
           floorsCount: patch.floorsCount !== undefined ? patch.floorsCount : building.floorsCount,
           unitsCount: patch.unitsCount !== undefined ? patch.unitsCount : building.unitsCount,
-          entrancesCount: patch.entrancesCount !== undefined ? patch.entrancesCount : building.entrancesCount,
+          entrancesCount:
+            patch.entrancesCount !== undefined ? patch.entrancesCount : building.entrancesCount,
           liftsCount: patch.liftsCount !== undefined ? patch.liftsCount : building.liftsCount,
           street: patch.street !== undefined ? patch.street : building.street,
-          buildingNumber: patch.buildingNumber !== undefined ? patch.buildingNumber : building.buildingNumber,
+          buildingNumber:
+            patch.buildingNumber !== undefined ? patch.buildingNumber : building.buildingNumber,
           lat: patch.lat !== undefined ? patch.lat : building.lat,
           lng: patch.lng !== undefined ? patch.lng : building.lng,
           annualKwh: patch.annualKwh !== undefined ? patch.annualKwh : building.annualKwh,
-          defaultLanguage: patch.defaultLanguage !== undefined ? patch.defaultLanguage : building.defaultLanguage,
+          defaultLanguage:
+            patch.defaultLanguage !== undefined ? patch.defaultLanguage : building.defaultLanguage,
           supportedLanguages: patch.supportedLanguages ?? building.supportedLanguages,
         },
       });
@@ -501,7 +640,10 @@ export class OnboardingService {
         for (const e of patch.entrances) {
           const match = existing.find((x) => x.name === e.name);
           if (match) {
-            await tx.entrance.update({ where: { id: match.id }, data: { number: e.number || null } });
+            await tx.entrance.update({
+              where: { id: match.id },
+              data: { number: e.number || null },
+            });
           } else {
             await tx.entrance.create({
               data: { tenantId, buildingId: building.id, name: e.name, number: e.number || null },
@@ -517,7 +659,13 @@ export class OnboardingService {
         for (const f of patch.floors) {
           const entranceId = f.entranceName ? byName.get(f.entranceName) || null : null;
           await tx.floor.create({
-            data: { tenantId, buildingId: building.id, entranceId, number: f.number, label: f.label || null },
+            data: {
+              tenantId,
+              buildingId: building.id,
+              entranceId,
+              number: f.number,
+              label: f.label || null,
+            },
           });
         }
       }
@@ -539,17 +687,24 @@ export class OnboardingService {
           if (!root) {
             root = await tx.asset.create({
               data: {
-                tenantId, buildingId: building.id, name: 'Vertical Transport',
-                class: 'system', systemType: 'vertical_transport', createdBy: `user:${actorUserId}`,
+                tenantId,
+                buildingId: building.id,
+                name: 'Vertical Transport',
+                class: 'system',
+                systemType: 'vertical_transport',
+                createdBy: `user:${actorUserId}`,
               },
             });
           }
           for (let i = existing.length; i < target; i++) {
             await tx.asset.create({
               data: {
-                tenantId, buildingId: building.id, parentAssetId: root.id,
+                tenantId,
+                buildingId: building.id,
+                parentAssetId: root.id,
                 name: `Lift ${String.fromCharCode(65 + (i % 26))}${i >= 26 ? Math.floor(i / 26) : ''}`,
-                class: 'lift', systemType: 'vertical_transport',
+                class: 'lift',
+                systemType: 'vertical_transport',
                 createdBy: `user:${actorUserId}`,
               },
             });
@@ -561,10 +716,18 @@ export class OnboardingService {
         // Inside a Prisma transaction — must use tx client directly to stay in
         // the same transactional context. Shape matches AuditService.write().
         data: {
-          tenantId, buildingId: building.id, actor: actorUserId, role: 'building_manager',
-          action: 'Building updated', entity: b.slug, entityType: 'building',
-          building: b.name, ip: '127.0.0.1', eventType: 'building.updated',
-          resourceType: 'building', resourceId: b.id,
+          tenantId,
+          buildingId: building.id,
+          actor: actorUserId,
+          role: 'building_manager',
+          action: 'Building updated',
+          entity: b.slug,
+          entityType: 'building',
+          building: b.name,
+          ip: '127.0.0.1',
+          eventType: 'building.updated',
+          resourceType: 'building',
+          resourceId: b.id,
         },
       });
 

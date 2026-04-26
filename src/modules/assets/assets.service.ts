@@ -1,17 +1,52 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { PpmService } from '../ppm/ppm.service';
+import { resolveBuildingId } from '../../common/building.helpers';
 
-const LIFECYCLE_STATUSES = ['planned', 'active', 'standby', 'out_of_service', 'obsolete', 'disposed'];
+const LIFECYCLE_STATUSES = [
+  'planned',
+  'active',
+  'standby',
+  'out_of_service',
+  'obsolete',
+  'disposed',
+];
 const CONDITION_STATES = ['good', 'fair', 'poor', 'critical'];
 const RISK_LEVELS = ['low', 'medium', 'high', 'life_safety', 'mission_critical'];
 const ASSET_LEVELS = ['system', 'subsystem', 'unit', 'component', 'group', 'zone'];
 const SYSTEM_FAMILIES = [
-  'HVAC', 'Electrical', 'Water', 'Drainage', 'Fire', 'FireSuppression', 'Lift',
-  'BMS', 'RenewableEnergy', 'Comms', 'Security', 'AccessControl',
-  'Lighting', 'StructuralMonitoring', 'Roof', 'Envelope', 'Glazing',
-  'Finishes', 'Flooring', 'Waterproofing', 'Sanitary', 'Service', 'Waste', 'Storage', 'Workshop', 'Other',
+  'HVAC',
+  'Electrical',
+  'Water',
+  'Drainage',
+  'Fire',
+  'FireSuppression',
+  'Lift',
+  'BMS',
+  'RenewableEnergy',
+  'Comms',
+  'Security',
+  'AccessControl',
+  'Lighting',
+  'StructuralMonitoring',
+  'Roof',
+  'Envelope',
+  'Glazing',
+  'Finishes',
+  'Flooring',
+  'Waterproofing',
+  'Sanitary',
+  'Service',
+  'Waste',
+  'Storage',
+  'Workshop',
+  'Other',
 ];
 
 @Injectable()
@@ -22,25 +57,38 @@ export class AssetsService {
     private readonly ppm: PpmService,
   ) {}
 
-  private async resolveBuildingId(tenantId: string, idOrSlug: string): Promise<string> {
-    const b = await this.prisma.building.findFirst({
-      where: { tenantId, OR: [{ id: idOrSlug }, { slug: idOrSlug }] },
-      select: { id: true },
-    });
-    if (!b) throw new NotFoundException('building not found');
-    return b.id;
-  }
+  private resolveBuildingId = (tenantId: string, idOrSlug: string) =>
+    resolveBuildingId(this.prisma, tenantId, idOrSlug);
 
   // ── Registry ─────────────────────────────────────────
-  async list(tenantId: string, buildingIdOrSlug: string, params: {
-    systemFamily?: string; assetLevel?: string; assetTypeId?: string;
-    riskCriticality?: string; lifecycleStatus?: string; conditionState?: string;
-    locationId?: string; search?: string; take?: number; skip?: number;
-    ppmOverdueOnly?: boolean;
-  }) {
+  async list(
+    tenantId: string,
+    buildingIdOrSlug: string,
+    params: {
+      systemFamily?: string;
+      assetLevel?: string;
+      assetTypeId?: string;
+      riskCriticality?: string;
+      lifecycleStatus?: string;
+      conditionState?: string;
+      locationId?: string;
+      search?: string;
+      take?: number;
+      skip?: number;
+      ppmOverdueOnly?: boolean;
+    },
+  ) {
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
     const where: any = { tenantId, buildingId, isActive: true };
-    for (const k of ['systemFamily', 'assetLevel', 'assetTypeId', 'riskCriticality', 'lifecycleStatus', 'conditionState', 'locationId'] as const) {
+    for (const k of [
+      'systemFamily',
+      'assetLevel',
+      'assetTypeId',
+      'riskCriticality',
+      'lifecycleStatus',
+      'conditionState',
+      'locationId',
+    ] as const) {
       if ((params as any)[k]) where[k] = (params as any)[k];
     }
     if (params.search) {
@@ -57,7 +105,9 @@ export class AssetsService {
     const skip = Math.max(params.skip ?? 0, 0);
     const [items, total] = await Promise.all([
       this.prisma.asset.findMany({
-        where, take, skip,
+        where,
+        take,
+        skip,
         orderBy: [{ systemFamily: 'asc' }, { name: 'asc' }],
       }),
       this.prisma.asset.count({ where }),
@@ -65,19 +115,87 @@ export class AssetsService {
     return { total, items };
   }
 
+  // Portfolio-wide list — same shape as building-scoped list() but without
+  // the buildingId filter. Used by the top-level /assets page.
+  async listAll(
+    tenantId: string,
+    params: {
+      systemFamily?: string;
+      lifecycleStatus?: string;
+      conditionState?: string;
+      search?: string;
+      take?: number;
+      skip?: number;
+    },
+  ) {
+    const where: any = { tenantId, isActive: true };
+    for (const k of ['systemFamily', 'lifecycleStatus', 'conditionState'] as const) {
+      if ((params as any)[k]) where[k] = (params as any)[k];
+    }
+    if (params.search) {
+      const q = params.search;
+      where.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { model: { contains: q, mode: 'insensitive' } },
+        { manufacturer: { contains: q, mode: 'insensitive' } },
+        { serialNumber: { contains: q, mode: 'insensitive' } },
+        { qrBarcode: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+    const take = Math.min(Math.max(params.take ?? 100, 1), 500);
+    const skip = Math.max(params.skip ?? 0, 0);
+    const [items, total, buildings] = await Promise.all([
+      this.prisma.asset.findMany({
+        where,
+        take,
+        skip,
+        orderBy: [{ systemFamily: 'asc' }, { name: 'asc' }],
+      }),
+      this.prisma.asset.count({ where }),
+      this.prisma.building.findMany({
+        where: { tenantId },
+        select: { id: true, slug: true, name: true },
+      }),
+    ]);
+    const buildingById = new Map(buildings.map((b) => [b.id, b]));
+    const enriched = items.map((a) => ({
+      ...a,
+      buildingName: buildingById.get(a.buildingId)?.name || null,
+      buildingSlug: buildingById.get(a.buildingId)?.slug || null,
+    }));
+    return { total, items: enriched };
+  }
+
   async get(tenantId: string, id: string) {
     const a = await this.prisma.asset.findFirst({ where: { id, tenantId } });
     if (!a) throw new NotFoundException('asset not found');
     const [attrs, docs, media, children, spares, assetType, location] = await Promise.all([
-      this.prisma.assetCustomAttribute.findMany({ where: { assetId: id }, orderBy: { attributeKey: 'asc' } }),
+      this.prisma.assetCustomAttribute.findMany({
+        where: { assetId: id },
+        orderBy: { attributeKey: 'asc' },
+      }),
       this.prisma.assetDocument.findMany({ where: { assetId: id } }),
       this.prisma.assetMedia.findMany({ where: { assetId: id } }),
-      this.prisma.asset.findMany({ where: { parentAssetId: id, tenantId }, select: { id: true, name: true, systemFamily: true, assetLevel: true, serialNumber: true } }),
+      this.prisma.asset.findMany({
+        where: { parentAssetId: id, tenantId },
+        select: { id: true, name: true, systemFamily: true, assetLevel: true, serialNumber: true },
+      }),
       this.prisma.assetSparePart.findMany({ where: { assetId: id } }),
       a.assetTypeId ? this.prisma.assetType.findUnique({ where: { id: a.assetTypeId } }) : null,
-      a.locationId ? this.prisma.buildingLocation.findUnique({ where: { id: a.locationId } }) : null,
+      a.locationId
+        ? this.prisma.buildingLocation.findUnique({ where: { id: a.locationId } })
+        : null,
     ]);
-    return { ...a, customAttributes: attrs, documents: docs, media, children, spareParts: spares, assetType, location };
+    return {
+      ...a,
+      customAttributes: attrs,
+      documents: docs,
+      media,
+      children,
+      spareParts: spares,
+      assetType,
+      location,
+    };
   }
 
   // ── Create / update ───────────────────────────────────
@@ -85,15 +203,21 @@ export class AssetsService {
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
     this.validateCreateBody(body);
     if (body.assetTypeId) {
-      const at = await this.prisma.assetType.findFirst({ where: { id: body.assetTypeId, tenantId, isActive: true } });
+      const at = await this.prisma.assetType.findFirst({
+        where: { id: body.assetTypeId, tenantId, isActive: true },
+      });
       if (!at) throw new NotFoundException('asset type not found');
       if (at.isSerialized && !body.serialNumber && body.assetLevel === 'unit') {
-        throw new BadRequestException(`asset type "${at.name}" is serialized — serialNumber is required for a unit`);
+        throw new BadRequestException(
+          `asset type "${at.name}" is serialized — serialNumber is required for a unit`,
+        );
       }
       body.systemFamily = body.systemFamily || at.systemFamily;
     }
     if (body.locationId) {
-      const loc = await this.prisma.buildingLocation.findFirst({ where: { id: body.locationId, tenantId, buildingId } });
+      const loc = await this.prisma.buildingLocation.findFirst({
+        where: { id: body.locationId, tenantId, buildingId },
+      });
       if (!loc) throw new NotFoundException('location not found in this building');
     }
     // Enforce unique qrBarcode only when supplied
@@ -103,7 +227,8 @@ export class AssetsService {
     }
     const created = await this.prisma.asset.create({
       data: {
-        tenantId, buildingId,
+        tenantId,
+        buildingId,
         name: body.name,
         class: body.class || body.systemFamily || 'asset',
         systemType: body.systemType || null,
@@ -140,9 +265,15 @@ export class AssetsService {
       },
     });
     await this.audit.write({
-      tenantId, actor: actorUserId, role: 'asset_manager',
-      action: 'asset.created', entity: created.id, entityType: 'asset',
-      building: buildingId, ip: '-', sensitive: false,
+      tenantId,
+      actor: actorUserId,
+      role: 'asset_manager',
+      action: 'asset.created',
+      entity: created.id,
+      entityType: 'asset',
+      building: buildingId,
+      ip: '-',
+      sensitive: false,
     });
     return created;
   }
@@ -152,13 +283,30 @@ export class AssetsService {
     if (!a) throw new NotFoundException('asset not found');
     const data: any = {};
     for (const k of [
-      'name', 'class', 'systemType', 'systemFamily', 'assetTypeId', 'assetLevel',
-      'parentAssetId', 'locationId', 'qrBarcode',
-      'model', 'manufacturer', 'manufacturerPartNo', 'serialNumber',
-      'lifecycleStatus', 'conditionState', 'riskCriticality',
-      'responsibleDepartment', 'responsibleUserId',
-      'purchaseCost', 'replacementCost', 'contractId', 'slaId',
-      'brickClass', 'ifcGuid',
+      'name',
+      'class',
+      'systemType',
+      'systemFamily',
+      'assetTypeId',
+      'assetLevel',
+      'parentAssetId',
+      'locationId',
+      'qrBarcode',
+      'model',
+      'manufacturer',
+      'manufacturerPartNo',
+      'serialNumber',
+      'lifecycleStatus',
+      'conditionState',
+      'riskCriticality',
+      'responsibleDepartment',
+      'responsibleUserId',
+      'purchaseCost',
+      'replacementCost',
+      'contractId',
+      'slaId',
+      'brickClass',
+      'ifcGuid',
     ]) {
       if (body[k] !== undefined) data[k] = body[k];
     }
@@ -170,16 +318,30 @@ export class AssetsService {
     }
     if (body.haystackTags !== undefined) data.haystackTags = body.haystackTags;
     // Validation: enum fields
-    if (data.lifecycleStatus && !LIFECYCLE_STATUSES.includes(data.lifecycleStatus)) throw new BadRequestException('invalid lifecycleStatus');
-    if (data.conditionState && !CONDITION_STATES.includes(data.conditionState)) throw new BadRequestException('invalid conditionState');
-    if (data.riskCriticality && !RISK_LEVELS.includes(data.riskCriticality)) throw new BadRequestException('invalid riskCriticality');
-    if (data.assetLevel && !ASSET_LEVELS.includes(data.assetLevel)) throw new BadRequestException('invalid assetLevel');
+    if (data.lifecycleStatus && !LIFECYCLE_STATUSES.includes(data.lifecycleStatus))
+      throw new BadRequestException('invalid lifecycleStatus');
+    if (data.conditionState && !CONDITION_STATES.includes(data.conditionState))
+      throw new BadRequestException('invalid conditionState');
+    if (data.riskCriticality && !RISK_LEVELS.includes(data.riskCriticality))
+      throw new BadRequestException('invalid riskCriticality');
+    if (data.assetLevel && !ASSET_LEVELS.includes(data.assetLevel))
+      throw new BadRequestException('invalid assetLevel');
     const updated = await this.prisma.asset.update({ where: { id }, data });
     await this.audit.write({
-      tenantId, actor: actorUserId, role: 'asset_manager',
-      action: 'asset.updated', entity: id, entityType: 'asset',
-      building: a.buildingId, ip: '-', sensitive:
-        !!(data.lifecycleStatus || data.riskCriticality || data.locationId || data.contractId),
+      tenantId,
+      actor: actorUserId,
+      role: 'asset_manager',
+      action: 'asset.updated',
+      entity: id,
+      entityType: 'asset',
+      building: a.buildingId,
+      ip: '-',
+      sensitive: !!(
+        data.lifecycleStatus ||
+        data.riskCriticality ||
+        data.locationId ||
+        data.contractId
+      ),
     });
     return updated;
   }
@@ -187,24 +349,38 @@ export class AssetsService {
   async softDelete(tenantId: string, actorUserId: string, id: string) {
     const a = await this.prisma.asset.findFirst({ where: { id, tenantId } });
     if (!a) throw new NotFoundException('asset not found');
-    await this.prisma.asset.update({ where: { id }, data: { isActive: false, lifecycleStatus: 'disposed' } });
+    await this.prisma.asset.update({
+      where: { id },
+      data: { isActive: false, lifecycleStatus: 'disposed' },
+    });
     await this.audit.write({
-      tenantId, actor: actorUserId, role: 'asset_manager',
-      action: 'asset.archived', entity: id, entityType: 'asset',
-      building: a.buildingId, ip: '-', sensitive: true,
+      tenantId,
+      actor: actorUserId,
+      role: 'asset_manager',
+      action: 'asset.archived',
+      entity: id,
+      entityType: 'asset',
+      building: a.buildingId,
+      ip: '-',
+      sensitive: true,
     });
     return { ok: true };
   }
 
   // ── Custom attributes ─────────────────────────────────
-  async setCustomAttribute(tenantId: string, assetId: string, body: { attributeKey: string; value: any; valueType?: string }) {
+  async setCustomAttribute(
+    tenantId: string,
+    assetId: string,
+    body: { attributeKey: string; value: any; valueType?: string },
+  ) {
     const a = await this.prisma.asset.findFirst({ where: { id: assetId, tenantId } });
     if (!a) throw new NotFoundException('asset not found');
     if (!body.attributeKey) throw new BadRequestException('attributeKey required');
     return this.prisma.assetCustomAttribute.upsert({
       where: { assetId_attributeKey: { assetId, attributeKey: body.attributeKey } },
       create: {
-        tenantId, assetId,
+        tenantId,
+        assetId,
         attributeKey: body.attributeKey,
         valueType: body.valueType || 'string',
         valueJson: body.value as any,
@@ -217,23 +393,33 @@ export class AssetsService {
   }
 
   async removeCustomAttribute(tenantId: string, assetId: string, attributeKey: string) {
-    const row = await this.prisma.assetCustomAttribute.findFirst({ where: { tenantId, assetId, attributeKey } });
+    const row = await this.prisma.assetCustomAttribute.findFirst({
+      where: { tenantId, assetId, attributeKey },
+    });
     if (!row) throw new NotFoundException('attribute not found');
     await this.prisma.assetCustomAttribute.delete({ where: { id: row.id } });
     return { ok: true };
   }
 
   // ── Documents ─────────────────────────────────────────
-  async attachDocument(tenantId: string, assetId: string, body: { documentId: string; docType: string; title?: string; version?: string }) {
+  async attachDocument(
+    tenantId: string,
+    assetId: string,
+    body: { documentId: string; docType: string; title?: string; version?: string },
+  ) {
     const a = await this.prisma.asset.findFirst({ where: { id: assetId, tenantId } });
     if (!a) throw new NotFoundException('asset not found');
-    if (!body.documentId || !body.docType) throw new BadRequestException('documentId and docType required');
+    if (!body.documentId || !body.docType)
+      throw new BadRequestException('documentId and docType required');
     const doc = await this.prisma.document.findFirst({ where: { id: body.documentId, tenantId } });
     if (!doc) throw new NotFoundException('document not found');
     return this.prisma.assetDocument.upsert({
-      where: { assetId_documentId_docType: { assetId, documentId: body.documentId, docType: body.docType } },
+      where: {
+        assetId_documentId_docType: { assetId, documentId: body.documentId, docType: body.docType },
+      },
       create: {
-        tenantId, assetId,
+        tenantId,
+        assetId,
         documentId: body.documentId,
         docType: body.docType,
         title: body.title || null,
@@ -244,21 +430,28 @@ export class AssetsService {
   }
 
   async detachDocument(tenantId: string, assetDocumentId: string) {
-    const row = await this.prisma.assetDocument.findFirst({ where: { id: assetDocumentId, tenantId } });
+    const row = await this.prisma.assetDocument.findFirst({
+      where: { id: assetDocumentId, tenantId },
+    });
     if (!row) throw new NotFoundException('asset-document link not found');
     await this.prisma.assetDocument.delete({ where: { id: assetDocumentId } });
     return { ok: true };
   }
 
   // ── Media ─────────────────────────────────────────────
-  async attachMedia(tenantId: string, assetId: string, body: { mediaType: string; documentId?: string; url?: string; caption?: string }) {
+  async attachMedia(
+    tenantId: string,
+    assetId: string,
+    body: { mediaType: string; documentId?: string; url?: string; caption?: string },
+  ) {
     const a = await this.prisma.asset.findFirst({ where: { id: assetId, tenantId } });
     if (!a) throw new NotFoundException('asset not found');
     if (!body.mediaType) throw new BadRequestException('mediaType required');
     if (!body.documentId && !body.url) throw new BadRequestException('documentId or url required');
     return this.prisma.assetMedia.create({
       data: {
-        tenantId, assetId,
+        tenantId,
+        assetId,
         mediaType: body.mediaType,
         documentId: body.documentId || null,
         url: body.url || null,
@@ -275,7 +468,12 @@ export class AssetsService {
   }
 
   // ── Bulk import (CSV-flavoured JSON) ──────────────────
-  async bulkImport(tenantId: string, actorUserId: string, buildingIdOrSlug: string, body: { items: any[]; validateOnly?: boolean }) {
+  async bulkImport(
+    tenantId: string,
+    actorUserId: string,
+    buildingIdOrSlug: string,
+    body: { items: any[]; validateOnly?: boolean },
+  ) {
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
     const errors: Array<{ row: number; error: string }> = [];
     const validated: any[] = [];
@@ -306,10 +504,23 @@ export class AssetsService {
   async listAssetTypes(tenantId: string, systemFamily?: string) {
     const where: any = { tenantId, isActive: true };
     if (systemFamily) where.systemFamily = systemFamily;
-    return this.prisma.assetType.findMany({ where, orderBy: [{ systemFamily: 'asc' }, { name: 'asc' }] });
+    return this.prisma.assetType.findMany({
+      where,
+      orderBy: [{ systemFamily: 'asc' }, { name: 'asc' }],
+    });
   }
 
-  async createAssetType(tenantId: string, body: { key: string; name: string; systemFamily: string; isSerialized?: boolean; description?: string; schemaKey?: string }) {
+  async createAssetType(
+    tenantId: string,
+    body: {
+      key: string;
+      name: string;
+      systemFamily: string;
+      isSerialized?: boolean;
+      description?: string;
+      schemaKey?: string;
+    },
+  ) {
     if (!body.key || !body.name || !body.systemFamily) {
       throw new BadRequestException('key, name, systemFamily required');
     }
@@ -328,7 +539,8 @@ export class AssetsService {
         schemaKey: body.schemaKey || null,
       },
       update: {
-        name: body.name, systemFamily: body.systemFamily,
+        name: body.name,
+        systemFamily: body.systemFamily,
         isSerialized: body.isSerialized ?? true,
         description: body.description || null,
         schemaKey: body.schemaKey || null,
@@ -341,37 +553,62 @@ export class AssetsService {
   private validateCreateBody(body: any) {
     if (!body) throw new BadRequestException('body required');
     if (!body.name) throw new BadRequestException('name required');
-    if (body.assetLevel && !ASSET_LEVELS.includes(body.assetLevel)) throw new BadRequestException('invalid assetLevel');
-    if (body.lifecycleStatus && !LIFECYCLE_STATUSES.includes(body.lifecycleStatus)) throw new BadRequestException('invalid lifecycleStatus');
-    if (body.conditionState && !CONDITION_STATES.includes(body.conditionState)) throw new BadRequestException('invalid conditionState');
-    if (body.riskCriticality && !RISK_LEVELS.includes(body.riskCriticality)) throw new BadRequestException('invalid riskCriticality');
-    if (body.systemFamily && !SYSTEM_FAMILIES.includes(body.systemFamily)) throw new BadRequestException(`invalid systemFamily`);
+    if (body.assetLevel && !ASSET_LEVELS.includes(body.assetLevel))
+      throw new BadRequestException('invalid assetLevel');
+    if (body.lifecycleStatus && !LIFECYCLE_STATUSES.includes(body.lifecycleStatus))
+      throw new BadRequestException('invalid lifecycleStatus');
+    if (body.conditionState && !CONDITION_STATES.includes(body.conditionState))
+      throw new BadRequestException('invalid conditionState');
+    if (body.riskCriticality && !RISK_LEVELS.includes(body.riskCriticality))
+      throw new BadRequestException('invalid riskCriticality');
+    if (body.systemFamily && !SYSTEM_FAMILIES.includes(body.systemFamily))
+      throw new BadRequestException(`invalid systemFamily`);
     // Unit-level assets with a typed serialized template must carry a serial.
-    if ((body.assetLevel || 'unit') === 'unit' && body.isSerialized === true && !body.serialNumber) {
+    if (
+      (body.assetLevel || 'unit') === 'unit' &&
+      body.isSerialized === true &&
+      !body.serialNumber
+    ) {
       throw new BadRequestException('unit-level serialized assets require serialNumber');
     }
     // Fire & lift: require riskCriticality + responsibleDepartment for safety of ops.
     if (body.systemFamily === 'Fire' || body.systemFamily === 'Lift') {
-      if (!body.riskCriticality) throw new BadRequestException(`${body.systemFamily} assets require riskCriticality`);
-      if (!body.responsibleDepartment) throw new BadRequestException(`${body.systemFamily} assets require responsibleDepartment`);
+      if (!body.riskCriticality)
+        throw new BadRequestException(`${body.systemFamily} assets require riskCriticality`);
+      if (!body.responsibleDepartment)
+        throw new BadRequestException(`${body.systemFamily} assets require responsibleDepartment`);
     }
   }
 
   // ── Semantic tags (Haystack + Brick) ──────────────────
   // Called by building-core's tagAsset endpoint. Assets owns the row; keeping
   // the write here guarantees a single writer to the assets table.
-  async setSemanticTags(tenantId: string, assetId: string, buildingId: string, body: {
-    haystackTags?: string[]; brickClass?: string; brickRelations?: unknown; externalIds?: unknown;
-  }) {
-    const asset = await this.prisma.asset.findFirst({ where: { id: assetId, tenantId, buildingId } });
+  async setSemanticTags(
+    tenantId: string,
+    assetId: string,
+    buildingId: string,
+    body: {
+      haystackTags?: string[];
+      brickClass?: string;
+      brickRelations?: unknown;
+      externalIds?: unknown;
+    },
+  ) {
+    const asset = await this.prisma.asset.findFirst({
+      where: { id: assetId, tenantId, buildingId },
+    });
     if (!asset) throw new NotFoundException('asset not found in this building');
     return this.prisma.asset.update({
       where: { id: assetId },
       data: {
         haystackTags: body.haystackTags ?? asset.haystackTags,
         brickClass: body.brickClass ?? asset.brickClass,
-        brickRelations: body.brickRelations === undefined ? (asset as any).brickRelations : (body.brickRelations as any),
-        externalIds: body.externalIds === undefined ? (asset as any).externalIds : (body.externalIds as any),
+        brickRelations:
+          body.brickRelations === undefined
+            ? (asset as any).brickRelations
+            : (body.brickRelations as any),
+        externalIds:
+          body.externalIds === undefined ? (asset as any).externalIds : (body.externalIds as any),
       },
     });
   }
@@ -381,20 +618,36 @@ export class AssetsService {
   // (the owner of ppm_plan_items). Audit entries are written here because the
   // ACTION is initiated by the asset module (actor role = asset_manager).
   async listPpm(tenantId: string, assetId: string) {
-    const a = await this.prisma.asset.findFirst({ where: { id: assetId, tenantId }, select: { id: true, buildingId: true } });
+    const a = await this.prisma.asset.findFirst({
+      where: { id: assetId, tenantId },
+      select: { id: true, buildingId: true },
+    });
     if (!a) throw new NotFoundException('asset not found');
     return this.ppm.listPlanItemsForAsset(tenantId, assetId, a.buildingId);
   }
 
   async attachPpm(tenantId: string, actorUserId: string, assetId: string, planItemId: string) {
-    const a = await this.prisma.asset.findFirst({ where: { id: assetId, tenantId }, select: { id: true, buildingId: true } });
+    const a = await this.prisma.asset.findFirst({
+      where: { id: assetId, tenantId },
+      select: { id: true, buildingId: true },
+    });
     if (!a) throw new NotFoundException('asset not found');
-    const updated = await this.ppm.attachPlanItemToAsset(tenantId, planItemId, assetId, a.buildingId);
+    const updated = await this.ppm.attachPlanItemToAsset(
+      tenantId,
+      planItemId,
+      assetId,
+      a.buildingId,
+    );
     await this.audit.write({
-      tenantId, actor: actorUserId, role: 'asset_manager',
+      tenantId,
+      actor: actorUserId,
+      role: 'asset_manager',
       action: 'ppm.plan_item.attach_asset',
-      entity: planItemId, entityType: 'ppm_plan_item',
-      building: a.buildingId, ip: '-', sensitive: false,
+      entity: planItemId,
+      entityType: 'ppm_plan_item',
+      building: a.buildingId,
+      ip: '-',
+      sensitive: false,
     });
     return updated;
   }
@@ -402,10 +655,15 @@ export class AssetsService {
   async detachPpm(tenantId: string, actorUserId: string, assetId: string, planItemId: string) {
     const updated = await this.ppm.detachPlanItemFromAsset(tenantId, planItemId, assetId);
     await this.audit.write({
-      tenantId, actor: actorUserId, role: 'asset_manager',
+      tenantId,
+      actor: actorUserId,
+      role: 'asset_manager',
       action: 'ppm.plan_item.detach_asset',
-      entity: planItemId, entityType: 'ppm_plan_item',
-      building: updated.buildingId, ip: '-', sensitive: false,
+      entity: planItemId,
+      entityType: 'ppm_plan_item',
+      building: updated.buildingId,
+      ip: '-',
+      sensitive: false,
     });
     return updated;
   }

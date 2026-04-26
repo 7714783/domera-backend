@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { AssetsService } from './assets.service';
@@ -17,6 +28,30 @@ export class AssetsController {
     private readonly auth: AuthService,
   ) {}
 
+  // Portfolio-wide list (across every building in the tenant). Used by the
+  // top-level /assets page so the operator can filter / search without
+  // first picking a building. Building-scoped /buildings/:id/assets stays
+  // canonical for per-building flows.
+  @Get('assets')
+  listAll(
+    @Query('systemFamily') systemFamily?: string,
+    @Query('lifecycleStatus') lifecycleStatus?: string,
+    @Query('conditionState') conditionState?: string,
+    @Query('search') search?: string,
+    @Query('take') take?: string,
+    @Query('skip') skip?: string,
+    @Headers('x-tenant-id') th?: string,
+  ) {
+    return this.svc.listAll(resolveTenantId(th), {
+      systemFamily,
+      lifecycleStatus,
+      conditionState,
+      search,
+      take: take ? Number(take) : undefined,
+      skip: skip ? Number(skip) : undefined,
+    });
+  }
+
   // Registry + CRUD (building-scoped list, flat CRUD on asset id)
   @Get('buildings/:id/assets')
   list(
@@ -34,8 +69,14 @@ export class AssetsController {
     @Headers('x-tenant-id') th?: string,
   ) {
     return this.svc.list(resolveTenantId(th), id, {
-      systemFamily, assetLevel, assetTypeId, riskCriticality,
-      lifecycleStatus, conditionState, locationId, search,
+      systemFamily,
+      assetLevel,
+      assetTypeId,
+      riskCriticality,
+      lifecycleStatus,
+      conditionState,
+      locationId,
+      search,
       take: take ? Number(take) : undefined,
       skip: skip ? Number(skip) : undefined,
     });
@@ -43,18 +84,27 @@ export class AssetsController {
 
   @Post('buildings/:id/assets')
   async create(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.create(resolveTenantId(th), await uid(ah, this.auth), id, body);
   }
 
   @Post('buildings/:id/assets/bulk-import')
   async bulkImport(
-    @Param('id') id: string, @Body() body: { items: any[]; validateOnly?: boolean },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: { items: any[]; validateOnly?: boolean },
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
-    return this.svc.bulkImport(resolveTenantId(th), await uid(ah, this.auth), id, body || { items: [] });
+    return this.svc.bulkImport(
+      resolveTenantId(th),
+      await uid(ah, this.auth),
+      id,
+      body || { items: [] },
+    );
   }
 
   @Get('assets/:id')
@@ -64,8 +114,10 @@ export class AssetsController {
 
   @Patch('assets/:id')
   async update(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.update(resolveTenantId(th), await uid(ah, this.auth), id, body);
   }
@@ -73,7 +125,8 @@ export class AssetsController {
   @Delete('assets/:id')
   async softDelete(
     @Param('id') id: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.softDelete(resolveTenantId(th), await uid(ah, this.auth), id);
   }
@@ -85,7 +138,11 @@ export class AssetsController {
   }
 
   @Delete('assets/:id/custom-attributes/:key')
-  removeAttr(@Param('id') id: string, @Param('key') key: string, @Headers('x-tenant-id') th?: string) {
+  removeAttr(
+    @Param('id') id: string,
+    @Param('key') key: string,
+    @Headers('x-tenant-id') th?: string,
+  ) {
     return this.svc.removeCustomAttribute(resolveTenantId(th), id, key);
   }
 
@@ -119,16 +176,20 @@ export class AssetsController {
 
   @Post('assets/:id/ppm/attach')
   async attachPpm(
-    @Param('id') id: string, @Body() body: { planItemId: string },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: { planItemId: string },
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.attachPpm(resolveTenantId(th), await uid(ah, this.auth), id, body?.planItemId);
   }
 
   @Post('assets/:id/ppm/detach')
   async detachPpm(
-    @Param('id') id: string, @Body() body: { planItemId: string },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: { planItemId: string },
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.detachPpm(resolveTenantId(th), await uid(ah, this.auth), id, body?.planItemId);
   }
