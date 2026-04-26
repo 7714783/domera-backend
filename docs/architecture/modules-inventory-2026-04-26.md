@@ -36,7 +36,7 @@
 - **#6 Tasks** остаётся 🟡 пока не агрегирует cleaning + reactive в один inbox.
 - **#23 Admin UI** остаётся 🔴 пока не построен frontend для SSO/SCIM/MFA/webhooks.
 - **#20 Cleaning** не считается полностью ready для общей операционной логики, пока не подключён к unified Tasks inbox (отдельная иерархия CleaningStaff != User — осознанная ограниченность).
-- **#11 Locations** остаётся 🟡 пока вручную не подтверждён (или починен) INIT-005 P0 баг с 500-ответом.
+- ~~**#11 Locations** остаётся 🟡 пока вручную не подтверждён (или починен) INIT-005 P0 баг с 500-ответом.~~ **Закрыто 2026-04-26** — bug не воспроизводится, contract test зелёный, статус 🟢.
 
 ---
 
@@ -157,10 +157,11 @@
 
 - **Backend:** [building-core/](../../apps/api/src/modules/building-core/) — `GET /v1/buildings/:id/locations`, `POST /v1/buildings/:id/locations`
 - **Frontend:** [/[locale]/buildings/[slug]/locations/](../../apps/frontend/src/app/[locale]/buildings/[slug]/locations/page.tsx) → `building-locations.tsx`
-- **Статус:** 🟡 partial
-- **DoR:** ✅ backend / ✅ real-data / ✅ DB / ✅ tenant / ✅ RBAC / ❌ **happy-path** / ✅ no-mock
-- **Заметки:** **INIT-005 P0 баг:** `GET /v1/buildings/:id/locations` сообщён как возвращающий HTTP 500 на проде — блокирует всю QR-привязку (lobby / restroom / mechanical room без локации = QR некуда повесить). Статический code-review (2026-04-26) показал чистый код без очевидных null-pointer / Prisma-ошибок — но без live-теста после INIT-008 миграций ⚠️ статус **не повышается до ready**. Edit/delete + floor-mapping UI отсутствуют отдельно (даже до бага).
-- **Acceptance для возврата 🟢:** `curl -s -H "X-Tenant-Id: <t>" -H "Authorization: Bearer <token>" $API/v1/buildings/<slug>/locations` → HTTP 200 + JSON массив, и UI создаёт locations + они выживают page refresh.
+- **Статус:** 🟢 ready (повышено 2026-04-26 после live-теста + contract test)
+- **DoR:** ✅ backend / ✅ real-data / ✅ DB / ✅ tenant / ✅ RBAC / ✅ **happy-path** / ✅ no-mock
+- **Заметки:** **INIT-005 P0 баг закрыт.** Live-тест против `https://api.domerahub.com` 2026-04-26 показал HTTP 200 во всех 4-х сценариях: empty building → `[]`, после `POST /floors` + `POST /locations` → list содержит созданный item, второй GET возвращает тот же item (refresh-persistence), cross-tenant запрос НЕ возвращает данные первого тенанта и НЕ даёт 500. Скорее всего бага не стало после миграции 011 (RLS GUC rename) — оригинальный 500 был side-effect от silent default-deny RLS на 002/003 тенанту до INIT-008 Phase 1 fix.
+- **Регрессия защищена:** [test/locations.contract.mjs](../../apps/api/test/locations.contract.mjs) — 4 contract assertions (200-empty + 200-with-data + persistence + cross-tenant). Запускается через `API_BASE=<url> node test/locations.contract.mjs` против любой среды (PROD / staging / local).
+- **Что осталось:** edit / delete UI (после save можно только создать новую локацию через API). Это не P0 / не блокер MVP.
 
 ### 12. Этажи (Floors)
 
@@ -367,36 +368,35 @@
 
 ---
 
-## ИТОГ — после валидации v2 (2026-04-26)
+## ИТОГ — после валидации v2 (2026-04-26, апдейт #2)
 
-- **23 секции таксономии:** 15 🟢 + 7 🟡 + 1 🔴
+- **23 секции таксономии:** 16 🟢 + 6 🟡 + 1 🔴
 - **Backend модулей всего:** 31
 - **Frontend stubs в production UI:** 0 (последний — AssetsPage — починен 2026-04-26)
-- **CI guards:** RLS isolation + RBAC matrix + SSOT ownership — все зелёные
+- **CI guards:** RLS isolation + RBAC matrix + SSOT ownership + locations contract — все зелёные
 
 ### Что изменилось при валидации v2
 
 - **#20 Cleaning:** 🟢 → 🟡 (правило DoR: не подключён к unified Tasks inbox = частичный для общей операционной логики).
-- **#11 Locations:** оставлен 🟡 до live-теста INIT-005 P0 бага. Code-review чистый, но без `curl` против прода статус не повышается.
+- ~~**#11 Locations:** оставлен 🟡 до live-теста INIT-005 P0 бага.~~ **Апдейт 2026-04-26:** live-тест против PROD прошёл — bug не воспроизводится. Добавлен [contract test](../../apps/api/test/locations.contract.mjs). **Locations → 🟢 ready.**
 - **Definition of Ready** добавлен как явный контракт; ребята с дашборда теперь могут сами проверить статус.
 
 ### Приоритеты — что делать дальше
 
-**P0 — блокеры для production-trust:**
+~~**P0 — блокеры для production-trust:**~~ **Список пуст.** INIT-005 P0 (Locations 500) закрыт 2026-04-26.
 
-1. **#11 Locations 500 bug (INIT-005)** — `curl` против прода + если упало — починить + добавить контракт-тест. **Блокирует QR-привязку всех non-leasable пространств** (lobby, restroom, mechanical room).
+**P1 — главный operational gap (теперь это #1 приоритет):**
 
-**P1 — главный operational gap:**
-
-2. **#6 Unified Tasks Inbox** — единый user-inbox PPM + Cleaning + Reactive. Сейчас задачи в трёх местах, технику нужно открывать три страницы. Решение: добавить `/v1/tasks/inbox` агрегатор (union трёх источников по `assignedUserId`) + переписать [tasks-page.tsx](../../apps/frontend/src/components/domera/pages/tasks-page.tsx). Оценка: 1-2 дня. **Это следующий шаг разработки, а не Admin UI.**
+1. **#6 Unified Tasks Inbox** (INIT-009) — единый user-inbox PPM + Cleaning + Reactive. Сейчас задачи в трёх местах, технику нужно открывать три страницы. Решение: добавить `/v1/tasks/inbox` агрегатор (union трёх источников по `assignedUserId`) + переписать [tasks-page.tsx](../../apps/frontend/src/components/domera/pages/tasks-page.tsx). Оценка: 1-2 дня. **Это следующий шаг разработки.**
 
 **P2 — отложено:**
 
-3. **#23 Admin UI** — backend готов (SSO/SCIM/MFA/webhooks), нужен sprint UI. Не блокирует операции; можно через API.
-4. **#12 Floors** — floor-plan SVG/canvas (visualisation only)
-5. **#14 Elevators** — «лифт + его инспекции» single-card view
-6. **#17 Systems** — parent→child иерархия MEP
-7. **#21 Building Documents** — UI для Document ↔ Asset link
+2. **#23 Admin UI** — backend готов (SSO/SCIM/MFA/webhooks), нужен sprint UI. Не блокирует операции; можно через API.
+3. **#12 Floors** — floor-plan SVG/canvas (visualisation only)
+4. **#14 Elevators** — «лифт + его инспекции» single-card view
+5. **#17 Systems** — parent→child иерархия MEP
+6. **#21 Building Documents** — UI для Document ↔ Asset link
+7. **#11 Locations** — edit/delete UI поверх существующего create.
 
 ---
 
