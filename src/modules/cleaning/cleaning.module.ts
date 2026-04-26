@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { IamModule } from '../iam/iam.module';
+import { AuditModule } from '../audit/audit.module';
 import { CleaningAccessService } from './cleaning.access.service';
 import { CleaningAdminService } from './cleaning.admin.service';
 import { CleaningRequestService } from './cleaning.request.service';
@@ -9,7 +10,7 @@ import { CleaningInternalController } from './cleaning.internal.controller';
 import { CleaningPublicController } from './cleaning.public.controller';
 
 @Module({
-  imports: [AuthModule, IamModule],
+  imports: [AuthModule, IamModule, AuditModule],
   controllers: [CleaningInternalController, CleaningPublicController],
   providers: [
     CleaningAccessService,

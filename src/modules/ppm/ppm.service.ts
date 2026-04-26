@@ -1,6 +1,13 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ApprovalsService } from '../approvals/approvals.service';
+import { requireManager, resolveBuildingId } from '../../common/building.helpers';
 import { approxMonths, nextAfter, addMonthsUtc } from './engine/recurrence';
 import { applyBlackouts, BlackoutRule } from './engine/blackout';
 
@@ -34,8 +41,17 @@ const DUPLICATE_PLAN_ITEM_MSG =
  *                      → in_progress → completed → evidence_distributed → archived
  */
 const ALL_STAGES = [
-  'scheduled', 'quote_requested', 'quote_received', 'awaiting_approval', 'approved',
-  'ordered', 'in_progress', 'completed', 'evidence_distributed', 'archived', 'cancelled',
+  'scheduled',
+  'quote_requested',
+  'quote_received',
+  'awaiting_approval',
+  'approved',
+  'ordered',
+  'in_progress',
+  'completed',
+  'evidence_distributed',
+  'archived',
+  'cancelled',
 ];
 
 /** Months between steps (used for UI + fallback when rrule parse fails). */
@@ -67,43 +83,72 @@ export class PpmService {
     private readonly approvals: ApprovalsService,
   ) {}
 
+  // INIT-010 Phase 1 / P0-1 — entry point for condition-triggers.
+  //
+  // condition-triggers used to call `prisma.taskInstance.create()` directly,
+  // which violated SSOT (taskInstance is owned by ppm). The fix routes the
+  // creation through this method so ownership stays with ppm. When the
+  // outbox pattern lands (INIT-010 Phase 7), this call is replaced by a
+  // subscriber that consumes a `condition.triggered` event — same semantics,
+  // pub/sub instead of direct DI.
+  async createTaskFromTrigger(input: {
+    tenantId: string;
+    buildingId: string;
+    templateId: string | null;
+    title: string;
+    dueAt: Date;
+  }) {
+    const template = input.templateId
+      ? await this.prisma.ppmTemplate.findUnique({ where: { id: input.templateId } })
+      : null;
+    return this.prisma.taskInstance.create({
+      data: {
+        tenantId: input.tenantId,
+        buildingId: input.buildingId,
+        title: input.title,
+        status: 'open',
+        lifecycleStage: 'scheduled',
+        executionMode: template?.executionMode || 'in_house',
+        dueAt: input.dueAt,
+        evidenceRequired: !!template?.evidenceDocTypeKey,
+      },
+    });
+  }
+
   private async loadBlackouts(tenantId: string, buildingId: string): Promise<BlackoutRule[]> {
     const rows = await this.prisma.calendarBlackout.findMany({
       where: {
-        tenantId, isActive: true,
+        tenantId,
+        isActive: true,
         OR: [{ buildingId: null }, { buildingId }],
       },
     });
     return rows.map((r) => ({
-      id: r.id, kind: r.kind, label: r.label,
-      dayOfWeek: r.dayOfWeek, startDate: r.startDate, endDate: r.endDate,
-      annualRecurring: r.annualRecurring, policy: r.policy as any,
-      isActive: r.isActive, buildingId: r.buildingId,
+      id: r.id,
+      kind: r.kind,
+      label: r.label,
+      dayOfWeek: r.dayOfWeek,
+      startDate: r.startDate,
+      endDate: r.endDate,
+      annualRecurring: r.annualRecurring,
+      policy: r.policy as any,
+      isActive: r.isActive,
+      buildingId: r.buildingId,
     }));
   }
 
-  private async requireManager(tenantId: string, actorUserId: string) {
-    const ws = await this.prisma.membership.findFirst({
-      where: { tenantId, userId: actorUserId, roleKey: { in: ['workspace_owner', 'workspace_admin', 'org_admin'] } },
+  // PPM includes maintenance_coordinator as an authorised building role
+  // (they schedule PPM executions even without manager rights).
+  private requireManager = (tenantId: string, actorUserId: string) =>
+    requireManager(this.prisma, tenantId, actorUserId, {
+      extraBuildingRoles: ['maintenance_coordinator'],
     });
-    if (ws) return;
-    const br = await this.prisma.buildingRoleAssignment.findFirst({
-      where: { tenantId, userId: actorUserId, roleKey: { in: ['building_manager', 'chief_engineer', 'maintenance_coordinator'] } },
-    });
-    if (!br) throw new ForbiddenException('not authorized');
-  }
-
-  private async resolveBuildingId(tenantId: string, idOrSlug: string): Promise<string> {
-    const b = await this.prisma.building.findFirst({
-      where: { tenantId, OR: [{ id: idOrSlug }, { slug: idOrSlug }] },
-      select: { id: true },
-    });
-    if (!b) throw new NotFoundException('building not found');
-    return b.id;
-  }
+  private resolveBuildingId = (tenantId: string, idOrSlug: string) =>
+    resolveBuildingId(this.prisma, tenantId, idOrSlug);
 
   async listPrograms(
-    tenantId: string, buildingIdOrSlug: string,
+    tenantId: string,
+    buildingIdOrSlug: string,
     opts: { includeAwaitingOnboarding?: boolean } = {},
   ) {
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
@@ -117,28 +162,39 @@ export class PpmService {
       where: templateWhere,
       include: {
         planItems: {
-          ...(opts.includeAwaitingOnboarding ? {} : { where: { baselineStatus: { not: 'pending' } } }),
-          include: { obligation: { select: { name: true, domain: true, requiredDocumentTypeKey: true } } },
+          ...(opts.includeAwaitingOnboarding
+            ? {}
+            : { where: { baselineStatus: { not: 'pending' } } }),
+          include: {
+            obligation: { select: { name: true, domain: true, requiredDocumentTypeKey: true } },
+          },
         },
       },
       orderBy: [{ scope: 'asc' }, { name: 'asc' }],
     });
     const orgIds = [...new Set(items.map((x) => x.performerOrgId).filter((x): x is string => !!x))];
     const orgs = orgIds.length
-      ? await this.prisma.organization.findMany({ where: { id: { in: orgIds } }, select: { id: true, name: true, type: true } })
+      ? await this.prisma.organization.findMany({
+          where: { id: { in: orgIds } },
+          select: { id: true, name: true, type: true },
+        })
       : [];
     const orgById = new Map(orgs.map((o) => [o.id, o]));
     return items.map((t) => {
-      const nextDue = t.planItems
-        .map((p) => p.nextDueAt)
-        .sort((a, b) => a.getTime() - b.getTime())[0] || null;
-      const lastDone = t.planItems
-        .map((p) => p.lastPerformedAt)
-        .filter((x): x is Date => !!x)
-        .sort((a, b) => b.getTime() - a.getTime())[0] || null;
+      const nextDue =
+        t.planItems.map((p) => p.nextDueAt).sort((a, b) => a.getTime() - b.getTime())[0] || null;
+      const lastDone =
+        t.planItems
+          .map((p) => p.lastPerformedAt)
+          .filter((x): x is Date => !!x)
+          .sort((a, b) => b.getTime() - a.getTime())[0] || null;
       return {
-        id: t.id, name: t.name, description: t.description, domain: t.domain,
-        scope: t.scope, executionMode: t.executionMode,
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        domain: t.domain,
+        scope: t.scope,
+        executionMode: t.executionMode,
         performerOrg: t.performerOrgId ? orgById.get(t.performerOrgId) : null,
         contractId: t.contractId,
         requiresApprovalBeforeOrder: t.requiresApprovalBeforeOrder,
@@ -153,22 +209,27 @@ export class PpmService {
     });
   }
 
-  async createProgram(tenantId: string, actorUserId: string, buildingIdOrSlug: string, body: {
-    obligationTemplateId: string;
-    name?: string;
-    description?: string;
-    domain?: string;
-    scope?: 'building_common' | 'unit_scoped';
-    executionMode: 'in_house' | 'contracted' | 'ad_hoc_approved';
-    performerOrgId?: string;
-    contractId?: string;
-    unitId?: string;
-    frequencyMonths?: number;
-    recurrenceRule?: string;
-    evidenceDocTypeKey?: string;
-    assignedRole?: string;
-    startDate?: string;
-  }) {
+  async createProgram(
+    tenantId: string,
+    actorUserId: string,
+    buildingIdOrSlug: string,
+    body: {
+      obligationTemplateId: string;
+      name?: string;
+      description?: string;
+      domain?: string;
+      scope?: 'building_common' | 'unit_scoped';
+      executionMode: 'in_house' | 'contracted' | 'ad_hoc_approved';
+      performerOrgId?: string;
+      contractId?: string;
+      unitId?: string;
+      frequencyMonths?: number;
+      recurrenceRule?: string;
+      evidenceDocTypeKey?: string;
+      assignedRole?: string;
+      startDate?: string;
+    },
+  ) {
     await this.requireManager(tenantId, actorUserId);
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
 
@@ -184,7 +245,8 @@ export class PpmService {
     // expressible here due to nullable unitId so we enforce it in-app.
     const duplicate = await this.prisma.ppmPlanItem.findFirst({
       where: {
-        tenantId, buildingId,
+        tenantId,
+        buildingId,
         obligationTemplateId: obligation.id,
         scope: body.scope || 'building_common',
         unitId: body.unitId || null,
@@ -205,7 +267,8 @@ export class PpmService {
 
     const template = await this.prisma.ppmTemplate.create({
       data: {
-        tenantId, buildingId,
+        tenantId,
+        buildingId,
         name: body.name || obligation.name,
         description: body.description || null,
         domain: body.domain || obligation.domain || null,
@@ -231,7 +294,8 @@ export class PpmService {
     try {
       planItem = await this.prisma.ppmPlanItem.create({
         data: {
-          tenantId, buildingId,
+          tenantId,
+          buildingId,
           templateId: template.id,
           obligationTemplateId: obligation.id,
           assignedRole: body.assignedRole || 'maintenance_coordinator',
@@ -259,7 +323,12 @@ export class PpmService {
     return { template, planItem };
   }
 
-  async scheduleExecution(tenantId: string, actorUserId: string, planItemId: string, targetDate?: string) {
+  async scheduleExecution(
+    tenantId: string,
+    actorUserId: string,
+    planItemId: string,
+    targetDate?: string,
+  ) {
     await this.requireManager(tenantId, actorUserId);
     const plan = await this.prisma.ppmPlanItem.findFirst({
       where: { id: planItemId, tenantId },
@@ -270,8 +339,10 @@ export class PpmService {
     const due = targetDate ? new Date(targetDate) : plan.nextDueAt;
     const task = await this.prisma.taskInstance.create({
       data: {
-        tenantId, buildingId: plan.buildingId,
-        planItemId: plan.id, unitId: plan.unitId || null,
+        tenantId,
+        buildingId: plan.buildingId,
+        planItemId: plan.id,
+        unitId: plan.unitId || null,
         title: plan.template.name,
         status: 'open',
         lifecycleStage: 'scheduled',
@@ -288,7 +359,14 @@ export class PpmService {
     return task;
   }
 
-  private async log(tenantId: string, buildingId: string, taskId: string, actor: string, eventType: string, metadata: any = {}) {
+  private async log(
+    tenantId: string,
+    buildingId: string,
+    taskId: string,
+    actor: string,
+    eventType: string,
+    metadata: any = {},
+  ) {
     await this.prisma.ppmExecutionLog.create({
       data: { tenantId, buildingId, taskId, actor, eventType, metadata },
     });
@@ -316,10 +394,7 @@ export class PpmService {
    * explain why the action was blocked.
    */
   private assertSod(
-    step:
-      | 'submit_for_approval'
-      | 'record_completion'
-      | 'review_completion',
+    step: 'submit_for_approval' | 'record_completion' | 'review_completion',
     actorUserId: string,
     context: {
       createdByUserId?: string | null;
@@ -329,17 +404,28 @@ export class PpmService {
   ) {
     if (step === 'submit_for_approval') {
       if (context.requesterUserId && context.requesterUserId === actorUserId) {
-        throw new ForbiddenException('separation_of_duties: quote requester cannot submit the same quote for approval');
+        throw new ForbiddenException(
+          'separation_of_duties: quote requester cannot submit the same quote for approval',
+        );
       }
     }
     if (step === 'review_completion') {
       if (context.executorUserId && context.executorUserId === actorUserId) {
-        throw new ForbiddenException('separation_of_duties: executor cannot review their own completion');
+        throw new ForbiddenException(
+          'separation_of_duties: executor cannot review their own completion',
+        );
       }
     }
   }
 
-  private async transition(tenantId: string, actorUserId: string, taskId: string, from: string[], to: string, patch: any = {}) {
+  private async transition(
+    tenantId: string,
+    actorUserId: string,
+    taskId: string,
+    from: string[],
+    to: string,
+    patch: any = {},
+  ) {
     await this.requireManager(tenantId, actorUserId);
     const task = await this.getTask(tenantId, taskId);
     if (from.length && !from.includes(task.lifecycleStage)) {
@@ -349,42 +435,74 @@ export class PpmService {
       where: { id: task.id },
       data: { lifecycleStage: to, ...patch },
     });
-    await this.log(tenantId, task.buildingId, task.id, actorUserId, `lifecycle.${to}`, { from: task.lifecycleStage, patch });
+    await this.log(tenantId, task.buildingId, task.id, actorUserId, `lifecycle.${to}`, {
+      from: task.lifecycleStage,
+      patch,
+    });
     return updated;
   }
 
-  async requestQuote(tenantId: string, actorUserId: string, taskId: string, body: { quoteDocumentId?: string; quoteAmount?: number; quoteCurrency?: string; notes?: string }) {
+  async requestQuote(
+    tenantId: string,
+    actorUserId: string,
+    taskId: string,
+    body: {
+      quoteDocumentId?: string;
+      quoteAmount?: number;
+      quoteCurrency?: string;
+      notes?: string;
+    },
+  ) {
     const task = await this.getTask(tenantId, taskId);
-    if (task.executionMode !== 'ad_hoc_approved') throw new BadRequestException('only ad_hoc_approved tasks use quote flow');
+    if (task.executionMode !== 'ad_hoc_approved')
+      throw new BadRequestException('only ad_hoc_approved tasks use quote flow');
     return this.transition(tenantId, actorUserId, taskId, ['scheduled'], 'quote_requested', {
       quoteDocumentId: body.quoteDocumentId || null,
     });
   }
 
-  async recordQuote(tenantId: string, actorUserId: string, taskId: string, body: { quoteDocumentId?: string; quoteAmount: number; quoteCurrency?: string }) {
-    return this.transition(tenantId, actorUserId, taskId, ['quote_requested', 'scheduled'], 'quote_received', {
-      quoteDocumentId: body.quoteDocumentId || null,
-      quoteAmount: body.quoteAmount,
-      quoteCurrency: body.quoteCurrency || 'ILS',
-      quoteReceivedAt: new Date(),
-    });
+  async recordQuote(
+    tenantId: string,
+    actorUserId: string,
+    taskId: string,
+    body: { quoteDocumentId?: string; quoteAmount: number; quoteCurrency?: string },
+  ) {
+    return this.transition(
+      tenantId,
+      actorUserId,
+      taskId,
+      ['quote_requested', 'scheduled'],
+      'quote_received',
+      {
+        quoteDocumentId: body.quoteDocumentId || null,
+        quoteAmount: body.quoteAmount,
+        quoteCurrency: body.quoteCurrency || 'ILS',
+        quoteReceivedAt: new Date(),
+      },
+    );
   }
 
   async submitForApproval(tenantId: string, actorUserId: string, taskId: string) {
     await this.requireManager(tenantId, actorUserId);
     const task = await this.getTask(tenantId, taskId);
-    if (task.executionMode !== 'ad_hoc_approved') throw new BadRequestException('only ad_hoc_approved tasks need approval');
-    if (task.lifecycleStage !== 'quote_received') throw new BadRequestException(`need quote_received, got ${task.lifecycleStage}`);
+    if (task.executionMode !== 'ad_hoc_approved')
+      throw new BadRequestException('only ad_hoc_approved tasks need approval');
+    if (task.lifecycleStage !== 'quote_received')
+      throw new BadRequestException(`need quote_received, got ${task.lifecycleStage}`);
 
     // SoD: the person who requested / recorded the quote may not also submit it for approval.
     const quoteActorLog = await this.prisma.ppmExecutionLog.findFirst({
-      where: { taskId: task.id, eventType: { in: ['lifecycle.quote_requested', 'lifecycle.quote_received'] } },
+      where: {
+        taskId: task.id,
+        eventType: { in: ['lifecycle.quote_requested', 'lifecycle.quote_received'] },
+      },
       orderBy: { createdAt: 'asc' },
     });
     this.assertSod('submit_for_approval', actorUserId, { requesterUserId: quoteActorLog?.actor });
 
     const approval = await this.approvals.createRequest({
-      tenantId, buildingId: task.buildingId,
+      tenantId,
+      buildingId: task.buildingId,
       title: `PPM spend approval: ${task.title}`,
       type: 'spend_approval',
       amount: task.quoteAmount ?? 0,
@@ -400,7 +518,9 @@ export class PpmService {
       where: { id: task.id },
       data: { lifecycleStage: 'awaiting_approval', approvalRequestId: approval.id },
     });
-    await this.log(tenantId, task.buildingId, task.id, actorUserId, 'lifecycle.awaiting_approval', { approvalId: approval.id });
+    await this.log(tenantId, task.buildingId, task.id, actorUserId, 'lifecycle.awaiting_approval', {
+      approvalId: approval.id,
+    });
     return { task: updated, approvalRequestId: approval.id };
   }
 
@@ -408,11 +528,15 @@ export class PpmService {
     const task = await this.getTask(tenantId, taskId);
     if (task.executionMode !== 'ad_hoc_approved') throw new BadRequestException('not ad-hoc');
     if (!task.approvalRequestId) throw new BadRequestException('no approval attached');
-    const ar = await this.prisma.approvalRequest.findUnique({ where: { id: task.approvalRequestId } });
+    const ar = await this.prisma.approvalRequest.findUnique({
+      where: { id: task.approvalRequestId },
+    });
     if (!ar || ar.status !== 'approved') throw new BadRequestException('approval not yet approved');
     // SoD: the approval requester cannot be the one marking it approved on the task (that came from a different actor via /approvals/:id/approve).
     if (ar.requesterUserId && ar.requesterUserId === actorUserId) {
-      throw new ForbiddenException('separation_of_duties: approval requester cannot ratify their own approval');
+      throw new ForbiddenException(
+        'separation_of_duties: approval requester cannot ratify their own approval',
+      );
     }
     return this.transition(tenantId, actorUserId, taskId, ['awaiting_approval'], 'approved', {
       approvedAt: new Date(),
@@ -432,16 +556,27 @@ export class PpmService {
    * (baseline) page and other dashboards. Filter by baselineStatus to
    * restrict to onboarding-pending rows or the main-flow rows only.
    */
-  async listPlanItems(tenantId: string, buildingIdOrSlug: string, filter: { baselineStatus?: string } = {}) {
+  async listPlanItems(
+    tenantId: string,
+    buildingIdOrSlug: string,
+    filter: { baselineStatus?: string } = {},
+  ) {
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
     const where: any = { tenantId, buildingId };
     if (filter.baselineStatus) where.baselineStatus = filter.baselineStatus;
     return this.prisma.ppmPlanItem.findMany({
       where,
       select: {
-        id: true, templateId: true, nextDueAt: true, lastPerformedAt: true,
-        scope: true, executionMode: true, assignedRole: true,
-        baselineStatus: true, baselineSetAt: true, baselineNote: true,
+        id: true,
+        templateId: true,
+        nextDueAt: true,
+        lastPerformedAt: true,
+        scope: true,
+        executionMode: true,
+        assignedRole: true,
+        baselineStatus: true,
+        baselineSetAt: true,
+        baselineNote: true,
         baselineEvidenceDocumentId: true,
       },
     });
@@ -477,7 +612,9 @@ export class PpmService {
    * scheduler / compliance dashboards start including the row.
    */
   async recordBaseline(
-    tenantId: string, actorUserId: string, planItemId: string,
+    tenantId: string,
+    actorUserId: string,
+    planItemId: string,
     body: {
       mode?: 'set' | 'unknown_immediate' | 'unknown_backdated';
       lastPerformedAt?: string;
@@ -498,10 +635,13 @@ export class PpmService {
 
     // ── mode=set: real historical date + optional evidence ────────
     if (mode === 'set') {
-      if (!body.lastPerformedAt) throw new BadRequestException('lastPerformedAt required when mode=set');
+      if (!body.lastPerformedAt)
+        throw new BadRequestException('lastPerformedAt required when mode=set');
       const occurredAt = new Date(body.lastPerformedAt);
-      if (isNaN(occurredAt.getTime())) throw new BadRequestException('lastPerformedAt must be a valid date');
-      if (occurredAt.getTime() > Date.now()) throw new BadRequestException('lastPerformedAt cannot be in the future');
+      if (isNaN(occurredAt.getTime()))
+        throw new BadRequestException('lastPerformedAt must be a valid date');
+      if (occurredAt.getTime() > Date.now())
+        throw new BadRequestException('lastPerformedAt cannot be in the future');
 
       if (body.evidenceDocumentId) {
         const doc = await this.prisma.document.findFirst({
@@ -510,7 +650,11 @@ export class PpmService {
         if (!doc) throw new NotFoundException('evidence document not found in this building');
       }
 
-      let nextDue = nextDueFrom(plan.recurrenceRule, occurredAt, plan.template.frequencyMonths ?? null);
+      let nextDue = nextDueFrom(
+        plan.recurrenceRule,
+        occurredAt,
+        plan.template.frequencyMonths ?? null,
+      );
       const blackouts = await this.loadBlackouts(tenantId, plan.buildingId);
       if (blackouts.length > 0) {
         const shifted = applyBlackouts(nextDue, blackouts, plan.buildingId);
@@ -532,22 +676,36 @@ export class PpmService {
 
       const completion = await this.prisma.completionRecord.create({
         data: {
-          tenantId, buildingId: plan.buildingId,
-          taskInstanceId: null, workOrderId: null,
+          tenantId,
+          buildingId: plan.buildingId,
+          taskInstanceId: null,
+          workOrderId: null,
           completedByUserId: `baseline:${actorUserId}`,
           completedAt: occurredAt,
           serviceReportDocumentId: body.evidenceDocumentId || null,
-          notes: [body.notes, 'Baseline entry (set) — recorded at takeover from prior operator records.'].filter(Boolean).join(' — '),
+          notes: [
+            body.notes,
+            'Baseline entry (set) — recorded at takeover from prior operator records.',
+          ]
+            .filter(Boolean)
+            .join(' — '),
         },
       });
 
+      // PpmExecutionLog.taskId FK requires a TaskInstance; at baseline time
+      // no task exists yet, so the write will fail. Swallow — baseline
+      // already writes a CompletionRecord + AuditEntry, and a plan-item-
+      // scoped log table is TODO.
       await this.log(tenantId, plan.buildingId, plan.id, actorUserId, 'baseline.set', {
-        occurredAt, nextDueAt: nextDue, evidenceDocumentId: body.evidenceDocumentId || null,
+        occurredAt,
+        nextDueAt: nextDue,
+        evidenceDocumentId: body.evidenceDocumentId || null,
         completionRecordId: completion.id,
-      });
+      }).catch(() => undefined);
 
       return {
-        ok: true, mode: 'set' as const,
+        ok: true,
+        mode: 'set' as const,
         planItemId: updatedPlan.id,
         lastPerformedAt: updatedPlan.lastPerformedAt,
         nextDueAt: updatedPlan.nextDueAt,
@@ -558,9 +716,10 @@ export class PpmService {
 
     // ── mode=unknown_immediate / unknown_backdated ────────────────
     const now = new Date();
-    const noteText = mode === 'unknown_immediate'
-      ? 'Baseline unknown — plan item enters main flow flagged for immediate execution.'
-      : 'Baseline unknown — plan item enters main flow awaiting back-dated completion with confirming document.';
+    const noteText =
+      mode === 'unknown_immediate'
+        ? 'Baseline unknown — plan item enters main flow flagged for immediate execution.'
+        : 'Baseline unknown — plan item enters main flow awaiting back-dated completion with confirming document.';
 
     const updatedPlan = await this.prisma.ppmPlanItem.update({
       where: { id: plan.id },
@@ -575,10 +734,11 @@ export class PpmService {
       },
     });
 
+    // Same reason as above — no TaskInstance exists yet at baseline time.
     await this.log(tenantId, plan.buildingId, plan.id, actorUserId, `baseline.${mode}`, {
       note: noteText,
       mode,
-    });
+    }).catch(() => undefined);
 
     return {
       ok: true,
@@ -596,20 +756,34 @@ export class PpmService {
    * counts and per-row results for the UI.
    */
   async recordBaselineBulk(
-    tenantId: string, actorUserId: string, buildingIdOrSlug: string,
-    body: { items: Array<{
-      planItemId: string;
-      mode?: 'set' | 'unknown_immediate' | 'unknown_backdated';
-      lastPerformedAt?: string;
-      evidenceDocumentId?: string | null;
-      notes?: string | null;
-      skip?: boolean;
-    }> },
+    tenantId: string,
+    actorUserId: string,
+    buildingIdOrSlug: string,
+    body: {
+      items: Array<{
+        planItemId: string;
+        mode?: 'set' | 'unknown_immediate' | 'unknown_backdated';
+        lastPerformedAt?: string;
+        evidenceDocumentId?: string | null;
+        notes?: string | null;
+        skip?: boolean;
+      }>;
+    },
   ) {
     await this.requireManager(tenantId, actorUserId);
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
-    const results: Array<{ planItemId: string; ok: boolean; error?: string; mode?: string; lastPerformedAt?: Date | null; nextDueAt?: Date; baselineStatus?: string }> = [];
-    let applied = 0, skipped = 0, errored = 0;
+    const results: Array<{
+      planItemId: string;
+      ok: boolean;
+      error?: string;
+      mode?: string;
+      lastPerformedAt?: Date | null;
+      nextDueAt?: Date;
+      baselineStatus?: string;
+    }> = [];
+    let applied = 0,
+      skipped = 0,
+      errored = 0;
 
     for (const it of body.items || []) {
       // Explicit skip OR no actionable intent → leave the row in baseline
@@ -633,7 +807,9 @@ export class PpmService {
         });
         applied++;
         results.push({
-          planItemId: it.planItemId, ok: true, mode: r.mode,
+          planItemId: it.planItemId,
+          ok: true,
+          mode: r.mode,
           lastPerformedAt: r.lastPerformedAt as any,
           nextDueAt: r.nextDueAt as any,
           baselineStatus: r.baselineStatus,
@@ -648,17 +824,33 @@ export class PpmService {
 
   async markInProgress(tenantId: string, actorUserId: string, taskId: string) {
     const task = await this.getTask(tenantId, taskId);
-    const allowed = task.executionMode === 'ad_hoc_approved' ? ['ordered'] : ['scheduled', 'ordered'];
+    const allowed =
+      task.executionMode === 'ad_hoc_approved' ? ['ordered'] : ['scheduled', 'ordered'];
     return this.transition(tenantId, actorUserId, taskId, allowed, 'in_progress', {});
   }
 
-  async recordCompletion(tenantId: string, actorUserId: string, taskId: string, body: { serviceReportDocumentId?: string; evidenceDocuments?: string[]; result?: string; completedAt?: string; notes?: string }) {
+  async recordCompletion(
+    tenantId: string,
+    actorUserId: string,
+    taskId: string,
+    body: {
+      serviceReportDocumentId?: string;
+      evidenceDocuments?: string[];
+      result?: string;
+      completedAt?: string;
+      notes?: string;
+    },
+  ) {
     await this.requireManager(tenantId, actorUserId);
     const task = await this.getTask(tenantId, taskId);
     if (!['in_progress', 'ordered', 'scheduled'].includes(task.lifecycleStage)) {
       throw new BadRequestException(`cannot complete from ${task.lifecycleStage}`);
     }
-    if (task.evidenceRequired && !body.serviceReportDocumentId && !(body.evidenceDocuments && body.evidenceDocuments.length)) {
+    if (
+      task.evidenceRequired &&
+      !body.serviceReportDocumentId &&
+      !(body.evidenceDocuments && body.evidenceDocuments.length)
+    ) {
       throw new BadRequestException('evidence required for completion');
     }
     const completedAt = body.completedAt ? new Date(body.completedAt) : new Date();
@@ -677,9 +869,16 @@ export class PpmService {
     });
 
     if (task.planItemId) {
-      const plan = await this.prisma.ppmPlanItem.findUnique({ where: { id: task.planItemId }, include: { template: true } });
+      const plan = await this.prisma.ppmPlanItem.findUnique({
+        where: { id: task.planItemId },
+        include: { template: true },
+      });
       if (plan) {
-        let nextDue = nextDueFrom(plan.recurrenceRule, completedAt, plan.template.frequencyMonths ?? null);
+        let nextDue = nextDueFrom(
+          plan.recurrenceRule,
+          completedAt,
+          plan.template.frequencyMonths ?? null,
+        );
         const blackouts = await this.loadBlackouts(tenantId, plan.buildingId);
         if (blackouts.length > 0) {
           const shifted = applyBlackouts(nextDue, blackouts, plan.buildingId);
@@ -693,7 +892,8 @@ export class PpmService {
     }
 
     await this.log(tenantId, task.buildingId, task.id, actorUserId, 'lifecycle.completed', {
-      completedAt, serviceReportDocumentId: body.serviceReportDocumentId,
+      completedAt,
+      serviceReportDocumentId: body.serviceReportDocumentId,
     });
     return updated;
   }
@@ -711,8 +911,10 @@ export class PpmService {
     body: { decision: 'accept' | 'reject'; note?: string },
   ) {
     const task = await this.getTask(tenantId, taskId);
-    if (task.lifecycleStage !== 'completed') throw new BadRequestException(`cannot review from ${task.lifecycleStage}`);
-    if (!['accept', 'reject'].includes(body.decision)) throw new BadRequestException('decision must be accept|reject');
+    if (task.lifecycleStage !== 'completed')
+      throw new BadRequestException(`cannot review from ${task.lifecycleStage}`);
+    if (!['accept', 'reject'].includes(body.decision))
+      throw new BadRequestException('decision must be accept|reject');
 
     // SoD: executor ≠ reviewer.
     this.assertSod('review_completion', actorUserId, { executorUserId: task.completedByUserId });
@@ -722,61 +924,133 @@ export class PpmService {
       ? task.planItem.template.closedByRoles
       : ['chief_engineer', 'building_manager'];
     const hasClosingRole = await this.prisma.buildingRoleAssignment.findFirst({
-      where: { tenantId, buildingId: task.buildingId, userId: actorUserId, roleKey: { in: closingRoles } },
+      where: {
+        tenantId,
+        buildingId: task.buildingId,
+        userId: actorUserId,
+        roleKey: { in: closingRoles },
+      },
     });
     const isWsManager = await this.prisma.membership.findFirst({
-      where: { tenantId, userId: actorUserId, roleKey: { in: ['workspace_owner', 'workspace_admin'] } },
+      where: {
+        tenantId,
+        userId: actorUserId,
+        roleKey: { in: ['workspace_owner', 'workspace_admin'] },
+      },
     });
     if (!hasClosingRole && !isWsManager) {
-      throw new ForbiddenException(`only one of [${closingRoles.join(', ')}] or workspace manager can review completion`);
+      throw new ForbiddenException(
+        `only one of [${closingRoles.join(', ')}] or workspace manager can review completion`,
+      );
     }
 
     if (body.decision === 'reject') {
       // Bounce back to in_progress so the executor can fix and re-submit.
       const updated = await this.prisma.taskInstance.update({
         where: { id: task.id },
-        data: { lifecycleStage: 'in_progress', status: 'open', completedAt: null, completedByUserId: null, result: null },
+        data: {
+          lifecycleStage: 'in_progress',
+          status: 'open',
+          completedAt: null,
+          completedByUserId: null,
+          result: null,
+        },
       });
-      await this.log(tenantId, task.buildingId, task.id, actorUserId, 'lifecycle.review.rejected', { note: body.note || null });
+      await this.log(tenantId, task.buildingId, task.id, actorUserId, 'lifecycle.review.rejected', {
+        note: body.note || null,
+      });
       return updated;
     }
 
-    await this.log(tenantId, task.buildingId, task.id, actorUserId, 'lifecycle.review.accepted', { note: body.note || null });
+    await this.log(tenantId, task.buildingId, task.id, actorUserId, 'lifecycle.review.accepted', {
+      note: body.note || null,
+    });
     return task;
   }
 
-  async distributeEvidence(tenantId: string, actorUserId: string, taskId: string, body: { recipients: Array<{ role?: string; userId?: string; email?: string; deliveredAt?: string }>; note?: string }) {
+  async distributeEvidence(
+    tenantId: string,
+    actorUserId: string,
+    taskId: string,
+    body: {
+      recipients: Array<{ role?: string; userId?: string; email?: string; deliveredAt?: string }>;
+      note?: string;
+    },
+  ) {
     const task = await this.getTask(tenantId, taskId);
     if (!['completed', 'evidence_distributed'].includes(task.lifecycleStage)) {
-      throw new BadRequestException(`distribute only after completion (got ${task.lifecycleStage})`);
+      throw new BadRequestException(
+        `distribute only after completion (got ${task.lifecycleStage})`,
+      );
     }
-    const prev = Array.isArray(task.evidenceDistributedTo) ? (task.evidenceDistributedTo as any[]) : [];
+    const prev = Array.isArray(task.evidenceDistributedTo)
+      ? (task.evidenceDistributedTo as any[])
+      : [];
     const now = new Date().toISOString();
-    const merged = [...prev, ...body.recipients.map((r) => ({ ...r, loggedAt: r.deliveredAt || now }))];
-    return this.transition(tenantId, actorUserId, taskId, ['completed', 'evidence_distributed'], 'evidence_distributed', {
-      evidenceDistributedTo: merged,
-    });
+    const merged = [
+      ...prev,
+      ...body.recipients.map((r) => ({ ...r, loggedAt: r.deliveredAt || now })),
+    ];
+    return this.transition(
+      tenantId,
+      actorUserId,
+      taskId,
+      ['completed', 'evidence_distributed'],
+      'evidence_distributed',
+      {
+        evidenceDistributedTo: merged,
+      },
+    );
   }
 
   async archive(tenantId: string, actorUserId: string, taskId: string) {
-    return this.transition(tenantId, actorUserId, taskId, ['completed', 'evidence_distributed'], 'archived', {
-      archivedAt: new Date(),
-    });
+    return this.transition(
+      tenantId,
+      actorUserId,
+      taskId,
+      ['completed', 'evidence_distributed'],
+      'archived',
+      {
+        archivedAt: new Date(),
+      },
+    );
   }
 
   async cancel(tenantId: string, actorUserId: string, taskId: string, reason?: string) {
-    return this.transition(tenantId, actorUserId, taskId, ALL_STAGES.filter((s) => !['completed', 'archived', 'cancelled'].includes(s)), 'cancelled', {
-      status: 'cancelled', blockedReason: reason || null,
-    });
+    return this.transition(
+      tenantId,
+      actorUserId,
+      taskId,
+      ALL_STAGES.filter((s) => !['completed', 'archived', 'cancelled'].includes(s)),
+      'cancelled',
+      {
+        status: 'cancelled',
+        blockedReason: reason || null,
+      },
+    );
   }
 
-  async listExecutions(tenantId: string, buildingIdOrSlug: string, filter: { stage?: string; scope?: string; limit?: number } = {}) {
+  async listExecutions(
+    tenantId: string,
+    buildingIdOrSlug: string,
+    filter: { stage?: string; scope?: string; limit?: number } = {},
+  ) {
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
     const where: any = { tenantId, buildingId };
     if (filter.stage) where.lifecycleStage = filter.stage;
     const tasks = await this.prisma.taskInstance.findMany({
-      where, orderBy: { dueAt: 'asc' }, take: filter.limit || 200,
-      include: { planItem: { include: { template: { select: { name: true, scope: true, executionMode: true, performerOrgId: true } } } } },
+      where,
+      orderBy: { dueAt: 'asc' },
+      take: filter.limit || 200,
+      include: {
+        planItem: {
+          include: {
+            template: {
+              select: { name: true, scope: true, executionMode: true, performerOrgId: true },
+            },
+          },
+        },
+      },
     });
     if (filter.scope) {
       return tasks.filter((t) => t.planItem?.template.scope === filter.scope);
@@ -790,7 +1064,9 @@ export class PpmService {
     // Exclude 'pending' (awaiting baseline) — those live on the Setup page only.
     const items = await this.prisma.ppmPlanItem.findMany({
       where: {
-        tenantId, buildingId, nextDueAt: { lte: to },
+        tenantId,
+        buildingId,
+        nextDueAt: { lte: to },
         baselineStatus: { not: 'pending' },
       },
       include: { template: true, obligation: { select: { name: true } } },
@@ -831,28 +1107,38 @@ export class PpmService {
         orderBy: { name: 'asc' },
       }),
       this.prisma.buildingRoleAssignment.findMany({
-        where: { tenantId, buildingId, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+        where: {
+          tenantId,
+          buildingId,
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        },
         include: {
           user: { select: { id: true, displayName: true, email: true, username: true } },
           role: { select: { key: true, name: true } },
         },
         orderBy: { delegatedAt: 'asc' },
       }),
-      this.prisma.role.findMany({ select: { key: true, name: true, scope: true }, orderBy: { name: 'asc' } }),
+      this.prisma.role.findMany({
+        select: { key: true, name: true, scope: true },
+        orderBy: { name: 'asc' },
+      }),
     ]);
 
     // Prefer a managed plan item per obligation when multiple exist (e.g. a
     // managed one + a lingering pending sibling created before baseline was set).
-    const appliedByObligation = new Map<string, typeof applied[number]>();
+    const appliedByObligation = new Map<string, (typeof applied)[number]>();
     for (const p of applied) {
       const existing = appliedByObligation.get(p.obligationTemplateId);
-      if (!existing) { appliedByObligation.set(p.obligationTemplateId, p); continue; }
+      if (!existing) {
+        appliedByObligation.set(p.obligationTemplateId, p);
+        continue;
+      }
       if (existing.baselineStatus === 'pending' && p.baselineStatus !== 'pending') {
         appliedByObligation.set(p.obligationTemplateId, p);
       }
     }
 
-    const markByObligation = new Map<string, typeof marks[number]>();
+    const markByObligation = new Map<string, (typeof marks)[number]>();
     for (const m of marks) markByObligation.set(m.obligationTemplateId, m);
 
     const rows = obligations.map((o) => {
@@ -879,38 +1165,47 @@ export class PpmService {
         bases: o.bases.map((b) => ({ type: b.type, referenceCode: b.referenceCode })),
         applicability: o.applicabilityRules.map((r) => r.predicate as any),
         status,
-        appliedProgram: tpl && app ? {
-          planItemId: app.id,
-          templateId: app.templateId,
-          baselineStatus: app.baselineStatus,
-          scope: tpl.scope,
-          executionMode: tpl.executionMode,
-          performerOrgId: tpl.performerOrgId,
-          contractId: tpl.contractId,
-          frequencyMonths: tpl.frequencyMonths,
-          assignedRole: tpl.assignedRole,
-          assignedUserId: tpl.assignedUserId,
-          approvalChain: tpl.approvalChain,
-          evidenceRecipients: tpl.evidenceRecipients,
-          openedByRoles: tpl.openedByRoles,
-          closedByRoles: tpl.closedByRoles,
-          slaReminderDays: tpl.slaReminderDays,
-          estimatedAnnualCost: tpl.estimatedAnnualCost,
-          estimatedCostCurrency: tpl.estimatedCostCurrency,
-          requiresPhotoEvidence: tpl.requiresPhotoEvidence,
-          requiresSignoff: tpl.requiresSignoff,
-          retentionYears: tpl.retentionYears,
-          instructions: tpl.instructions,
-          description: tpl.description,
-          lastPerformedAt: app.lastPerformedAt,
-          nextDueAt: app.nextDueAt,
-        } : null,
+        appliedProgram:
+          tpl && app
+            ? {
+                planItemId: app.id,
+                templateId: app.templateId,
+                baselineStatus: app.baselineStatus,
+                scope: tpl.scope,
+                executionMode: tpl.executionMode,
+                performerOrgId: tpl.performerOrgId,
+                contractId: tpl.contractId,
+                frequencyMonths: tpl.frequencyMonths,
+                assignedRole: tpl.assignedRole,
+                assignedUserId: tpl.assignedUserId,
+                approvalChain: tpl.approvalChain,
+                evidenceRecipients: tpl.evidenceRecipients,
+                openedByRoles: tpl.openedByRoles,
+                closedByRoles: tpl.closedByRoles,
+                slaReminderDays: tpl.slaReminderDays,
+                estimatedAnnualCost: tpl.estimatedAnnualCost,
+                estimatedCostCurrency: tpl.estimatedCostCurrency,
+                requiresPhotoEvidence: tpl.requiresPhotoEvidence,
+                requiresSignoff: tpl.requiresSignoff,
+                retentionYears: tpl.retentionYears,
+                instructions: tpl.instructions,
+                description: tpl.description,
+                lastPerformedAt: app.lastPerformedAt,
+                nextDueAt: app.nextDueAt,
+              }
+            : null,
         notApplicableNote: mark?.complianceStatus === 'not_applicable' ? mark.createdBy : null,
       };
     });
 
-    const byStatus = rows.reduce<Record<string, number>>((a, r) => (a[r.status] = (a[r.status] || 0) + 1, a), {});
-    const byDomain = rows.reduce<Record<string, number>>((a, r) => (a[r.domain || 'other'] = (a[r.domain || 'other'] || 0) + 1, a), {});
+    const byStatus = rows.reduce<Record<string, number>>(
+      (a, r) => ((a[r.status] = (a[r.status] || 0) + 1), a),
+      {},
+    );
+    const byDomain = rows.reduce<Record<string, number>>(
+      (a, r) => ((a[r.domain || 'other'] = (a[r.domain || 'other'] || 0) + 1), a),
+      {},
+    );
 
     const staffList = staff.map((a) => ({
       userId: a.user.id,
@@ -923,7 +1218,8 @@ export class PpmService {
 
     return {
       total: rows.length,
-      byStatus, byDomain,
+      byStatus,
+      byDomain,
       organizations: orgs,
       staff: staffList,
       roles,
@@ -968,29 +1264,43 @@ export class PpmService {
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
     if (!body?.items?.length) throw new BadRequestException('items required');
 
-    let applied = 0, marked = 0, removed = 0, skipped = 0;
+    let applied = 0,
+      marked = 0,
+      removed = 0,
+      skipped = 0;
     for (const it of body.items) {
-      if (it.action === 'skip') { skipped++; continue; }
+      if (it.action === 'skip') {
+        skipped++;
+        continue;
+      }
 
       const obligation = await this.prisma.obligationTemplate.findFirst({
         where: { id: it.obligationTemplateId, tenantId },
       });
-      if (!obligation) { skipped++; continue; }
+      if (!obligation) {
+        skipped++;
+        continue;
+      }
 
       if (it.action === 'not_applicable') {
         const existingPlan = await this.prisma.ppmPlanItem.findFirst({
           where: { tenantId, buildingId, obligationTemplateId: obligation.id },
         });
         if (existingPlan) {
-          await this.prisma.ppmPlanItem.deleteMany({ where: { obligationTemplateId: obligation.id, buildingId } });
-          await this.prisma.ppmTemplate.deleteMany({ where: { buildingId, id: existingPlan.templateId } });
+          await this.prisma.ppmPlanItem.deleteMany({
+            where: { obligationTemplateId: obligation.id, buildingId },
+          });
+          await this.prisma.ppmTemplate.deleteMany({
+            where: { buildingId, id: existingPlan.templateId },
+          });
         }
         await this.prisma.buildingObligation.upsert({
           where: {
             seedKey: `na:${buildingId}:${obligation.id}`,
           },
           create: {
-            tenantId, buildingId,
+            tenantId,
+            buildingId,
             obligationTemplateId: obligation.id,
             complianceStatus: 'not_applicable',
             criticality: 'low',
@@ -1012,10 +1322,16 @@ export class PpmService {
         });
         if (existingPlan) {
           await this.prisma.ppmPlanItem.delete({ where: { id: existingPlan.id } });
-          await this.prisma.ppmTemplate.deleteMany({ where: { id: existingPlan.templateId, buildingId } });
+          await this.prisma.ppmTemplate.deleteMany({
+            where: { id: existingPlan.templateId, buildingId },
+          });
         }
         await this.prisma.buildingObligation.deleteMany({
-          where: { buildingId, obligationTemplateId: obligation.id, complianceStatus: 'not_applicable' },
+          where: {
+            buildingId,
+            obligationTemplateId: obligation.id,
+            complianceStatus: 'not_applicable',
+          },
         });
         removed++;
         continue;
@@ -1029,23 +1345,31 @@ export class PpmService {
         instructions: it.instructions ?? undefined,
         scope: it.scope ?? undefined,
         executionMode: it.executionMode ?? undefined,
-        performerOrgId: it.performerOrgId === null ? null : it.performerOrgId ?? undefined,
-        contractId: it.contractId === null ? null : it.contractId ?? undefined,
-        requiresApprovalBeforeOrder: it.executionMode ? it.executionMode === 'ad_hoc_approved' : undefined,
+        performerOrgId: it.performerOrgId === null ? null : (it.performerOrgId ?? undefined),
+        contractId: it.contractId === null ? null : (it.contractId ?? undefined),
+        requiresApprovalBeforeOrder: it.executionMode
+          ? it.executionMode === 'ad_hoc_approved'
+          : undefined,
         frequencyMonths: it.frequencyMonths ?? undefined,
         assignedRole: it.assignedRole ?? undefined,
-        assignedUserId: it.assignedUserId === null ? null : it.assignedUserId ?? undefined,
-        approvalChain: it.approvalChain === null ? null : (it.approvalChain as any) ?? undefined,
-        evidenceRecipients: it.evidenceRecipients === null ? null : (it.evidenceRecipients as any) ?? undefined,
+        assignedUserId: it.assignedUserId === null ? null : (it.assignedUserId ?? undefined),
+        approvalChain: it.approvalChain === null ? null : ((it.approvalChain as any) ?? undefined),
+        evidenceRecipients:
+          it.evidenceRecipients === null ? null : ((it.evidenceRecipients as any) ?? undefined),
         openedByRoles: it.openedByRoles ?? undefined,
         closedByRoles: it.closedByRoles ?? undefined,
         slaReminderDays: it.slaReminderDays ?? undefined,
-        estimatedAnnualCost: it.estimatedAnnualCost === null ? null : it.estimatedAnnualCost ?? undefined,
-        estimatedCostCurrency: it.estimatedCostCurrency === null ? null : it.estimatedCostCurrency ?? undefined,
+        estimatedAnnualCost:
+          it.estimatedAnnualCost === null ? null : (it.estimatedAnnualCost ?? undefined),
+        estimatedCostCurrency:
+          it.estimatedCostCurrency === null ? null : (it.estimatedCostCurrency ?? undefined),
         requiresPhotoEvidence: it.requiresPhotoEvidence ?? undefined,
         requiresSignoff: it.requiresSignoff ?? undefined,
-        retentionYears: it.retentionYears === null ? null : it.retentionYears ?? undefined,
-        evidenceDocumentTemplateId: it.evidenceDocumentTemplateId === null ? null : it.evidenceDocumentTemplateId ?? undefined,
+        retentionYears: it.retentionYears === null ? null : (it.retentionYears ?? undefined),
+        evidenceDocumentTemplateId:
+          it.evidenceDocumentTemplateId === null
+            ? null
+            : (it.evidenceDocumentTemplateId ?? undefined),
       };
 
       const existingPlan = await this.prisma.ppmPlanItem.findFirst({
@@ -1061,18 +1385,19 @@ export class PpmService {
           data: {
             scope: it.scope ?? undefined,
             executionMode: it.executionMode ?? undefined,
-            performerOrgId: it.performerOrgId === null ? null : it.performerOrgId ?? undefined,
-            contractId: it.contractId === null ? null : it.contractId ?? undefined,
+            performerOrgId: it.performerOrgId === null ? null : (it.performerOrgId ?? undefined),
+            contractId: it.contractId === null ? null : (it.contractId ?? undefined),
             assignedRole: it.assignedRole ?? undefined,
-            assignedUserId: it.assignedUserId === null ? null : it.assignedUserId ?? undefined,
-            unitId: it.unitId === null ? null : it.unitId ?? undefined,
+            assignedUserId: it.assignedUserId === null ? null : (it.assignedUserId ?? undefined),
+            unitId: it.unitId === null ? null : (it.unitId ?? undefined),
           },
         });
         applied++;
       } else {
         const template = await this.prisma.ppmTemplate.create({
           data: {
-            tenantId, buildingId,
+            tenantId,
+            buildingId,
             name: obligation.name,
             description: it.description || null,
             instructions: it.instructions || null,
@@ -1103,7 +1428,8 @@ export class PpmService {
         try {
           await this.prisma.ppmPlanItem.create({
             data: {
-              tenantId, buildingId,
+              tenantId,
+              buildingId,
               templateId: template.id,
               obligationTemplateId: obligation.id,
               assignedRole: it.assignedRole || 'maintenance_coordinator',
@@ -1124,15 +1450,19 @@ export class PpmService {
           // clean it up and throw a clean conflict so the caller can retry the
           // batch or skip this row.
           if (isPpmPlanItemUniqueConflict(e)) {
-            await this.prisma.ppmTemplate.delete({ where: { id: template.id } }).catch(() => undefined);
-            throw new ConflictException(
-              `${DUPLICATE_PLAN_ITEM_MSG} (obligation ${obligation.id})`,
-            );
+            await this.prisma.ppmTemplate
+              .delete({ where: { id: template.id } })
+              .catch(() => undefined);
+            throw new ConflictException(`${DUPLICATE_PLAN_ITEM_MSG} (obligation ${obligation.id})`);
           }
           throw e;
         }
         await this.prisma.buildingObligation.deleteMany({
-          where: { buildingId, obligationTemplateId: obligation.id, complianceStatus: 'not_applicable' },
+          where: {
+            buildingId,
+            obligationTemplateId: obligation.id,
+            complianceStatus: 'not_applicable',
+          },
         });
         applied++;
       }
@@ -1144,12 +1474,14 @@ export class PpmService {
   async getExecution(tenantId: string, taskId: string) {
     const task = await this.getTask(tenantId, taskId);
     const logs = await this.prisma.ppmExecutionLog.findMany({
-      where: { taskId: task.id }, orderBy: { createdAt: 'asc' },
+      where: { taskId: task.id },
+      orderBy: { createdAt: 'asc' },
     });
     let approval = null;
     if (task.approvalRequestId) {
       approval = await this.prisma.approvalRequest.findUnique({
-        where: { id: task.approvalRequestId }, include: { steps: { orderBy: { orderNo: 'asc' } } },
+        where: { id: task.approvalRequestId },
+        include: { steps: { orderBy: { orderNo: 'asc' } } },
       });
     }
     return { task, logs, approval };
@@ -1162,8 +1494,14 @@ export class PpmService {
       this.prisma.ppmPlanItem.findMany({
         where: { tenantId, assetId },
         select: {
-          id: true, templateId: true, nextDueAt: true, lastPerformedAt: true,
-          scope: true, executionMode: true, assignedRole: true, baselineStatus: true,
+          id: true,
+          templateId: true,
+          nextDueAt: true,
+          lastPerformedAt: true,
+          scope: true,
+          executionMode: true,
+          assignedRole: true,
+          baselineStatus: true,
           template: { select: { id: true, name: true, domain: true, frequencyMonths: true } },
         },
         orderBy: { nextDueAt: 'asc' },
@@ -1171,8 +1509,13 @@ export class PpmService {
       this.prisma.ppmPlanItem.findMany({
         where: { tenantId, buildingId, assetId: null },
         select: {
-          id: true, templateId: true, nextDueAt: true, scope: true,
-          executionMode: true, assignedRole: true, baselineStatus: true,
+          id: true,
+          templateId: true,
+          nextDueAt: true,
+          scope: true,
+          executionMode: true,
+          assignedRole: true,
+          baselineStatus: true,
           template: { select: { id: true, name: true, domain: true, frequencyMonths: true } },
         },
         orderBy: [{ baselineStatus: 'asc' }, { nextDueAt: 'asc' }],
@@ -1182,7 +1525,10 @@ export class PpmService {
   }
 
   async attachPlanItemToAsset(
-    tenantId: string, planItemId: string, assetId: string, buildingId: string,
+    tenantId: string,
+    planItemId: string,
+    assetId: string,
+    buildingId: string,
   ) {
     const p = await this.prisma.ppmPlanItem.findFirst({ where: { id: planItemId, tenantId } });
     if (!p) throw new NotFoundException('plan item not found');
@@ -1190,7 +1536,9 @@ export class PpmService {
       throw new BadRequestException('plan item belongs to a different building');
     }
     if (p.assetId && p.assetId !== assetId) {
-      throw new BadRequestException('plan item is already attached to another asset — detach it first');
+      throw new BadRequestException(
+        'plan item is already attached to another asset — detach it first',
+      );
     }
     return this.prisma.ppmPlanItem.update({
       where: { id: planItemId },
@@ -1199,7 +1547,9 @@ export class PpmService {
   }
 
   async detachPlanItemFromAsset(tenantId: string, planItemId: string, assetId: string) {
-    const p = await this.prisma.ppmPlanItem.findFirst({ where: { id: planItemId, tenantId, assetId } });
+    const p = await this.prisma.ppmPlanItem.findFirst({
+      where: { id: planItemId, tenantId, assetId },
+    });
     if (!p) throw new NotFoundException('plan item not attached to this asset');
     const updated = await this.prisma.ppmPlanItem.update({
       where: { id: planItemId },
@@ -1227,7 +1577,13 @@ export class PpmService {
     const [obligations, existing] = await Promise.all([
       this.prisma.obligationTemplate.findMany({
         where: { tenantId },
-        select: { id: true, name: true, domain: true, recurrenceRule: true, requiredDocumentTypeKey: true },
+        select: {
+          id: true,
+          name: true,
+          domain: true,
+          recurrenceRule: true,
+          requiredDocumentTypeKey: true,
+        },
       }),
       this.prisma.ppmPlanItem.findMany({
         where: { tenantId, buildingId, scope: 'building_common' },
@@ -1241,10 +1597,14 @@ export class PpmService {
     const defaultNextDue = new Date(Date.now() + 365 * 86400000);
 
     for (const o of obligations) {
-      if (already.has(o.id)) { skipped += 1; continue; }
+      if (already.has(o.id)) {
+        skipped += 1;
+        continue;
+      }
       const tpl = await this.prisma.ppmTemplate.create({
         data: {
-          tenantId, buildingId,
+          tenantId,
+          buildingId,
           name: o.name,
           domain: o.domain || null,
           scope: 'building_common',
@@ -1257,7 +1617,8 @@ export class PpmService {
       try {
         await this.prisma.ppmPlanItem.create({
           data: {
-            tenantId, buildingId,
+            tenantId,
+            buildingId,
             templateId: tpl.id,
             obligationTemplateId: o.id,
             assignedRole: 'maintenance_coordinator',

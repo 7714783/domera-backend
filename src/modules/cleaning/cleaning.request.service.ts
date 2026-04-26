@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { MigratorPrismaService } from '../../prisma/prisma.migrator';
 import { ActorResolver } from '../../common/authz';
+import { AuditService } from '../audit/audit.service';
 import { CleaningActor, canAssign, canChangeStatus, filterForActor } from './cleaning.access';
 
 const VALID_PRIORITIES = ['low', 'normal', 'high', 'urgent'];
@@ -35,6 +36,7 @@ export class CleaningRequestService {
     private readonly prisma: PrismaService,
     private readonly migrator: MigratorPrismaService,
     private readonly actorResolver: ActorResolver,
+    private readonly audit: AuditService,
   ) {}
 
   async list(
@@ -271,6 +273,16 @@ export class CleaningRequestService {
       actor.userId,
       {},
     );
+    await this.audit.transition({
+      tenantId: actor.tenantId,
+      actor: actor.userId,
+      actorRole: actor.kind,
+      entityType: 'cleaning_request',
+      entityId: id,
+      from: req.status,
+      to,
+      buildingId: req.buildingId,
+    });
     return updated;
   }
 

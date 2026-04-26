@@ -81,8 +81,14 @@ export class ApprovalsService {
     // Substitute approver: allow if an active delegation lets actor sign for pendingStep.role.
     let delegation: Awaited<ReturnType<typeof this.delegations.activeDelegationFor>> | null = null;
     if (pendingStep.role !== actorRole) {
-      delegation = await this.delegations.activeDelegationFor(tenantId, actorName, pendingStep.role, request.buildingId);
-      const allowedOverride = actorRole === 'owner_representative' && pendingStep.orderNo === request.steps.length;
+      delegation = await this.delegations.activeDelegationFor(
+        tenantId,
+        actorName,
+        pendingStep.role,
+        request.buildingId,
+      );
+      const allowedOverride =
+        actorRole === 'owner_representative' && pendingStep.orderNo === request.steps.length;
       if (!delegation && !allowedOverride) {
         throw new Error(`Current pending step requires role: ${pendingStep.role}`);
       }
@@ -95,7 +101,11 @@ export class ApprovalsService {
       if (actorRole === 'building_manager' && request.amount > 25000) {
         throw new Error('building_manager limit exceeded');
       }
-      if (pendingStep.orderNo === 3 && request.amount > 50000 && actorRole !== 'owner_representative') {
+      if (
+        pendingStep.orderNo === 3 &&
+        request.amount > 50000 &&
+        actorRole !== 'owner_representative'
+      ) {
         throw new Error('owner_representative required for L3 approval above 50000 ILS');
       }
     }
@@ -126,10 +136,31 @@ export class ApprovalsService {
     const allApproved = fresh.steps.every((x) => x.status === 'approved');
     const hasRejected = fresh.steps.some((x) => x.status === 'rejected');
 
+    const nextStatus = hasRejected ? 'rejected' : allApproved ? 'approved' : 'pending';
     await this.prisma.approvalRequest.update({
       where: { id: fresh.id },
-      data: {
-        status: hasRejected ? 'rejected' : allApproved ? 'approved' : 'pending',
+      data: { status: nextStatus },
+    });
+
+    // INIT-010 P0-3 — universal audit_entries on every approval state change.
+    // The legacy auditService.write() call below stays for backwards
+    // compatibility with the existing audit list/search UI; transition()
+    // adds a structured before/after row used by compliance reports.
+    await this.auditService.transition({
+      tenantId,
+      actor: actorName,
+      actorRole,
+      entityType: 'approval_request',
+      entityId: fresh.id,
+      from: request.status,
+      to: nextStatus,
+      buildingId: request.buildingId,
+      sensitive: request.type === 'spend_approval',
+      metadata: {
+        title: request.title,
+        type: request.type,
+        stepId: pendingStep.id,
+        delegationId: delegation?.id,
       },
     });
 
@@ -170,14 +201,22 @@ export class ApprovalsService {
   // originated. Approvals owns the approval_requests table; callers must route
   // through this method instead of creating rows themselves.
   async createRequest(body: {
-    tenantId: string; buildingId: string; title: string; type: string;
-    amount?: number; requesterUserId: string; requesterName?: string;
-    hint?: string; steps: Array<{ orderNo: number; role: string }>;
+    tenantId: string;
+    buildingId: string;
+    title: string;
+    type: string;
+    amount?: number;
+    requesterUserId: string;
+    requesterName?: string;
+    hint?: string;
+    steps: Array<{ orderNo: number; role: string }>;
   }) {
     return this.prisma.approvalRequest.create({
       data: {
-        tenantId: body.tenantId, buildingId: body.buildingId,
-        title: body.title, type: body.type,
+        tenantId: body.tenantId,
+        buildingId: body.buildingId,
+        title: body.title,
+        type: body.type,
         amount: body.amount ?? 0,
         status: 'pending',
         requesterUserId: body.requesterUserId,

@@ -26,29 +26,24 @@ const docsDir = join(here, '..', '..', '..', 'docs', 'modules');
 // list — they must ship with an RFC from day one.
 //
 // To remove an entry: write the RFC at docs/modules/<name>/RFC.md.
+//
+// 2026-04-26 (INIT-010 Phase 1 / Task 4): top-12 RFCs landed —
+// approvals, assets, assignment, audit, building-core, cleaning,
+// contractor-companies, documents, iam, ppm, reactive, tenant-companies.
 const RETRO_RFC_PENDING = new Set([
-  'approvals',
-  'assets',
-  'assignment',
-  'audit',
   'auth',
-  'building-core',
   'buildings',
   'calendar-blackouts',
-  'cleaning',
   'compliance',
   'compliance-profiles',
   'condition-triggers',
   'connectors',
-  'contractor-companies',
   'devices',
   'document-links',
   'document-templates',
-  'documents',
   'emergency-overrides',
   'events',
   'health',
-  'iam',
   'imports',
   'inventory',
   'leases',
@@ -58,12 +53,10 @@ const RETRO_RFC_PENDING = new Set([
   'occupants',
   'onboarding',
   'organizations',
-  'ppm',
   'privacy',
   'projects',
   'public-qr',
   'qr-locations',
-  'reactive',
   'role-dashboards',
   'rounds',
   'scim',
@@ -72,7 +65,6 @@ const RETRO_RFC_PENDING = new Set([
   'takeover',
   'tasks',
   'tenancy',
-  'tenant-companies',
   'vendor-invoices',
   'webhooks',
 ]);

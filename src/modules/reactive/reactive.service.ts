@@ -8,6 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { requireManager, resolveBuildingId } from '../../common/building.helpers';
 import { AssignmentResolverService } from '../assignment/assignment.resolver';
 import { ActorResolver } from '../../common/authz';
+import { AuditService } from '../audit/audit.service';
 
 // INIT-007 Phase 4 — narrowing list responses by tenantCompany /
 // createdByScope. Returns extra `where` keys to merge into the Prisma
@@ -25,6 +26,7 @@ export class ReactiveService {
     private readonly prisma: PrismaService,
     private readonly assignmentResolver: AssignmentResolverService,
     private readonly actorResolver: ActorResolver,
+    private readonly audit: AuditService,
   ) {}
 
   // INIT-007 Phase 4 — derive list-narrow flags from the actor.
@@ -97,7 +99,7 @@ export class ReactiveService {
       roleKey: 'technician',
     });
 
-    return this.prisma.incident.create({
+    const created = await this.prisma.incident.create({
       data: {
         tenantId,
         buildingId,
@@ -116,6 +118,23 @@ export class ReactiveService {
         assignmentReason: decision.reason,
       },
     });
+    await this.audit.transition({
+      tenantId,
+      actor: actorUserId || 'system',
+      actorRole: 'reporter',
+      entityType: 'incident',
+      entityId: created.id,
+      from: null,
+      to: 'new',
+      buildingId,
+      metadata: {
+        severity: created.severity,
+        origin: created.origin,
+        assignedUserId: created.assignedUserId,
+        assignmentSource: created.assignmentSource,
+      },
+    });
+    return created;
   }
 
   async listIncidents(
@@ -144,10 +163,21 @@ export class ReactiveService {
     if (!inc) throw new NotFoundException('incident not found');
     await this.assertManager(tenantId, actorUserId, inc.buildingId);
     if (inc.ackedAt) return inc;
-    return this.prisma.incident.update({
+    const updated = await this.prisma.incident.update({
       where: { id },
       data: { status: 'triaged', ackedAt: new Date() },
     });
+    await this.audit.transition({
+      tenantId,
+      actor: actorUserId,
+      actorRole: 'manager',
+      entityType: 'incident',
+      entityId: id,
+      from: inc.status,
+      to: 'triaged',
+      buildingId: inc.buildingId,
+    });
+    return updated;
   }
 
   async resolveIncident(
@@ -160,7 +190,7 @@ export class ReactiveService {
     const inc = await this.prisma.incident.findFirst({ where: { id, tenantId } });
     if (!inc) throw new NotFoundException('incident not found');
     await this.assertManager(tenantId, actorUserId, inc.buildingId);
-    return this.prisma.incident.update({
+    const updated = await this.prisma.incident.update({
       where: { id },
       data: {
         status: 'resolved',
@@ -169,6 +199,18 @@ export class ReactiveService {
         preventiveAction: body.preventiveAction || null,
       },
     });
+    await this.audit.transition({
+      tenantId,
+      actor: actorUserId,
+      actorRole: 'manager',
+      entityType: 'incident',
+      entityId: id,
+      from: inc.status,
+      to: 'resolved',
+      buildingId: inc.buildingId,
+      metadata: { rootCause: body.rootCause, preventiveAction: body.preventiveAction },
+    });
+    return updated;
   }
 
   // ─── Service requests ──────────────────────────────────────
@@ -200,7 +242,7 @@ export class ReactiveService {
       roleKey: 'technician',
     });
 
-    return this.prisma.serviceRequest.create({
+    const created = await this.prisma.serviceRequest.create({
       data: {
         tenantId,
         buildingId,
@@ -220,6 +262,23 @@ export class ReactiveService {
         assignmentReason: decision.reason,
       },
     });
+    await this.audit.transition({
+      tenantId,
+      actor: actorUserId || 'system',
+      actorRole: 'submitter',
+      entityType: 'service_request',
+      entityId: created.id,
+      from: null,
+      to: 'new',
+      buildingId,
+      metadata: {
+        category: created.category,
+        priority: created.priority,
+        assignedUserId: created.assignedUserId,
+        assignmentSource: created.assignmentSource,
+      },
+    });
+    return created;
   }
 
   // Best-effort floorId derivation: explicit body.floorId wins, otherwise
@@ -270,10 +329,22 @@ export class ReactiveService {
     const sr = await this.prisma.serviceRequest.findFirst({ where: { id, tenantId } });
     if (!sr) throw new NotFoundException('service request not found');
     await this.assertManager(tenantId, actorUserId, sr.buildingId);
-    return this.prisma.serviceRequest.update({
+    const updated = await this.prisma.serviceRequest.update({
       where: { id },
       data: { status: 'resolved', resolutionCode: body.resolutionCode },
     });
+    await this.audit.transition({
+      tenantId,
+      actor: actorUserId,
+      actorRole: 'manager',
+      entityType: 'service_request',
+      entityId: id,
+      from: sr.status,
+      to: 'resolved',
+      buildingId: sr.buildingId,
+      metadata: { resolutionCode: body.resolutionCode },
+    });
+    return updated;
   }
 
   // ─── Manual (re)assignment of incidents + service-requests ───
@@ -290,7 +361,7 @@ export class ReactiveService {
     const inc = await this.prisma.incident.findFirst({ where: { id, tenantId } });
     if (!inc) throw new NotFoundException('incident not found');
     await this.assertManager(tenantId, actorUserId, inc.buildingId);
-    return this.prisma.incident.update({
+    const updated = await this.prisma.incident.update({
       where: { id },
       data: {
         assignedUserId: body.userId,
@@ -298,6 +369,18 @@ export class ReactiveService {
         assignmentReason: `manually assigned by ${actorUserId}`,
       },
     });
+    await this.audit.transition({
+      tenantId,
+      actor: actorUserId,
+      actorRole: 'manager',
+      entityType: 'incident',
+      entityId: id,
+      from: inc.assignedUserId || null,
+      to: body.userId,
+      buildingId: inc.buildingId,
+      metadata: { kind: 'manual_assign', priorSource: inc.assignmentSource },
+    });
+    return updated;
   }
 
   async assignServiceRequest(
@@ -310,7 +393,7 @@ export class ReactiveService {
     const sr = await this.prisma.serviceRequest.findFirst({ where: { id, tenantId } });
     if (!sr) throw new NotFoundException('service request not found');
     await this.assertManager(tenantId, actorUserId, sr.buildingId);
-    return this.prisma.serviceRequest.update({
+    const updated = await this.prisma.serviceRequest.update({
       where: { id },
       data: {
         assignedUserId: body.userId,
@@ -318,6 +401,18 @@ export class ReactiveService {
         assignmentReason: `manually assigned by ${actorUserId}`,
       },
     });
+    await this.audit.transition({
+      tenantId,
+      actor: actorUserId,
+      actorRole: 'manager',
+      entityType: 'service_request',
+      entityId: id,
+      from: sr.assignedUserId || null,
+      to: body.userId,
+      buildingId: sr.buildingId,
+      metadata: { kind: 'manual_assign', priorSource: sr.assignmentSource },
+    });
+    return updated;
   }
 
   // ─── Convert intake → WorkOrder ────────────────────────────
@@ -348,16 +443,49 @@ export class ReactiveService {
         dueAt: body.dueAt ? new Date(body.dueAt) : new Date(Date.now() + 7 * 86400000),
       },
     });
+    await this.audit.transition({
+      tenantId,
+      actor: actorUserId,
+      actorRole: 'manager',
+      entityType: 'work_order',
+      entityId: wo.id,
+      from: null,
+      to: 'dispatched',
+      buildingId: rec.buildingId,
+      metadata: { source: body.source, sourceId: body.sourceId, vendorOrgId: body.vendorOrgId },
+    });
 
     if (body.source === 'incident') {
       await this.prisma.incident.update({
         where: { id: rec.id },
         data: { status: 'dispatched', workOrderId: wo.id },
       });
+      await this.audit.transition({
+        tenantId,
+        actor: actorUserId,
+        actorRole: 'manager',
+        entityType: 'incident',
+        entityId: rec.id,
+        from: rec.status,
+        to: 'dispatched',
+        buildingId: rec.buildingId,
+        metadata: { workOrderId: wo.id },
+      });
     } else {
       await this.prisma.serviceRequest.update({
         where: { id: rec.id },
         data: { status: 'dispatched', workOrderId: wo.id },
+      });
+      await this.audit.transition({
+        tenantId,
+        actor: actorUserId,
+        actorRole: 'manager',
+        entityType: 'service_request',
+        entityId: rec.id,
+        from: rec.status,
+        to: 'dispatched',
+        buildingId: rec.buildingId,
+        metadata: { workOrderId: wo.id },
       });
     }
     return wo;

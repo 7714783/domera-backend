@@ -53,6 +53,15 @@ const OWNERSHIP = {
   userAvailability: 'assignment',
   // ── contractor-companies (INIT-007 P6) ────────────────────────────
   contractorCompany: 'contractor-companies',
+  // ── ppm ───────────────────────────────────────────────────────────
+  // INIT-010 P0-1 (2026-04-26): TaskInstance — canonical owner ppm
+  // (creates from PPM plan items + condition-triggers via DI).
+  // tasks updates lifecycle state (start/pause/resume/complete) from the
+  // user-facing /v1/tasks/:id/* endpoints — that's the legitimate state
+  // machine operator, separate from creation.
+  // seed-runtime is the dev-only demo harness — accepted exception.
+  taskInstance: ['ppm', 'tasks', 'seed-runtime'],
+
   // ── reactive ──────────────────────────────────────────────────────
   // Connectors creates incidents from inbound webhooks (legitimate
   // external integration path); public-qr creates service-requests
@@ -103,6 +112,11 @@ for (const file of files) {
   const lines = src.split('\n');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    // Skip single-line comments — they often DESCRIBE prisma calls that
+    // were removed (see condition-triggers.service.ts header explaining the
+    // P0-1 fix). Without this, the test fires on docstrings.
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) continue;
     for (const [delegate, allowed] of Object.entries(OWNERSHIP)) {
       const allowedList = Array.isArray(allowed) ? allowed : [allowed];
       const re = new RegExp(`\\bprisma\\.${delegate}\\.(${WRITE_OPS.join('|')})\\b`);
