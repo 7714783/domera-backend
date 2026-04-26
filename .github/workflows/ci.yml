@@ -14,12 +14,6 @@ jobs:
   validate:
     name: Validate (typecheck + prisma)
     runs-on: ubuntu-latest
-    # Job-level env so postinstall (npm ci → prisma generate) and every
-    # subsequent step sees DATABASE_URL. Per-step env was unreliable after
-    # the Prisma 6.19 update — the deprecation warning on
-    # `package.json#prisma` flagged a subtle env-resolution change.
-    env:
-      DATABASE_URL: 'postgresql://user:pass@localhost:5432/ci'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,14 +21,14 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci --no-audit --no-fund
-      # postinstall was removed from package.json (it failed under Prisma 6.19
-      # in CI even with job-level DATABASE_URL — race with setup-node hook).
-      # Run prisma generate explicitly here so subsequent steps that import
-      # the generated client (typecheck, env-guard test) compile.
-      - name: Prisma generate
-        run: npx prisma generate
       - name: Prisma validate
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/ci
         run: npx prisma validate
+      - name: Prisma generate
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/ci
+        run: npx prisma generate
       - name: TypeScript typecheck
         run: npm run typecheck
       - name: Syntax-check RLS SQL
@@ -42,13 +36,13 @@ jobs:
           for f in prisma/rls/*.sql; do
             awk '/create policy|alter policy/ { if ($0 !~ /on /) { print "missing ON in: " $0; exit 1 } }' "$f"
           done
-      - name: Guard against GUC name drift (INIT-008 Phase 1)
+      - name: Guard against RLS GUC name drift (INIT-008 Phase 1)
         # Every RLS policy MUST use app.current_tenant_id — that's what the
         # Prisma extension sets via set_config. An older generation of
         # migrations used app.tenant_id and silently evaluated to NULL →
         # default-deny. This guard fails the build if anyone reintroduces
-        # the wrong name in raw-SQL migrations or rls/*.sql files. Matching
-        # comments that document the old name are excluded via awk.
+        # the wrong name in raw-SQL migrations or rls/*.sql files. Inline
+        # comments documenting the old name are excluded.
         run: |
           bad=$(grep -rnE "current_setting\('app\.tenant_id'" prisma/ | grep -v '^--' || true)
           if [ -n "$bad" ]; then
@@ -69,9 +63,6 @@ jobs:
   migrations-apply:
     name: Apply migrations on a clean Postgres (end-to-end)
     runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/domera_ci'
-      DATABASE_URL_MIGRATOR: 'postgresql://postgres:postgres@localhost:5432/domera_ci'
     services:
       postgres:
         image: postgres:16
@@ -93,10 +84,16 @@ jobs:
           cache: 'npm'
       - run: npm ci --no-audit --no-fund
       - name: Prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/domera_ci
         run: npx prisma migrate deploy
       - name: Raw-SQL migrations
+        env:
+          DATABASE_URL_MIGRATOR: postgresql://postgres:postgres@localhost:5432/domera_ci
         run: node prisma/migrations-sql/apply-migrations.mjs
       - name: migrate status must be clean
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/domera_ci
         run: |
           out="$(npx prisma migrate status 2>&1 || true)"
           echo "$out"

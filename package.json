@@ -19,6 +19,7 @@
     "db:rls": "node prisma/rls/apply-rls.mjs 002_split_roles.sql 001_enable_rls.sql 003_force_rls.sql 004_public_qr_rpc.sql",
     "db:deploy": "pnpm run db:migrate:deploy && pnpm run db:migrate:sql && pnpm run db:rls",
     "db:push:sandbox": "prisma db push",
+    "postinstall": "prisma generate",
     "lint": "eslint src",
     "test": "node --test --test-reporter=spec test/*.test.mjs",
     "test:rls": "node --test --test-reporter=spec test/rls.isolation.test.mjs",
