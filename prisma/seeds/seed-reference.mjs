@@ -115,6 +115,26 @@ const ROLES = [
     scope: 'building',
     maxDelegatableScope: null,
   },
+  // INIT-007 Phase 5 — cleaning supervisor + security persona.
+  // CLEANING_MANAGER bridges the existing CleaningStaff hierarchy
+  // (boss/manager/supervisor/cleaner is cleaning-internal) to the
+  // platform Role catalogue so a cleaning supervisor can also be
+  // granted dashboard / reporting permissions through Role.
+  // SECURITY is its own role (not a fire_safety_officer rebrand) so
+  // building managers can grant security duties without granting
+  // fire-safety document approval rights.
+  {
+    key: 'cleaning_manager',
+    name: 'Cleaning Manager',
+    scope: 'building',
+    maxDelegatableScope: null,
+  },
+  {
+    key: 'security',
+    name: 'Security Officer',
+    scope: 'building',
+    maxDelegatableScope: null,
+  },
 ];
 
 const PERMISSIONS = {
@@ -277,6 +297,29 @@ PERMISSIONS.tenant_employee = [
   'building.read',
   'tasks.view_created',     // only self-submitted tickets
   'tasks.cancel_own',       // can cancel own tickets before assignment
+];
+
+// INIT-007 Phase 5 — CLEANING_MANAGER + SECURITY permissions.
+// CLEANING_MANAGER manages cleaning operations across the building:
+// assigns staff, sees all cleaning tasks, signs off completions, runs
+// reports. NOT a workspace admin — cannot manage roles or budgets.
+PERMISSIONS.cleaning_manager = [
+  'building.read',
+  'tasks.view_all',         // sees all cleaning tasks in scope
+  'task.assign',            // assigns cleaners to zones/floors
+  'task.read_assigned',
+  'task.complete_review',   // signs off completions
+  'document.upload_evidence',
+  'report.export',          // cleaning quality reports
+];
+// SECURITY handles incidents, access control, patrol logs. Scope-narrowable
+// via teamId (security team) or floorIds (parking-only guards, etc).
+PERMISSIONS.security = [
+  'building.read',
+  'security.incident.manage',
+  'tasks.create',           // can open incidents/SR
+  'tasks.view_assigned',    // sees own patrol/incident tasks
+  'document.upload_evidence',
 ];
 
 const CERTIFICATIONS = [
