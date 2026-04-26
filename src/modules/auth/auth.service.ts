@@ -227,7 +227,40 @@ export class AuthService {
       roleKey: m.roleKey,
       status: m.status,
     }));
-    return { ...user, memberships: normalizedMemberships };
+
+    // INIT-007 Phase 8 — surface effective permissions + role list so the
+    // frontend can filter the sidebar nav and render a persona switcher
+    // without making N follow-up calls. Effective = union across every
+    // active Role grant the user holds (memberships + buildingRoles +
+    // organizationMemberships).
+    const allRoleKeys = new Set<string>();
+    for (const m of user.memberships) allRoleKeys.add(m.roleKey);
+    for (const br of user.buildingRoles) allRoleKeys.add(br.roleKey);
+    for (const om of user.organizationMemberships) allRoleKeys.add(om.roleKey);
+
+    const permRows = allRoleKeys.size
+      ? await this.prisma.rolePermission.findMany({
+          where: { roleKey: { in: [...allRoleKeys] } },
+          select: { roleKey: true, permission: true },
+        })
+      : [];
+    const effectivePermissions = [...new Set(permRows.map((r) => r.permission))].sort();
+
+    // Role catalogue (key + name) for the persona switcher dropdown.
+    const roleRows = allRoleKeys.size
+      ? await this.prisma.role.findMany({
+          where: { key: { in: [...allRoleKeys] } },
+          select: { key: true, name: true, scope: true },
+        })
+      : [];
+    const availableRoles = roleRows.map((r) => ({ key: r.key, name: r.name, scope: r.scope }));
+
+    return {
+      ...user,
+      memberships: normalizedMemberships,
+      effectivePermissions,
+      availableRoles,
+    };
   }
 
   async listSessions(userId: string) {
