@@ -334,6 +334,57 @@ export class AuthService {
     return { revoked: count };
   }
 
+  // INIT-013 — workspace switch. Verifies the user has an active
+  // membership (or super-admin status) in the target tenant, then
+  // ROTATES the JWT: revokes the current token + issues a fresh one
+  // bound to the same userId. The new token's session row stores the
+  // active workspace via the existing memberships join — the tenant
+  // header `x-tenant-id` is what actually scopes RLS, JWT only carries
+  // identity. Returning a fresh JWT lets us invalidate the old tab
+  // (which still has the old token) so it can't read the new tenant.
+  async switchWorkspace(
+    currentToken: string,
+    actorUserId: string,
+    targetTenantId: string,
+    meta?: { userAgent?: string; ipAddress?: string },
+  ) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: targetTenantId } });
+    if (!tenant) throw new BadRequestException('tenant not found');
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { id: true, username: true, isSuperAdmin: true },
+    });
+    if (!user) throw new UnauthorizedException('user not found');
+
+    if (!user.isSuperAdmin) {
+      const membership = await this.prisma.membership.findFirst({
+        where: { tenantId: targetTenantId, userId: actorUserId, status: 'active' },
+      });
+      if (!membership) throw new UnauthorizedException('no active membership in target tenant');
+    }
+
+    // Revoke the current session — the old token must not survive,
+    // otherwise a stale browser tab could still read the previous tenant.
+    const hash = sha256(currentToken);
+    const row = await this.prisma.session.findUnique({ where: { tokenHash: hash } });
+    if (row && !row.revokedAt) {
+      await this.prisma.session.update({
+        where: { id: row.id },
+        data: { revokedAt: new Date(), revokedBy: 'switch-workspace' },
+      });
+    }
+
+    const jti = crypto.randomUUID();
+    const token = this.sign(user, jti);
+    await this.createSession(actorUserId, token, meta);
+
+    return {
+      token,
+      tenant: { id: tenant.id, slug: tenant.slug, name: tenant.name },
+    };
+  }
+
   /** Prune all expired / old-revoked sessions. Safe to call from a scheduled job. */
   async prune(olderThanDays = 30) {
     const cutoff = new Date(Date.now() - olderThanDays * 86400 * 1000);

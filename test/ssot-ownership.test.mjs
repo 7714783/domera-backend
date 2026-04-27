@@ -87,6 +87,19 @@ const OWNERSHIP = {
   // Every module writes via audit.write() — only the audit service
   // should touch prisma.auditEntry directly.
   auditEntry: 'audit',
+  // ── INIT-013 Roles & Team module ──────────────────────────────────
+  // Public registry — only contractors-public writes. Workspace_owner
+  // creating a new contractor goes through that module's service.
+  publicContractor: 'contractors-public',
+  // Workspace ↔ contractor link table. Owned by contractors-workspace.
+  workspaceContractor: 'contractors-workspace',
+  // TeamMember is the workspace-wide people catalogue. Owner: team.
+  // iam keeps a legacy create path (createStaff) during migration —
+  // acceptable transitional dual-write.
+  teamMember: ['team', 'iam'],
+  // Role grants — owner: role-assignments. iam.service legacy revoke
+  // path remains during migration.
+  teamMemberRoleAssignment: ['role-assignments', 'team', 'iam'],
 };
 
 const WRITE_OPS = ['create', 'update', 'upsert', 'delete', 'deleteMany', 'updateMany', 'createMany'];

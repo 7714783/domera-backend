@@ -9,18 +9,18 @@ datasource db {
 
 // ─── Compliance profiles (P5): per-jurisdiction / per-building rule bundles ──
 model ComplianceProfile {
-  id           String   @id @default(uuid())
-  tenantId     String
-  key          String   // "IL-SI1525", "ASHRAE180", "NFPA25", custom
-  name         String
-  jurisdiction String?  // ISO country code or "global"
-  description  String?
-  domains      String[] @default([])
+  id                    String   @id @default(uuid())
+  tenantId              String
+  key                   String // "IL-SI1525", "ASHRAE180", "NFPA25", custom
+  name                  String
+  jurisdiction          String? // ISO country code or "global"
+  description           String?
+  domains               String[] @default([])
   obligationTemplateIds String[] @default([])
-  isActive     Boolean  @default(true)
-  isBuiltIn    Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  isActive              Boolean  @default(true)
+  isBuiltIn             Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   assignments BuildingComplianceProfile[]
 
@@ -45,19 +45,19 @@ model BuildingComplianceProfile {
 }
 
 model Tenant {
-  id                   String                 @id @default(uuid())
-  slug                 String                 @unique
+  id                   String                @id @default(uuid())
+  slug                 String                @unique
   name                 String
-  status               String                 @default("active")
-  storageMode          String                 @default("pooled")
-  defaultUiLocale      String                 @default("en")
-  defaultContentLocale String                 @default("en")
-  timezone             String                 @default("UTC")
-  isDemo               Boolean                @default(false)
-  seedKey              String?                @unique
-  createdBy            String?                @default("system")
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
+  status               String                @default("active")
+  storageMode          String                @default("pooled")
+  defaultUiLocale      String                @default("en")
+  defaultContentLocale String                @default("en")
+  timezone             String                @default("UTC")
+  isDemo               Boolean               @default(false)
+  seedKey              String?               @unique
+  createdBy            String?               @default("system")
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
   memberships          Membership[]
   buildings            Building[]
   organizations        Organization[]
@@ -75,47 +75,218 @@ model Tenant {
   seedRuns             SeedRun[]
   approvalPolicies     ApprovalPolicy[]
   approvalDelegations  ApprovalDelegation[]
+  devices              Device[]
+  teamMembers          TeamMember[]
+  workspaceContractors WorkspaceContractor[]
+  customRoles          Role[]                @relation("TenantCustomRoles")
 
   @@map("tenants")
-  devices Device[]
+}
+
+// ── INIT-013 Roles & Team module ───────────────────────────────────────
+//
+// PublicContractor — global registry, NOT tenant-scoped. Holds public-only
+// info that contractor companies are happy to expose: name, public phone /
+// email, licenses, specialisations, optional rating, country/city. Workspaces
+// link to it via WorkspaceContractor (tenant-scoped) where they store private
+// notes / preferred rate / internal rating.
+//
+// One PublicContractor row may be referenced by N WorkspaceContractor rows
+// across N workspaces — no leakage because every per-workspace state lives
+// on the tenant-scoped link table.
+model PublicContractor {
+  id                String   @id @default(uuid())
+  displayName       String
+  legalName         String?
+  publicPhone       String?
+  publicEmail       String?
+  website           String?
+  country           String?
+  city              String?
+  // Free-form specialisations: ['hvac', 'fire_safety', 'cleaning', 'security'].
+  specialisations   String[] @default([])
+  // License / certificate strings ('IEC-electrical', 'NFPA-25', …).
+  licenses          String[] @default([])
+  // Optional 0..5 average rating, computed off-band; nullable while empty.
+  ratingAvg         Float?
+  ratingCount       Int      @default(0)
+  // Verification status: 'unverified' | 'self_attested' | 'platform_verified'.
+  // Only platform_verified rows show a "trust badge" cross-workspace.
+  verificationState String   @default("unverified")
+  // Tenant that first created this entry — informational only.
+  createdByTenantId String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  workspaceLinks WorkspaceContractor[]
+
+  @@index([displayName])
+  @@index([publicPhone])
+  @@index([publicEmail])
+  @@map("public_contractors")
+}
+
+// WorkspaceContractor — per-workspace link to a PublicContractor. Stores
+// the relationship-specific data that must NEVER leak cross-workspace:
+// preferred contact within the workspace, private notes, agreed rate,
+// internal rating, contract start/end. Tenant-scoped (RLS enforced).
+model WorkspaceContractor {
+  id                  String    @id @default(uuid())
+  tenantId            String
+  publicContractorId  String
+  // Local override of the display name used inside this workspace
+  // (a workspace may know the same firm under a project nickname).
+  localDisplayName    String?
+  // Internal contact person — *separate* from the public phone. Often a
+  // specific manager who deals with this workspace's properties.
+  localContactPerson  String?
+  localContactPhone   String?
+  localContactEmail   String?
+  // Free-form private notes. NEVER returned to other tenants.
+  privateNotes        String?
+  preferredRate       String?
+  internalRatingAvg   Float?
+  internalRatingCount Int       @default(0)
+  startedAt           DateTime?
+  endedAt             DateTime?
+  status              String    @default("active") // active | paused | terminated
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  publicContractor PublicContractor @relation(fields: [publicContractorId], references: [id], onDelete: Restrict)
+  teamMembers      TeamMember[]
+
+  @@unique([tenantId, publicContractorId])
+  @@index([tenantId])
+  @@index([publicContractorId])
+  @@map("workspace_contractors")
+}
+
+// TeamMember — single source of people inside a workspace. Every person
+// who can be assigned to a task / approve a document / receive an alert
+// MUST exist as a TeamMember.
+//
+// Two kinds:
+//   · 'employee'   — has an associated User account (login + permissions).
+//   · 'contractor' — links to WorkspaceContractor (no User required, may
+//     be just a phone contact). May still be promoted to a User later.
+//
+// Deactivation flow: setting `isActive=false` triggers a cascade that
+// revokes all TeamMemberRoleAssignment rows + reassigns their open tasks
+// to the workspace_owner unassigned queue. The TeamMember row stays for
+// audit history.
+model TeamMember {
+  id                    String    @id @default(uuid())
+  tenantId              String
+  kind                  String    @default("employee") // employee | contractor | external
+  // Optional User link. NULL for contractor-without-account contacts.
+  // Unique per tenant: one User → at most one TeamMember in this workspace.
+  userId                String?
+  // Optional WorkspaceContractor link (only meaningful when kind=contractor).
+  workspaceContractorId String?
+  // Display attributes — primary source of truth for assignee names in UI.
+  displayName           String
+  email                 String?
+  phone                 String?
+  title                 String?
+  department            String?
+  photoUrl              String?
+  isActive              Boolean   @default(true)
+  startDate             DateTime?
+  endDate               DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  tenant              Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user                User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  workspaceContractor WorkspaceContractor?       @relation(fields: [workspaceContractorId], references: [id], onDelete: SetNull)
+  roleAssignments     TeamMemberRoleAssignment[]
+
+  @@unique([tenantId, userId])
+  @@index([tenantId, isActive])
+  @@index([tenantId, kind])
+  @@map("team_members")
+}
+
+// TeamMemberRoleAssignment — primary role grant going forward.
+// Replaces BuildingRoleAssignment for new code (legacy table kept for
+// backwards compatibility during migration period — backfilled in 017).
+//
+// `roleKey` references either a system role (Role.tenantId IS NULL) or
+// a custom role owned by this tenant (Role.tenantId = self).
+//
+// Scope dimensions are additive — empty = unrestricted within the
+// workspace, set = narrowing. The auto-routing resolver intersects the
+// task context with the assignment scope to find eligible members.
+model TeamMemberRoleAssignment {
+  id                  String    @id @default(uuid())
+  tenantId            String
+  teamMemberId        String
+  roleKey             String
+  // Building scope — empty = all buildings; otherwise a positive list.
+  buildingIds         String[]  @default([])
+  // ABAC scope dimensions (same shape as legacy BuildingRoleAssignment).
+  floorIds            String[]  @default([])
+  zoneIds             String[]  @default([])
+  systemIds           String[]  @default([])
+  teamId              String?
+  contractorCompanyId String?
+  tenantCompanyId     String?
+  createdByScope      Boolean   @default(false)
+  delegatedBy         String?
+  delegatedAt         DateTime  @default(now())
+  expiresAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  teamMember TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+  role       Role       @relation("TeamRoleGrants", fields: [roleKey], references: [key], onDelete: Cascade)
+
+  @@unique([teamMemberId, roleKey])
+  @@index([tenantId])
+  @@index([roleKey])
+  @@index([expiresAt])
+  @@map("team_member_role_assignments")
 }
 
 model User {
-  id                      String                 @id @default(uuid())
+  id                      String                   @id @default(uuid())
   email                   String
-  emailNormalized         String                 @unique
-  username                String?                @unique
+  emailNormalized         String                   @unique
+  username                String?                  @unique
   passwordHash            String?
   displayName             String?
-  status                  String                 @default("active")
-  isSuperAdmin            Boolean                @default(false)
+  status                  String                   @default("active")
+  isSuperAdmin            Boolean                  @default(false)
   lastLoginAt             DateTime?
-  isDemo                  Boolean                @default(false)
-  seedKey                 String?                @unique
-  createdBy               String?                @default("system")
-  createdAt               DateTime               @default(now())
-  updatedAt               DateTime               @updatedAt
+  isDemo                  Boolean                  @default(false)
+  seedKey                 String?                  @unique
+  createdBy               String?                  @default("system")
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
   memberships             Membership[]
   organizationMemberships OrganizationMembership[]
   buildingRoles           BuildingRoleAssignment[]
   certifications          UserCertification[]
   sessions                Session[]
+  teamMemberships         TeamMember[]
+  devices                 Device[]
 
   @@map("users")
-  devices Device[]
 }
 
 model Session {
-  id          String    @id @default(uuid())
-  userId      String
-  tokenHash   String    @unique
-  createdAt   DateTime  @default(now())
-  lastSeenAt  DateTime  @default(now())
-  expiresAt   DateTime
-  revokedAt   DateTime?
-  revokedBy   String?
-  userAgent   String?
-  ipAddress   String?
+  id         String    @id @default(uuid())
+  userId     String
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  revokedBy  String?
+  userAgent  String?
+  ipAddress  String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -141,23 +312,23 @@ model Membership {
 }
 
 model Organization {
-  id          String                 @id @default(uuid())
-  tenantId    String
-  name        String
-  slug        String
-  type        String
-  compliance  Int                    @default(0)
-  status      String                 @default("watch")
-  isDemo      Boolean                @default(false)
-  seedKey     String?                @unique
-  createdBy   String?                @default("system")
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
-  tenant      Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  buildings   Building[]
-  memberships OrganizationMembership[]
-  mandates    BuildingMandate[]
-  vendorContracts BuildingContract[] @relation("BuildingContractVendor")
+  id              String                   @id @default(uuid())
+  tenantId        String
+  name            String
+  slug            String
+  type            String
+  compliance      Int                      @default(0)
+  status          String                   @default("watch")
+  isDemo          Boolean                  @default(false)
+  seedKey         String?                  @unique
+  createdBy       String?                  @default("system")
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  tenant          Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  buildings       Building[]
+  memberships     OrganizationMembership[]
+  mandates        BuildingMandate[]
+  vendorContracts BuildingContract[]       @relation("BuildingContractVendor")
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -180,43 +351,43 @@ model OrganizationMembership {
 }
 
 model Building {
-  id                   String              @id @default(uuid())
-  tenantId             String
-  organizationId       String?
-  slug                 String
-  buildingCode         String?
-  name                 String
-  timezone             String
-  countryCode          String
-  city                 String
-  addressLine1         String
-  street               String?
-  buildingNumber       String?
-  lat                  Float?
-  lng                  Float?
-  defaultContentLocale String              @default("en")
-  defaultLanguage      String?
-  supportedLanguages   String[]            @default([])
-  type                 String              @default("Commercial")
-  buildingType         String?
-  primaryUse           String?
-  secondaryUses        String[]            @default([])
-  complexityFlags      String[]            @default([])
-  yearBuilt            Int?
-  floorsAboveGround    Int?
-  floorsBelowGround    Int?
-  floorsCount          Int?
-  unitsCount           Int?
-  entrancesCount       Int?
-  liftsCount           Int?
-  hasParking           Boolean?
+  id                        String    @id @default(uuid())
+  tenantId                  String
+  organizationId            String?
+  slug                      String
+  buildingCode              String?
+  name                      String
+  timezone                  String
+  countryCode               String
+  city                      String
+  addressLine1              String
+  street                    String?
+  buildingNumber            String?
+  lat                       Float?
+  lng                       Float?
+  defaultContentLocale      String    @default("en")
+  defaultLanguage           String?
+  supportedLanguages        String[]  @default([])
+  type                      String    @default("Commercial")
+  buildingType              String?
+  primaryUse                String?
+  secondaryUses             String[]  @default([])
+  complexityFlags           String[]  @default([])
+  yearBuilt                 Int?
+  floorsAboveGround         Int?
+  floorsBelowGround         Int?
+  floorsCount               Int?
+  unitsCount                Int?
+  entrancesCount            Int?
+  liftsCount                Int?
+  hasParking                Boolean?
   hasRestaurantsGroundFloor Boolean?
-  hasRooftopMechanical Boolean?
-  compliance           Int                 @default(0)
-  mandates             Int                 @default(0)
+  hasRooftopMechanical      Boolean?
+  compliance                Int       @default(0)
+  mandates                  Int       @default(0)
   // Operational health indicator (compliance / overdue / etc.) — keep
   // separate from the lifecycleStatus below.
-  status               String              @default("warning")
+  status                    String    @default("warning")
   // INIT-012 Phase 2 — building lifecycle.
   //   draft     — freshly created during onboarding wizard; partial data;
   //               only visible to managers; published when flipped to active.
@@ -224,53 +395,53 @@ model Building {
   //   archived  — decommissioned; read-only; excluded from listings by
   //               default. Different from full deletion — archived keeps
   //               history viewable; DELETE /v1/buildings/:slug removes it.
-  lifecycleStatus      String              @default("active")
-  publishedAt          DateTime?
-  archivedAt           DateTime?
-  annualKwh            Float?
-  notes                String?
-  attributes           Json?
-  isDemo               Boolean             @default(false)
-  seedKey              String?             @unique
-  createdBy            String?             @default("system")
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
+  lifecycleStatus           String    @default("active")
+  publishedAt               DateTime?
+  archivedAt                DateTime?
+  annualKwh                 Float?
+  notes                     String?
+  attributes                Json?
+  isDemo                    Boolean   @default(false)
+  seedKey                   String?   @unique
+  createdBy                 String?   @default("system")
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
-  tenant             Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  organization       Organization?        @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  assets             Asset[]
+  tenant              Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  organization        Organization?               @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  assets              Asset[]
   buildingObligations BuildingObligation[]
-  ppmTemplates       PpmTemplate[]
-  ppmPlanItems       PpmPlanItem[]
-  tasks              TaskInstance[]
-  budgets            Budget[]
-  invoices           Invoice[]
-  approvals          ApprovalRequest[]
-  approvalPolicies   ApprovalPolicy[]
-  documents          Document[]
-  audits             AuditEntry[]
-  mandatesList       BuildingMandate[]
-  roleAssignments    BuildingRoleAssignment[]
-  engineeringRecs    EngineeringRecommendation[]
-  projects           Project[]
-  workOrders         WorkOrder[]
-  takeoverCases      TakeoverCase[]
-  entrances          Entrance[]
-  floors             Floor[]
-  units              Unit[]
-  settings           BuildingSettings?
-  accounts           Account[]
-  contracts          Contract[]
-  requests           ResidentRequest[]
-  notifications      Notification[]
-  buildingFloors     BuildingFloor[]
-  buildingUnits      BuildingUnit[]
-  buildingUnitGroups BuildingUnitGroup[]
-  verticalTransport  BuildingVerticalTransport[]
-  buildingSystems    BuildingSystem[]
-  occupantCompanies  BuildingOccupantCompany[]
-  unitOccupancies    BuildingUnitOccupancy[]
-  buildingContracts  BuildingContract[]
+  ppmTemplates        PpmTemplate[]
+  ppmPlanItems        PpmPlanItem[]
+  tasks               TaskInstance[]
+  budgets             Budget[]
+  invoices            Invoice[]
+  approvals           ApprovalRequest[]
+  approvalPolicies    ApprovalPolicy[]
+  documents           Document[]
+  audits              AuditEntry[]
+  mandatesList        BuildingMandate[]
+  roleAssignments     BuildingRoleAssignment[]
+  engineeringRecs     EngineeringRecommendation[]
+  projects            Project[]
+  workOrders          WorkOrder[]
+  takeoverCases       TakeoverCase[]
+  entrances           Entrance[]
+  floors              Floor[]
+  units               Unit[]
+  settings            BuildingSettings?
+  accounts            Account[]
+  contracts           Contract[]
+  requests            ResidentRequest[]
+  notifications       Notification[]
+  buildingFloors      BuildingFloor[]
+  buildingUnits       BuildingUnit[]
+  buildingUnitGroups  BuildingUnitGroup[]
+  verticalTransport   BuildingVerticalTransport[]
+  buildingSystems     BuildingSystem[]
+  occupantCompanies   BuildingOccupantCompany[]
+  unitOccupancies     BuildingUnitOccupancy[]
+  buildingContracts   BuildingContract[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -282,57 +453,57 @@ model Building {
 //   - serialized unit/component: serial number, unique item
 //   - group/zone asset:           zonal / linear / area without serial
 model Asset {
-  id            String   @id @default(uuid())
-  tenantId      String
-  buildingId    String
-  parentAssetId String?
-  assetTypeId   String?         // FK to AssetType (taxonomy)
-  locationId    String?         // FK to canonical BuildingLocation
-  qrBarcode     String?         @unique
-  name          String
-  class         String          // legacy coarse class (kept for backward-compat)
-  systemType    String?         // legacy subsystem label
-  systemFamily  String?         // canonical: HVAC | Electrical | Fire | Lift | Water | …
-  assetLevel    String          @default("unit") // system | subsystem | unit | component | group | zone
-  model         String?
-  manufacturer  String?
-  manufacturerPartNo String?
-  serialNumber  String?
-  installDate   DateTime?
-  commissioningDate DateTime?
-  warrantyStart DateTime?
-  warrantyEnd   DateTime?
-  attributes    Json?
+  id                    String    @id @default(uuid())
+  tenantId              String
+  buildingId            String
+  parentAssetId         String?
+  assetTypeId           String? // FK to AssetType (taxonomy)
+  locationId            String? // FK to canonical BuildingLocation
+  qrBarcode             String?   @unique
+  name                  String
+  class                 String // legacy coarse class (kept for backward-compat)
+  systemType            String? // legacy subsystem label
+  systemFamily          String? // canonical: HVAC | Electrical | Fire | Lift | Water | …
+  assetLevel            String    @default("unit") // system | subsystem | unit | component | group | zone
+  model                 String?
+  manufacturer          String?
+  manufacturerPartNo    String?
+  serialNumber          String?
+  installDate           DateTime?
+  commissioningDate     DateTime?
+  warrantyStart         DateTime?
+  warrantyEnd           DateTime?
+  attributes            Json?
   // Lifecycle + responsibility
-  lifecycleStatus    String  @default("active")   // planned | active | standby | out_of_service | obsolete | disposed
-  conditionState     String  @default("good")     // good | fair | poor | critical
-  riskCriticality    String  @default("medium")   // low | medium | high | life_safety | mission_critical
+  lifecycleStatus       String    @default("active") // planned | active | standby | out_of_service | obsolete | disposed
+  conditionState        String    @default("good") // good | fair | poor | critical
+  riskCriticality       String    @default("medium") // low | medium | high | life_safety | mission_critical
   responsibleDepartment String?
-  responsibleUserId  String?
+  responsibleUserId     String?
   // Commercial
-  purchaseCost       Float?
-  replacementCost    Float?
-  contractId         String?
-  slaId              String?
+  purchaseCost          Float?
+  replacementCost       Float?
+  contractId            String?
+  slaId                 String?
   // Semantic model columns (SSOT §P4):
-  haystackTags   String[] @default([])
-  brickClass     String?
-  brickRelations Json?
-  externalIds    Json?
-  ifcGuid        String?
-  isActive       Boolean  @default(true)
-  isDemo        Boolean  @default(false)
-  seedKey       String?  @unique
-  createdBy     String?  @default("system")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  haystackTags          String[]  @default([])
+  brickClass            String?
+  brickRelations        Json?
+  externalIds           Json?
+  ifcGuid               String?
+  isActive              Boolean   @default(true)
+  isDemo                Boolean   @default(false)
+  seedKey               String?   @unique
+  createdBy             String?   @default("system")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  parent   Asset?   @relation("AssetTree", fields: [parentAssetId], references: [id], onDelete: Cascade)
-  children Asset[]  @relation("AssetTree")
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building         Building          @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  parent           Asset?            @relation("AssetTree", fields: [parentAssetId], references: [id], onDelete: Cascade)
+  children         Asset[]           @relation("AssetTree")
   maintenancePlans MaintenancePlan[]
-  ppmPlanItems PpmPlanItem[] @relation("AssetPpmPlanItems")
+  ppmPlanItems     PpmPlanItem[]     @relation("AssetPpmPlanItems")
 
   @@index([tenantId, buildingId])
   @@index([parentAssetId])
@@ -350,18 +521,18 @@ model Asset {
 // building-ops taxonomy (HVAC/Electrical/Fire/Lift/Water/Comms/Security/
 // Envelope/Roof/Sanitary/...).
 model AssetType {
-  id             String   @id @default(uuid())
-  tenantId       String
-  key            String                   // stable key, e.g. "hvac.ahu"
-  name           String
-  systemFamily   String                   // HVAC | Electrical | Fire | Lift | Water | Comms | Security | Envelope | Roof | Sanitary | Service | Monitoring
-  isSerialized   Boolean  @default(true)  // serialized unit vs group/zone
-  schemaKey      String?                  // links to JSON Schema for typed custom attrs
-  description    String?
-  isBuiltIn      Boolean  @default(false)
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id           String   @id @default(uuid())
+  tenantId     String
+  key          String // stable key, e.g. "hvac.ahu"
+  name         String
+  systemFamily String // HVAC | Electrical | Fire | Lift | Water | Comms | Security | Envelope | Roof | Sanitary | Service | Monitoring
+  isSerialized Boolean  @default(true) // serialized unit vs group/zone
+  schemaKey    String? // links to JSON Schema for typed custom attrs
+  description  String?
+  isBuiltIn    Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([tenantId, key])
   @@index([tenantId, systemFamily, isActive])
@@ -371,14 +542,14 @@ model AssetType {
 // Custom typed attributes per asset. Value stored as JSON to keep schema
 // flexible while preserving indexable `attributeKey` on hot paths.
 model AssetCustomAttribute {
-  id            String   @id @default(uuid())
-  tenantId      String
-  assetId       String
-  attributeKey  String
-  valueType     String   @default("string") // string | number | integer | boolean | date | json
-  valueJson     Json
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(uuid())
+  tenantId     String
+  assetId      String
+  attributeKey String
+  valueType    String   @default("string") // string | number | integer | boolean | date | json
+  valueJson    Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([assetId, attributeKey])
   @@index([tenantId, attributeKey])
@@ -393,7 +564,7 @@ model AssetDocument {
   tenantId   String
   assetId    String
   documentId String
-  docType    String                // o_m_manual | as_built | certificate | warranty | datasheet | photo | schema | other
+  docType    String // o_m_manual | as_built | certificate | warranty | datasheet | photo | schema | other
   title      String?
   version    String?
   createdAt  DateTime @default(now())
@@ -412,9 +583,9 @@ model AssetMedia {
   id         String   @id @default(uuid())
   tenantId   String
   assetId    String
-  mediaType  String                // photo | drawing | diagram | video
-  documentId String?               // optional link to a stored Document
-  url        String?               // or a direct URL (for external refs)
+  mediaType  String // photo | drawing | diagram | video
+  documentId String? // optional link to a stored Document
+  url        String? // or a direct URL (for external refs)
   caption    String?
   createdAt  DateTime @default(now())
 
@@ -426,17 +597,17 @@ model AssetMedia {
 // entities in inventory and get linked to one or more asset types (or
 // specific assets) via AssetSparePart.
 model SparePart {
-  id             String   @id @default(uuid())
-  tenantId       String
-  partNo         String
-  name           String
-  manufacturer   String?
-  supplierId     String?
-  unit           String?  @default("pc")
-  reorderPoint   Int?
-  notes          String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id           String   @id @default(uuid())
+  tenantId     String
+  partNo       String
+  name         String
+  manufacturer String?
+  supplierId   String?
+  unit         String?  @default("pc")
+  reorderPoint Int?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([tenantId, partNo])
   @@index([tenantId, supplierId])
@@ -445,13 +616,13 @@ model SparePart {
 
 // Many-to-many: which spare parts are recommended for a given asset.
 model AssetSparePart {
-  id              String   @id @default(uuid())
-  tenantId        String
-  assetId         String
-  partId          String
-  qtyRecommended  Float    @default(1)
-  notes           String?
-  createdAt       DateTime @default(now())
+  id             String   @id @default(uuid())
+  tenantId       String
+  assetId        String
+  partId         String
+  qtyRecommended Float    @default(1)
+  notes          String?
+  createdAt      DateTime @default(now())
 
   @@unique([assetId, partId])
   @@index([tenantId, assetId])
@@ -460,28 +631,28 @@ model AssetSparePart {
 }
 
 model SensorPoint {
-  id          String   @id @default(uuid())
-  tenantId    String
-  buildingId  String
-  assetId     String
-  name        String
-  pointType   String   // temp | pressure | flow | co2 | power | status | setpoint | command
-  unit        String?
+  id           String   @id @default(uuid())
+  tenantId     String
+  buildingId   String
+  assetId      String
+  name         String
+  pointType    String // temp | pressure | flow | co2 | power | status | setpoint | command
+  unit         String?
   // Integration IDs
-  bacnetId    String?  // e.g. "2:device-1024:AI:4"
-  opcNodeId   String?  // OPC-UA NodeId (e.g. "ns=2;s=Channel.Device.Tag")
-  haystackRef String?  // ^id or @id reference in a Haystack project
+  bacnetId     String? // e.g. "2:device-1024:AI:4"
+  opcNodeId    String? // OPC-UA NodeId (e.g. "ns=2;s=Channel.Device.Tag")
+  haystackRef  String? // ^id or @id reference in a Haystack project
   haystackTags String[] @default([])
-  brickClass  String?
+  brickClass   String?
   // Metadata
-  minValue    Float?
-  maxValue    Float?
-  sampleRateS Int?    // expected sampling period (seconds)
-  isActive    Boolean @default(true)
-  isDemo      Boolean @default(false)
-  seedKey     String? @unique
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  minValue     Float?
+  maxValue     Float?
+  sampleRateS  Int? // expected sampling period (seconds)
+  isActive     Boolean  @default(true)
+  isDemo       Boolean  @default(false)
+  seedKey      String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([buildingId, bacnetId])
   @@unique([buildingId, opcNodeId])
@@ -492,27 +663,27 @@ model SensorPoint {
 }
 
 model AlarmSource {
-  id          String   @id @default(uuid())
-  tenantId    String
-  buildingId  String
-  assetId     String
-  name        String
-  severity    String   @default("warning") // critical | warning | info
-  source      String   // panel | bms | edge_gateway | controller | manual
+  id            String    @id @default(uuid())
+  tenantId      String
+  buildingId    String
+  assetId       String
+  name          String
+  severity      String    @default("warning") // critical | warning | info
+  source        String // panel | bms | edge_gateway | controller | manual
   // Integration IDs
-  bacnetId    String?
-  opcNodeId   String?
-  haystackRef String?
-  haystackTags String[] @default([])
-  brickClass  String?
+  bacnetId      String?
+  opcNodeId     String?
+  haystackRef   String?
+  haystackTags  String[]  @default([])
+  brickClass    String?
   // Runtime state (optional denormalized fields; authoritative state lives in events)
-  isActive    Boolean  @default(false)
-  lastRaisedAt DateTime?
+  isActive      Boolean   @default(false)
+  lastRaisedAt  DateTime?
   lastClearedAt DateTime?
-  isDemo      Boolean  @default(false)
-  seedKey     String?  @unique
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isDemo        Boolean   @default(false)
+  seedKey       String?   @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([tenantId, buildingId])
   @@index([assetId])
@@ -550,7 +721,7 @@ model ObligationTemplate {
 }
 
 model ObligationBasis {
-  id                   String @id @default(uuid())
+  id                   String  @id @default(uuid())
   obligationTemplateId String
   type                 String
   referenceCode        String?
@@ -574,21 +745,21 @@ model ApplicabilityRule {
 }
 
 model BuildingObligation {
-  id                 String   @id @default(uuid())
-  tenantId           String
-  buildingId         String
+  id                   String   @id @default(uuid())
+  tenantId             String
+  buildingId           String
   obligationTemplateId String
-  complianceStatus   String   @default("active")
-  criticality        String   @default("medium")
-  isDemo             Boolean  @default(false)
-  seedKey            String?  @unique
-  createdBy          String?  @default("system")
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  complianceStatus     String   @default("active")
+  criticality          String   @default("medium")
+  isDemo               Boolean  @default(false)
+  seedKey              String?  @unique
+  createdBy            String?  @default("system")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  building    Building           @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  obligation  ObligationTemplate @relation(fields: [obligationTemplateId], references: [id], onDelete: Cascade)
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building   Building           @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  obligation ObligationTemplate @relation(fields: [obligationTemplateId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, buildingId])
   @@map("building_obligations")
@@ -603,13 +774,13 @@ model PpmTemplate {
   instructions                String?
   domain                      String?
   scope                       String   @default("building_common") // building_common | unit_scoped
-  executionMode               String   @default("in_house")        // in_house | contracted | ad_hoc_approved
+  executionMode               String   @default("in_house") // in_house | contracted | ad_hoc_approved
   performerOrgId              String?
   contractId                  String?
   assignedUserId              String?
   assignedRole                String?
-  approvalChain               Json?    // ordered: [{ role?, userId?, label? }]
-  evidenceRecipients          Json?    // ordered: [{ role?, userId?, channel? }]
+  approvalChain               Json? // ordered: [{ role?, userId?, label? }]
+  evidenceRecipients          Json? // ordered: [{ role?, userId?, channel? }]
   openedByRoles               String[] @default([])
   closedByRoles               String[] @default([])
   slaReminderDays             Int[]    @default([])
@@ -631,8 +802,8 @@ model PpmTemplate {
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 
-  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  building  Building     @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building  Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   planItems PpmPlanItem[]
 
   @@index([tenantId, buildingId])
@@ -641,21 +812,21 @@ model PpmTemplate {
 }
 
 model PpmPlanItem {
-  id                   String   @id @default(uuid())
-  tenantId             String
-  buildingId           String
-  templateId           String
-  obligationTemplateId String
-  assignedRole         String
-  assignedUserId       String?
-  recurrenceRule       String
-  nextDueAt            DateTime
-  lastPerformedAt      DateTime?
-  unitId               String?
-  scope                String   @default("building_common")
-  executionMode        String   @default("in_house")
-  performerOrgId       String?
-  contractId           String?
+  id                         String    @id @default(uuid())
+  tenantId                   String
+  buildingId                 String
+  templateId                 String
+  obligationTemplateId       String
+  assignedRole               String
+  assignedUserId             String?
+  recurrenceRule             String
+  nextDueAt                  DateTime
+  lastPerformedAt            DateTime?
+  unitId                     String?
+  scope                      String    @default("building_common")
+  executionMode              String    @default("in_house")
+  performerOrgId             String?
+  contractId                 String?
   // Baseline state — whether this plan item has been onboarded into the
   // main scheduled flow.
   //   pending  — no baseline yet; excluded from the scheduler / compliance
@@ -664,26 +835,26 @@ model PpmPlanItem {
   //   unknown  — operator declared the prior record unknown; forced into
   //              main flow with immediate due date. Evidence may be filled
   //              later by a back-dated completion.
-  baselineStatus       String   @default("pending")
-  baselineSetAt        DateTime?
-  baselineSetByUserId  String?
+  baselineStatus             String    @default("pending")
+  baselineSetAt              DateTime?
+  baselineSetByUserId        String?
   baselineEvidenceDocumentId String?
-  baselineNote         String?
+  baselineNote               String?
   // Optional link to an Asset — when the plan item is scoped to a specific
   // piece of equipment (e.g. AHU-01) rather than the whole building or a unit.
-  assetId              String?
-  isDemo               Boolean  @default(false)
-  seedKey              String?  @unique
-  createdBy            String?  @default("system")
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  assetId                    String?
+  isDemo                     Boolean   @default(false)
+  seedKey                    String?   @unique
+  createdBy                  String?   @default("system")
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
-  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  building    Building           @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  template    PpmTemplate        @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  obligation  ObligationTemplate @relation(fields: [obligationTemplateId], references: [id], onDelete: Cascade)
-  asset       Asset?             @relation("AssetPpmPlanItems", fields: [assetId], references: [id], onDelete: SetNull)
-  tasks       TaskInstance[]
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building   Building           @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  template   PpmTemplate        @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  obligation ObligationTemplate @relation(fields: [obligationTemplateId], references: [id], onDelete: Cascade)
+  asset      Asset?             @relation("AssetPpmPlanItems", fields: [assetId], references: [id], onDelete: SetNull)
+  tasks      TaskInstance[]
 
   @@index([tenantId, buildingId, nextDueAt])
   @@index([buildingId, scope])
@@ -702,14 +873,14 @@ model PpmPlanItem {
 }
 
 model TaskInstance {
-  id                       String   @id @default(uuid())
+  id                       String    @id @default(uuid())
   tenantId                 String
   buildingId               String
   planItemId               String?
   unitId                   String?
   title                    String
   status                   String
-  lifecycleStage           String   @default("scheduled")
+  lifecycleStage           String    @default("scheduled")
   executionMode            String?
   performerOrgId           String?
   // INIT-007 Phase 6 — universal contractor scope. NULL on legacy rows.
@@ -719,7 +890,7 @@ model TaskInstance {
   completedByUserId        String?
   result                   String?
   recurrenceRule           String?
-  evidenceRequired         Boolean  @default(false)
+  evidenceRequired         Boolean   @default(false)
   evidenceDocuments        Json?
   blockedReason            String?
   requiredCertificationKey String?
@@ -734,18 +905,27 @@ model TaskInstance {
   serviceReportDocumentId  String?
   evidenceDistributedTo    Json?
   archivedAt               DateTime?
-  isDemo                   Boolean  @default(false)
-  seedKey                  String?  @unique
-  createdBy                String?  @default("system")
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  // INIT-013 — primary assignee is now a TeamMember. Nullable: a task may
+  // start unassigned and land in the workspace_owner queue. The resolver
+  // (RoleAssignmentsService.findEligibleAssignees) populates this field
+  // at create time when no manual assignee is supplied. Legacy
+  // assignedUserId-style fields on Incident/ServiceRequest are kept for
+  // INIT-004 parity until those modules migrate.
+  assignedTeamMemberId     String?
+  assignmentSource         String?  // 'manual' | 'auto' | 'unassigned'
+  assignmentReason         String?  // human-readable: "least-loaded BMS technician"
+  isDemo                   Boolean   @default(false)
+  seedKey                  String?   @unique
+  createdBy                String?   @default("system")
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
-  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  building Building    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  planItem PpmPlanItem? @relation(fields: [planItemId], references: [id], onDelete: SetNull)
-  workOrders WorkOrder[]
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building      Building          @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  planItem      PpmPlanItem?      @relation(fields: [planItemId], references: [id], onDelete: SetNull)
+  workOrders    WorkOrder[]
   executionLogs PpmExecutionLog[]
-  notes      TaskNote[]
+  notes         TaskNote[]
 
   @@index([tenantId, buildingId, dueAt])
   @@index([status])
@@ -761,12 +941,12 @@ model TaskInstance {
 // already carries tenantId + buildingId; FK cascades clean up notes when
 // the parent task is deleted.
 model TaskNote {
-  id             String       @id @default(uuid())
+  id             String   @id @default(uuid())
   tenantId       String
   taskInstanceId String
   authorUserId   String
   body           String
-  createdAt      DateTime     @default(now())
+  createdAt      DateTime @default(now())
 
   task TaskInstance @relation(fields: [taskInstanceId], references: [id], onDelete: Cascade)
 
@@ -805,8 +985,8 @@ model Budget {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  building Building    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building Building     @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   lines    BudgetLine[]
 
   @@index([tenantId, buildingId])
@@ -832,19 +1012,19 @@ model BudgetLine {
 }
 
 model Invoice {
-  id               String   @id @default(uuid())
-  tenantId         String
-  buildingId       String
-  budgetLineId     String?
-  invoiceNo        String
-  amount           Float
-  status           String
-  vendorName       String?
-  isDemo           Boolean  @default(false)
-  seedKey          String?  @unique
-  createdBy        String?  @default("system")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id           String   @id @default(uuid())
+  tenantId     String
+  buildingId   String
+  budgetLineId String?
+  invoiceNo    String
+  amount       Float
+  status       String
+  vendorName   String?
+  isDemo       Boolean  @default(false)
+  seedKey      String?  @unique
+  createdBy    String?  @default("system")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   building   Building    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
@@ -881,21 +1061,21 @@ model ApprovalRequest {
 }
 
 model ApprovalStep {
-  id            String   @id @default(uuid())
-  requestId     String
-  orderNo       Int
-  role          String
-  status        String
-  actedByUserId String?
-  actedAt       DateTime?
+  id               String    @id @default(uuid())
+  requestId        String
+  orderNo          Int
+  role             String
+  status           String
+  actedByUserId    String?
+  actedAt          DateTime?
   // SSOT §P15: substitute / time-boxed delegation trail
   onBehalfOfUserId String?
   delegationId     String?
   waitingSinceAt   DateTime? @default(now())
-  isDemo        Boolean  @default(false)
-  seedKey       String?  @unique
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  isDemo           Boolean   @default(false)
+  seedKey          String?   @unique
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   request ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
@@ -908,23 +1088,23 @@ model ApprovalStep {
 // SSOT §P15 — versioned approval policy templates + bounded delegation
 // ─────────────────────────────────────────────────────────────────────
 model ApprovalPolicy {
-  id             String   @id @default(uuid())
-  tenantId       String
-  name           String
-  type           String   // spend_approval | document_approval | compliance_approval
-  buildingId     String?  // null = global / workspace-wide
-  version        Int      @default(1)
-  isActive       Boolean  @default(true)
-  currency       String   @default("ILS")
-  minAmount      Float    @default(0)
-  maxAmount      Float?   // null = no upper bound
-  stepsJson      Json     // [{ orderNo, role, mandatory: true, escalateAfterHours?: number }]
-  effectiveFrom  DateTime @default(now())
-  effectiveUntil DateTime?
-  supersedesId   String?  // previous policy version this one replaces
+  id              String    @id @default(uuid())
+  tenantId        String
+  name            String
+  type            String // spend_approval | document_approval | compliance_approval
+  buildingId      String? // null = global / workspace-wide
+  version         Int       @default(1)
+  isActive        Boolean   @default(true)
+  currency        String    @default("ILS")
+  minAmount       Float     @default(0)
+  maxAmount       Float? // null = no upper bound
+  stepsJson       Json // [{ orderNo, role, mandatory: true, escalateAfterHours?: number }]
+  effectiveFrom   DateTime  @default(now())
+  effectiveUntil  DateTime?
+  supersedesId    String? // previous policy version this one replaces
   createdByUserId String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   building Building? @relation(fields: [buildingId], references: [id], onDelete: Cascade)
@@ -935,20 +1115,20 @@ model ApprovalPolicy {
 }
 
 model ApprovalDelegation {
-  id               String   @id @default(uuid())
-  tenantId         String
-  delegatorUserId  String
-  delegateUserId   String
-  role             String   // role being delegated (maintenance_coordinator, finance_controller, ...)
-  buildingId       String?  // null = applies across all buildings the delegator covers
-  reason           String?
-  startsAt         DateTime
-  endsAt           DateTime
-  revokedAt        DateTime?
-  revokedByUserId  String?
-  createdByUserId  String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id              String    @id @default(uuid())
+  tenantId        String
+  delegatorUserId String
+  delegateUserId  String
+  role            String // role being delegated (maintenance_coordinator, finance_controller, ...)
+  buildingId      String? // null = applies across all buildings the delegator covers
+  reason          String?
+  startsAt        DateTime
+  endsAt          DateTime
+  revokedAt       DateTime?
+  revokedByUserId String?
+  createdByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -959,24 +1139,24 @@ model ApprovalDelegation {
 }
 
 model Document {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   tenantId        String
   buildingId      String
   title           String
   documentType    String
   documentTypeKey String?
   status          String
-  versionNo       Int      @default(1)
+  versionNo       Int       @default(1)
   storageKey      String
   // Content integrity & policy (SSOT §P7)
   sha256          String?
   mimeType        String?
   sizeBytes       Int?
-  virusScanStatus String?  @default("pending") // pending | clean | infected | unscanned
+  virusScanStatus String?   @default("pending") // pending | clean | infected | unscanned
   virusScanAt     DateTime?
-  retentionClass  String?  // short | standard | statutory_7y | permanent
+  retentionClass  String? // short | standard | statutory_7y | permanent
   retentionUntil  DateTime?
-  legalHold       Boolean  @default(false)
+  legalHold       Boolean   @default(false)
   legalHoldReason String?
   legalHoldSetAt  DateTime?
   legalHoldSetBy  String?
@@ -987,11 +1167,11 @@ model Document {
   // SSOT §P13 — content lifecycle for time-bounded docs (insurance, KYC, license)
   expiresAt       DateTime?
   expiryAlertedAt DateTime?
-  ownerOrgId      String?  // optional link to BuildingOccupantCompany / Organization owning the doc
-  isDemo          Boolean  @default(false)
-  seedKey         String?  @unique
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  ownerOrgId      String? // optional link to BuildingOccupantCompany / Organization owning the doc
+  isDemo          Boolean   @default(false)
+  seedKey         String?   @unique
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
@@ -1027,7 +1207,7 @@ model AuditEntry {
   createdBy    String?  @default("system")
   createdAt    DateTime @default(now())
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   buildingRef Building? @relation(fields: [buildingId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, timestamp])
@@ -1036,8 +1216,8 @@ model AuditEntry {
 }
 
 model Certification {
-  id               String @id @default(uuid())
-  key              String @unique
+  id               String  @id @default(uuid())
+  key              String  @unique
   name             String
   issuingAuthority String?
   domain           String?
@@ -1048,12 +1228,12 @@ model Certification {
 }
 
 model UserCertification {
-  id                  String   @id @default(uuid())
-  userId              String
-  certificationId     String
-  issuedAt            DateTime @default(now())
-  expiresAt           DateTime?
-  evidenceDocumentId  String?
+  id                 String    @id @default(uuid())
+  userId             String
+  certificationId    String
+  issuedAt           DateTime  @default(now())
+  expiresAt          DateTime?
+  evidenceDocumentId String?
 
   user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   certification Certification @relation(fields: [certificationId], references: [id], onDelete: Cascade)
@@ -1064,8 +1244,8 @@ model UserCertification {
 }
 
 model DocumentType {
-  id               String @id @default(uuid())
-  key              String @unique
+  id               String  @id @default(uuid())
+  key              String  @unique
   name             String
   issuingAuthority String?
   version          String?
@@ -1089,23 +1269,23 @@ model DocumentType {
 //   - kind=reference     : informational — no fill-in, just attached for
 //                          guidance (SOP, checklist PDF).
 model DocumentTemplate {
-  id                  String   @id @default(uuid())
-  tenantId            String
-  buildingId          String?          // optional scope; null = tenant-wide
-  key                 String           // stable identifier within (tenantId, key)
-  name                String
-  description         String?
-  kind                String           // sketch_form | printable | reference
-  documentTypeKey     String?          // link to DocumentType taxonomy
-  bodyMarkdown        String?          // sketch_form body
-  sampleDocumentId    String?          // printable/reference sample Document
-  requiresPhoto       Boolean  @default(false)
-  requiresDigitalSignoff Boolean @default(false)
-  retentionYears      Int?
-  isActive            Boolean  @default(true)
-  createdByUserId     String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                     String   @id @default(uuid())
+  tenantId               String
+  buildingId             String? // optional scope; null = tenant-wide
+  key                    String // stable identifier within (tenantId, key)
+  name                   String
+  description            String?
+  kind                   String // sketch_form | printable | reference
+  documentTypeKey        String? // link to DocumentType taxonomy
+  bodyMarkdown           String? // sketch_form body
+  sampleDocumentId       String? // printable/reference sample Document
+  requiresPhoto          Boolean  @default(false)
+  requiresDigitalSignoff Boolean  @default(false)
+  retentionYears         Int?
+  isActive               Boolean  @default(true)
+  createdByUserId        String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   @@unique([tenantId, key])
   @@index([tenantId, buildingId, isActive])
@@ -1121,40 +1301,40 @@ model DocumentTemplate {
 // Rounds are scheduled (optional RRULE) and produce RoundInstance rows
 // when executed.
 model Round {
-  id             String    @id @default(uuid())
-  tenantId       String
-  buildingId     String
-  name           String
-  description    String?
-  recurrenceRule String?   // optional RRULE; null = ad-hoc
-  assignedRole   String?   // default role that runs the round
+  id               String   @id @default(uuid())
+  tenantId         String
+  buildingId       String
+  name             String
+  description      String?
+  recurrenceRule   String? // optional RRULE; null = ad-hoc
+  assignedRole     String? // default role that runs the round
   estimatedMinutes Int?
-  isActive       Boolean   @default(true)
-  createdByUserId String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  isActive         Boolean  @default(true)
+  createdByUserId  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  waypoints      RoundWaypoint[]
+  waypoints RoundWaypoint[]
 
   @@index([tenantId, buildingId, isActive])
   @@map("rounds")
 }
 
 model RoundWaypoint {
-  id                String   @id @default(uuid())
-  tenantId          String
-  roundId           String
-  orderNo           Int
-  locationId        String?   // BuildingLocation.id (canonical)
-  unitId            String?   // OR BuildingUnit.id
-  legacyZoneId      String?   // OR legacy CleaningZone.id
-  label             String    // display name for this step
-  documentTemplateId String?  // checklist to complete here
-  requiresPhoto     Boolean   @default(false)
-  requiresSignature Boolean   @default(false)
+  id                      String   @id @default(uuid())
+  tenantId                String
+  roundId                 String
+  orderNo                 Int
+  locationId              String? // BuildingLocation.id (canonical)
+  unitId                  String? // OR BuildingUnit.id
+  legacyZoneId            String? // OR legacy CleaningZone.id
+  label                   String // display name for this step
+  documentTemplateId      String? // checklist to complete here
+  requiresPhoto           Boolean  @default(false)
+  requiresSignature       Boolean  @default(false)
   expectedDurationMinutes Int?
-  notes             String?
-  createdAt         DateTime  @default(now())
+  notes                   String?
+  createdAt               DateTime @default(now())
 
   round Round @relation(fields: [roundId], references: [id], onDelete: Cascade)
 
@@ -1167,16 +1347,16 @@ model RoundWaypoint {
 // Execution of a Round by a user. Each answered waypoint becomes a row
 // in RoundInstanceAnswer (checklist responses + photos/signature refs).
 model RoundInstance {
-  id             String    @id @default(uuid())
-  tenantId       String
-  buildingId     String
-  roundId        String
+  id              String    @id @default(uuid())
+  tenantId        String
+  buildingId      String
+  roundId         String
   startedByUserId String
-  startedAt      DateTime  @default(now())
-  completedAt    DateTime?
-  status         String    @default("in_progress") // in_progress | completed | aborted
-  notes          String?
-  createdAt      DateTime  @default(now())
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  status          String    @default("in_progress") // in_progress | completed | aborted
+  notes           String?
+  createdAt       DateTime  @default(now())
 
   @@index([tenantId, buildingId, status])
   @@index([roundId])
@@ -1184,14 +1364,14 @@ model RoundInstance {
 }
 
 model RoundInstanceAnswer {
-  id              String   @id @default(uuid())
-  tenantId        String
-  instanceId      String
-  waypointId      String
-  answeredAt      DateTime @default(now())
-  passed          Boolean  @default(true)
-  findings        String?
-  photoDocumentIds String[] @default([])
+  id                  String   @id @default(uuid())
+  tenantId            String
+  instanceId          String
+  waypointId          String
+  answeredAt          DateTime @default(now())
+  passed              Boolean  @default(true)
+  findings            String?
+  photoDocumentIds    String[] @default([])
   signatureDocumentId String?
 
   @@unique([instanceId, waypointId])
@@ -1200,15 +1380,32 @@ model RoundInstanceAnswer {
 }
 
 model Role {
-  id                  String  @id @default(uuid())
-  key                 String  @unique
+  id                  String   @id @default(uuid())
+  key                 String   @unique
   name                String
   scope               String
   maxDelegatableScope String?
+  // INIT-013 — system roles have tenantId NULL and isCustom=false. Custom
+  // roles created by a workspace_owner are tenant-scoped and isCustom=true.
+  // Custom role keys are namespaced as `tenant_<tenantId>_<slug>` to avoid
+  // colliding with the global system role keys.
+  tenantId            String?
+  isCustom            Boolean  @default(false)
+  description         String?
+  // Module categories this role exercises. Picked from the canonical list
+  // in apps/api/src/common/categories.ts. Used by the role-builder UI to
+  // group permissions by domain (finance / tech_support / cleaning / …).
+  categories          String[] @default([])
+  iconKey             String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   permissions     RolePermission[]
   buildingAssigns BuildingRoleAssignment[]
+  teamAssigns     TeamMemberRoleAssignment[] @relation("TeamRoleGrants")
+  tenant          Tenant?                    @relation("TenantCustomRoles", fields: [tenantId], references: [id], onDelete: Cascade)
 
+  @@index([tenantId, isCustom])
   @@map("roles")
 }
 
@@ -1237,15 +1434,15 @@ model BuildingRoleAssignment {
   // parent scope). Guard semantics live in apps/api/src/common/authz
   // (requireScope). Shape is kept flat rather than promoting to a
   // separate RoleGrant table — we want one SELECT per auth check.
-  floorIds              String[]  @default([])
-  zoneIds               String[]  @default([])
-  systemIds             String[]  @default([])
-  teamId                String?
-  contractorCompanyId   String?
-  tenantCompanyId       String?
+  floorIds            String[] @default([])
+  zoneIds             String[] @default([])
+  systemIds           String[] @default([])
+  teamId              String?
+  contractorCompanyId String?
+  tenantCompanyId     String?
   // When true, task-oriented listings additionally filter to
   // createdByUserId = actor.userId (TENANT_EMPLOYEE self-service pattern).
-  createdByScope        Boolean   @default(false)
+  createdByScope      Boolean  @default(false)
 
   building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1280,22 +1477,22 @@ model BuildingMandate {
 }
 
 model ImportJob {
-  id          String    @id @default(uuid())
-  tenantId    String
-  kind        String
-  sourceKey   String
-  status      String    // preview | committed | rolled_back | failed
-  summary     Json?
-  createdBy   String
-  createdAt   DateTime  @default(now())   // recorded_at — when the import was recorded in our system
+  id              String    @id @default(uuid())
+  tenantId        String
+  kind            String
+  sourceKey       String
+  status          String // preview | committed | rolled_back | failed
+  summary         Json?
+  createdBy       String
+  createdAt       DateTime  @default(now()) // recorded_at — when the import was recorded in our system
   // Dual timestamps (SSOT §P5): recordedAt + occurredAt distinguish
   // "when we filed it" from "when the underlying event actually happened"
-  occurredAt  DateTime? // occurred_at — business date of the imported rows
-  committedAt DateTime?
-  rolledBackAt DateTime?
-  rollbackReason String?
-  createdEntities Json?  // { model: [id, id, ...] } snapshot of rows inserted on commit; used to rollback
-  finishedAt  DateTime?
+  occurredAt      DateTime? // occurred_at — business date of the imported rows
+  committedAt     DateTime?
+  rolledBackAt    DateTime?
+  rollbackReason  String?
+  createdEntities Json? // { model: [id, id, ...] } snapshot of rows inserted on commit; used to rollback
+  finishedAt      DateTime?
 
   rows ImportJobRow[]
 
@@ -1344,20 +1541,20 @@ model EngineeringRecommendation {
 }
 
 model Project {
-  id               String   @id @default(uuid())
-  tenantId         String
-  buildingId       String
-  name             String
-  stage            String   @default("initiation")
-  capexBudgetId    String?
-  recommendationId String?
-  classification   String   @default("capex")
+  id                   String    @id @default(uuid())
+  tenantId             String
+  buildingId           String
+  name                 String
+  stage                String    @default("initiation")
+  capexBudgetId        String?
+  recommendationId     String?
+  classification       String    @default("capex")
   classificationReason String?
-  conversionHistory Json?
-  stageHistory     Json?
-  closedAt         DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  conversionHistory    Json?
+  stageHistory         Json?
+  closedAt             DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
 
@@ -1367,22 +1564,22 @@ model Project {
 }
 
 model ProjectStage {
-  id           String   @id @default(uuid())
-  tenantId     String
-  buildingId   String
-  projectId    String
-  orderNo      Int
-  name         String
-  ownerUserId  String?
-  plannedStart DateTime?
-  plannedEnd   DateTime?
-  actualStart  DateTime?
-  actualEnd    DateTime?
-  status       String   @default("not_started")
+  id                 String    @id @default(uuid())
+  tenantId           String
+  buildingId         String
+  projectId          String
+  orderNo            Int
+  name               String
+  ownerUserId        String?
+  plannedStart       DateTime?
+  plannedEnd         DateTime?
+  actualStart        DateTime?
+  actualEnd          DateTime?
+  status             String    @default("not_started")
   acceptanceCriteria String?
-  notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   @@unique([projectId, orderNo])
   @@index([tenantId, buildingId, projectId])
@@ -1391,22 +1588,22 @@ model ProjectStage {
 }
 
 model ProjectBudgetLine {
-  id            String  @id @default(uuid())
-  tenantId      String
-  buildingId    String
-  projectId     String
-  stageId       String?
-  category      String
-  description   String
-  plannedAmount Float
-  actualAmount  Float    @default(0)
-  currency      String   @default("ILS")
-  classification String  @default("capex")
-  vendorOrgId   String?
+  id              String   @id @default(uuid())
+  tenantId        String
+  buildingId      String
+  projectId       String
+  stageId         String?
+  category        String
+  description     String
+  plannedAmount   Float
+  actualAmount    Float    @default(0)
+  currency        String   @default("ILS")
+  classification  String   @default("capex")
+  vendorOrgId     String?
   purchaseOrderId String?
-  notes         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([tenantId, buildingId, projectId])
   @@index([stageId])
@@ -1415,26 +1612,26 @@ model ProjectBudgetLine {
 }
 
 model ChangeOrder {
-  id              String   @id @default(uuid())
-  tenantId        String
-  buildingId      String
-  projectId       String
-  coNumber        String
-  title           String
-  description     String?
-  scopeDelta      String?
-  costDelta       Float
-  currency        String   @default("ILS")
+  id                String    @id @default(uuid())
+  tenantId          String
+  buildingId        String
+  projectId         String
+  coNumber          String
+  title             String
+  description       String?
+  scopeDelta        String?
+  costDelta         Float
+  currency          String    @default("ILS")
   scheduleDeltaDays Int?
-  classification  String   @default("capex")
+  classification    String    @default("capex")
   requestedByUserId String
   approvalRequestId String?
-  status          String   @default("pending")
-  approvedByUserId String?
-  approvedAt      DateTime?
-  supersededByCoId String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  status            String    @default("pending")
+  approvedByUserId  String?
+  approvedAt        DateTime?
+  supersededByCoId  String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@unique([projectId, coNumber])
   @@index([tenantId, buildingId, projectId])
@@ -1443,25 +1640,25 @@ model ChangeOrder {
 }
 
 model AcceptancePack {
-  id             String   @id @default(uuid())
-  tenantId       String
-  buildingId     String
-  projectId      String   @unique
-  requiredDocumentTypeKeys String[] @default([])
-  submittedAt    DateTime?
-  contractorSignoffByUserId String?
-  contractorSignoffAt       DateTime?
-  managerSignoffByUserId    String?
-  managerSignoffAt          DateTime?
+  id                           String    @id @default(uuid())
+  tenantId                     String
+  buildingId                   String
+  projectId                    String    @unique
+  requiredDocumentTypeKeys     String[]  @default([])
+  submittedAt                  DateTime?
+  contractorSignoffByUserId    String?
+  contractorSignoffAt          DateTime?
+  managerSignoffByUserId       String?
+  managerSignoffAt             DateTime?
   chiefEngineerSignoffByUserId String?
   chiefEngineerSignoffAt       DateTime?
-  ownerSignoffByUserId    String?
-  ownerSignoffAt          DateTime?
-  status         String   @default("draft")
-  rejectionReason String?
-  closedAt       DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  ownerSignoffByUserId         String?
+  ownerSignoffAt               DateTime?
+  status                       String    @default("draft")
+  rejectionReason              String?
+  closedAt                     DateTime?
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
 
   @@index([tenantId, buildingId])
   @@index([status])
@@ -1469,7 +1666,7 @@ model AcceptancePack {
 }
 
 model WorkOrder {
-  id                  String    @id @default(uuid())
+  id                  String   @id @default(uuid())
   tenantId            String
   buildingId          String
   taskInstanceId      String?
@@ -1479,12 +1676,12 @@ model WorkOrder {
   // backfilled from vendorOrgId via a bridge in the seed.
   contractorCompanyId String?
   contractId          String?
-  status              String    @default("dispatched")
+  status              String   @default("dispatched")
   dueAt               DateTime
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  building Building     @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  building Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   task     TaskInstance? @relation(fields: [taskInstanceId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, buildingId, status])
@@ -1493,18 +1690,18 @@ model WorkOrder {
 }
 
 model TakeoverCase {
-  id                  String    @id @default(uuid())
-  tenantId            String
-  buildingId          String
-  outgoingOrgId       String?
-  incomingOrgId       String?
-  targetGoLiveAt      DateTime?
-  status              String    @default("draft")
-  createdByUserId     String
-  signedOffAt         DateTime?
-  signoffLog          Json?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  id              String    @id @default(uuid())
+  tenantId        String
+  buildingId      String
+  outgoingOrgId   String?
+  incomingOrgId   String?
+  targetGoLiveAt  DateTime?
+  status          String    @default("draft")
+  createdByUserId String
+  signedOffAt     DateTime?
+  signoffLog      Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
 
@@ -1520,7 +1717,7 @@ model ParkingSpot {
   floorId    String?
   code       String
   spotType   String   @default("reserved") // reserved | floating | ev | accessible | motorcycle
-  features   String[] @default([])         // ['climate', 'covered', ...]
+  features   String[] @default([]) // ['climate', 'covered', ...]
   isLeased   Boolean  @default(false)
   notes      String?
   createdAt  DateTime @default(now())
@@ -1532,17 +1729,17 @@ model ParkingSpot {
 }
 
 model StorageUnit {
-  id         String   @id @default(uuid())
-  tenantId   String
-  buildingId String
-  floorId    String?
-  code       String
-  areaSqm    Float?
-  isClimateControlled Boolean @default(false)
-  isLeased   Boolean  @default(false)
-  notes      String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  tenantId            String
+  buildingId          String
+  floorId             String?
+  code                String
+  areaSqm             Float?
+  isClimateControlled Boolean  @default(false)
+  isLeased            Boolean  @default(false)
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@unique([buildingId, code])
   @@index([tenantId, buildingId])
@@ -1551,13 +1748,13 @@ model StorageUnit {
 
 // ─── Systems & assets extensions (P4): relations + lift profile ───
 model EquipmentRelation {
-  id           String   @id @default(uuid())
-  tenantId     String
-  buildingId   String
+  id            String   @id @default(uuid())
+  tenantId      String
+  buildingId    String
   parentAssetId String
   childAssetId  String
-  relationType String   @default("contains")  // contains | serves | feeds | controls
-  createdAt    DateTime @default(now())
+  relationType  String   @default("contains") // contains | serves | feeds | controls
+  createdAt     DateTime @default(now())
 
   @@unique([parentAssetId, childAssetId, relationType])
   @@index([tenantId, buildingId])
@@ -1565,24 +1762,24 @@ model EquipmentRelation {
 }
 
 model ElevatorProfile {
-  id              String   @id @default(uuid())
-  tenantId        String
-  buildingId      String
-  assetId         String   @unique
-  shaftCode       String?
-  carType         String?   // passenger | freight | parking
-  capacityKg      Int?
-  servedFromFloor Int?
-  servedToFloor   Int?
-  speedMps        Float?
-  controllerModel String?
-  vendorOrgId     String?
-  rescueMode      String?
-  lastInspectionAt DateTime?
+  id                String    @id @default(uuid())
+  tenantId          String
+  buildingId        String
+  assetId           String    @unique
+  shaftCode         String?
+  carType           String? // passenger | freight | parking
+  capacityKg        Int?
+  servedFromFloor   Int?
+  servedToFloor     Int?
+  speedMps          Float?
+  controllerModel   String?
+  vendorOrgId       String?
+  rescueMode        String?
+  lastInspectionAt  DateTime?
   nextInspectionDue DateTime?
-  notes           String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@index([tenantId, buildingId])
   @@map("elevator_profiles")
@@ -1593,7 +1790,7 @@ model DocumentLink {
   id         String   @id @default(uuid())
   tenantId   String
   documentId String
-  targetType String   // ppm_task | work_order | equipment | lease | quote | purchase_order | project | incident | service_request | takeover_case
+  targetType String // ppm_task | work_order | equipment | lease | quote | purchase_order | project | incident | service_request | takeover_case
   targetId   String
   createdAt  DateTime @default(now())
   createdBy  String?
@@ -1614,9 +1811,9 @@ model Incident {
   equipmentId      String?
   title            String
   description      String?
-  severity         String    // P1 | P2 | P3 | P4
-  status           String    @default("new")   // new | triaged | dispatched | resolved | archived
-  origin           String    // bms | human | qr | email | api | sensor
+  severity         String // P1 | P2 | P3 | P4
+  status           String    @default("new") // new | triaged | dispatched | resolved | archived
+  origin           String // bms | human | qr | email | api | sensor
   reportedBy       String?
   reportedAt       DateTime  @default(now())
   ackedAt          DateTime?
@@ -1647,14 +1844,14 @@ model Incident {
 }
 
 model ServiceRequest {
-  id               String    @id @default(uuid())
+  id               String   @id @default(uuid())
   tenantId         String
   buildingId       String
   unitId           String?
   qrLocationId     String?
-  category         String    // cleaning | technical | complaint | safety | elevator | parking | restroom | other
-  priority         String    @default("normal")  // low | normal | high
-  status           String    @default("new")     // new | triaged | dispatched | resolved | archived
+  category         String // cleaning | technical | complaint | safety | elevator | parking | restroom | other
+  priority         String   @default("normal") // low | normal | high
+  status           String   @default("new") // new | triaged | dispatched | resolved | archived
   description      String?
   photoKey         String?
   submittedBy      String?
@@ -1667,8 +1864,8 @@ model ServiceRequest {
   assignmentReason String?
   floorId          String?
   tenantCompanyId  String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([tenantId, buildingId, status])
   @@index([qrLocationId])
@@ -1689,7 +1886,7 @@ model Quote {
   amount            Float
   currency          String    @default("ILS")
   validUntil        DateTime?
-  status            String    @default("requested")  // requested | received | approved | rejected | superseded | cancelled
+  status            String    @default("requested") // requested | received | approved | rejected | superseded | cancelled
   revisionOf        String?
   receivedAt        DateTime?
   approvalRequestId String?
@@ -1714,7 +1911,7 @@ model PurchaseOrder {
   budgetLineId       String?
   amount             Float
   currency           String    @default("ILS")
-  status             String    @default("issued")  // issued | in_progress | completed | cancelled
+  status             String    @default("issued") // issued | in_progress | completed | cancelled
   issuedAt           DateTime  @default(now())
   expectedDeliveryAt DateTime?
   completedAt        DateTime?
@@ -1731,30 +1928,30 @@ model PurchaseOrder {
 
 // Three-way match: PO ↔ CompletionRecord ↔ VendorInvoice
 model VendorInvoice {
-  id               String   @id @default(uuid())
-  tenantId         String
-  buildingId       String
-  purchaseOrderId  String
-  vendorOrgId      String?
-  invoiceNumber    String
-  invoiceDate      DateTime
-  receivedAt       DateTime @default(now())
-  amount           Float
-  currency         String   @default("ILS")
-  taxAmount        Float?
-  documentId       String?
+  id                      String    @id @default(uuid())
+  tenantId                String
+  buildingId              String
+  purchaseOrderId         String
+  vendorOrgId             String?
+  invoiceNumber           String
+  invoiceDate             DateTime
+  receivedAt              DateTime  @default(now())
+  amount                  Float
+  currency                String    @default("ILS")
+  taxAmount               Float?
+  documentId              String?
   // Three-way match result (populated on POST /vendor-invoices/:id/match)
-  matchStatus      String   @default("unmatched") // unmatched | matched | over_amount | under_amount | no_completion | no_po | price_mismatch | disputed
-  matchedPoAmount     Float?
+  matchStatus             String    @default("unmatched") // unmatched | matched | over_amount | under_amount | no_completion | no_po | price_mismatch | disputed
+  matchedPoAmount         Float?
   matchedCompletionAmount Float?
-  matchedByUserId  String?
-  matchedAt        DateTime?
-  varianceNotes    String?
-  approvalStatus   String   @default("pending") // pending | approved | rejected
-  approvedByUserId String?
-  approvedAt       DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  matchedByUserId         String?
+  matchedAt               DateTime?
+  varianceNotes           String?
+  approvalStatus          String    @default("pending") // pending | approved | rejected
+  approvedByUserId        String?
+  approvedAt              DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   @@unique([tenantId, vendorOrgId, invoiceNumber])
   @@index([tenantId, buildingId, matchStatus])
@@ -1766,23 +1963,23 @@ model VendorInvoice {
 // forward. Used to encode local weekends (e.g. Israel: Saturday) + statutory
 // holidays + tenant-specific maintenance freeze windows.
 model CalendarBlackout {
-  id          String   @id @default(uuid())
-  tenantId    String
-  buildingId  String?  // null = tenant-wide
-  kind        String   // weekend | holiday | freeze | custom
-  label       String
+  id              String    @id @default(uuid())
+  tenantId        String
+  buildingId      String? // null = tenant-wide
+  kind            String // weekend | holiday | freeze | custom
+  label           String
   // Recurring weekly: dayOfWeek (0=Sun..6=Sat). If set, startDate/endDate ignored.
-  dayOfWeek   Int?
+  dayOfWeek       Int?
   // One-shot / annual: inclusive range. If annualRecurring=true, the month+day
   // pattern repeats every year (startDate's year is ignored).
-  startDate   DateTime?
-  endDate     DateTime?
-  annualRecurring Boolean  @default(false)
+  startDate       DateTime?
+  endDate         DateTime?
+  annualRecurring Boolean   @default(false)
   // When a due date hits a blackout: shift | skip | defer_to_next_working_day
-  policy      String   @default("defer_to_next_working_day")
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  policy          String    @default("defer_to_next_working_day")
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([tenantId, buildingId, isActive])
   @@index([dayOfWeek])
@@ -1793,23 +1990,23 @@ model CalendarBlackout {
 // threshold, spawn an ad-hoc TaskInstance from the bound PpmTemplate.
 // This is the "predictive maintenance" edge of P6.
 model ConditionTrigger {
-  id           String   @id @default(uuid())
-  tenantId     String
-  buildingId   String
-  sensorPointId String
-  templateId   String
-  name         String
+  id               String    @id @default(uuid())
+  tenantId         String
+  buildingId       String
+  sensorPointId    String
+  templateId       String
+  name             String
   // Threshold semantics: operator applied to reading vs value.
-  operator     String   // gt | gte | lt | lte | eq | ne | crossing
-  threshold    Float
-  unit         String?
+  operator         String // gt | gte | lt | lte | eq | ne | crossing
+  threshold        Float
+  unit             String?
   // De-duplication: don't spawn a new task if another fired within the window.
-  cooldownMinutes Int   @default(60)
-  isActive     Boolean  @default(true)
-  lastFiredAt  DateTime?
+  cooldownMinutes  Int       @default(60)
+  isActive         Boolean   @default(true)
+  lastFiredAt      DateTime?
   lastReadingValue Float?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([tenantId, buildingId, isActive])
   @@index([sensorPointId])
@@ -1820,17 +2017,17 @@ model ConditionTrigger {
 // Audit log of every evaluated sensor reading that flipped a trigger —
 // whether or not it actually spawned a task (may be de-duped by cooldown).
 model ConditionEvent {
-  id           String   @id @default(uuid())
-  tenantId     String
-  buildingId   String
-  triggerId    String
-  sensorPointId String
-  readingValue Float
-  readingAt    DateTime
-  action       String   // spawned_task | deduped_cooldown | threshold_not_met
+  id             String   @id @default(uuid())
+  tenantId       String
+  buildingId     String
+  triggerId      String
+  sensorPointId  String
+  readingValue   Float
+  readingAt      DateTime
+  action         String // spawned_task | deduped_cooldown | threshold_not_met
   taskInstanceId String?
-  notes        String?
-  createdAt    DateTime @default(now())
+  notes          String?
+  createdAt      DateTime @default(now())
 
   @@index([tenantId, triggerId, readingAt])
   @@index([action])
@@ -1840,22 +2037,22 @@ model ConditionEvent {
 // Emergency override (break-glass): allows bypassing normal SoD/approval
 // chains for P1 incidents; requires post-facto ratification within a window.
 model EmergencyOverride {
-  id               String    @id @default(uuid())
-  tenantId         String
-  buildingId       String
-  targetType       String    // purchase_order | work_order | completion | task_instance | quote
-  targetId         String
-  reason           String
-  severity         String    @default("P1") // P1 | P2
-  invokedByUserId  String
-  invokedAt        DateTime  @default(now())
+  id                String    @id @default(uuid())
+  tenantId          String
+  buildingId        String
+  targetType        String // purchase_order | work_order | completion | task_instance | quote
+  targetId          String
+  reason            String
+  severity          String    @default("P1") // P1 | P2
+  invokedByUserId   String
+  invokedAt         DateTime  @default(now())
   ratificationDueBy DateTime
-  ratifiedByUserId String?
-  ratifiedAt       DateTime?
+  ratifiedByUserId  String?
+  ratifiedAt        DateTime?
   ratificationNotes String?
-  status           String    @default("pending_ratification") // pending_ratification | ratified | lapsed | rejected
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  status            String    @default("pending_ratification") // pending_ratification | ratified | lapsed | rejected
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@index([tenantId, buildingId, status])
   @@index([targetType, targetId])
@@ -1864,7 +2061,7 @@ model EmergencyOverride {
 }
 
 model CompletionRecord {
-  id                      String    @id @default(uuid())
+  id                      String   @id @default(uuid())
   tenantId                String
   buildingId              String
   workOrderId             String?
@@ -1876,9 +2073,9 @@ model CompletionRecord {
   materialsCost           Float?
   downtimeMinutes         Int?
   serviceReportDocumentId String?
-  photoDocumentIds        String[]  @default([])
+  photoDocumentIds        String[] @default([])
   notes                   String?
-  createdAt               DateTime  @default(now())
+  createdAt               DateTime @default(now())
 
   @@index([tenantId, buildingId])
   @@index([workOrderId])
@@ -1917,7 +2114,7 @@ model StockLocation {
   buildingId String?
   code       String
   name       String
-  kind       String   @default("storeroom")  // storeroom | truck | vendor | scrap
+  kind       String   @default("storeroom") // storeroom | truck | vendor | scrap
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
 
@@ -1934,7 +2131,7 @@ model StockMovement {
   tenantId        String
   itemId          String
   quantity        Float
-  movementType    String   // receipt | issue | transfer | adjustment | return | write_off
+  movementType    String // receipt | issue | transfer | adjustment | return | write_off
   fromLocationId  String?
   toLocationId    String?
   workOrderId     String?
@@ -1950,7 +2147,7 @@ model StockMovement {
 
   item         InventoryItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
   fromLocation StockLocation? @relation("StockMovementFrom", fields: [fromLocationId], references: [id], onDelete: SetNull)
-  toLocation   StockLocation? @relation("StockMovementTo",   fields: [toLocationId],   references: [id], onDelete: SetNull)
+  toLocation   StockLocation? @relation("StockMovementTo", fields: [toLocationId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, itemId])
   @@index([tenantId, occurredAt])
@@ -1960,19 +2157,19 @@ model StockMovement {
 }
 
 model QrLocation {
-  id         String   @id @default(uuid())
-  tenantId   String
-  buildingId String
-  code       String   // short scan-friendly code (e.g. BC1-LOBBY-E1)
-  label      String
-  targetType String   // "space" | "equipment" | "floor" | "unit"
-  spaceId    String?
+  id          String   @id @default(uuid())
+  tenantId    String
+  buildingId  String
+  code        String // short scan-friendly code (e.g. BC1-LOBBY-E1)
+  label       String
+  targetType  String // "space" | "equipment" | "floor" | "unit"
+  spaceId     String?
   equipmentId String?
-  floorId    String?
-  unitId     String?
-  notes      String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  floorId     String?
+  unitId      String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@unique([buildingId, code])
   @@index([tenantId, buildingId])
@@ -1980,7 +2177,7 @@ model QrLocation {
 }
 
 model Entrance {
-  id         String @id @default(uuid())
+  id         String   @id @default(uuid())
   tenantId   String
   buildingId String
   name       String
@@ -2003,7 +2200,7 @@ model Entrance {
 // BuildingFloor / BuildingUnit. Cross-module readers MUST NOT reach for
 // these models — the audit job will start failing CI when they do.
 model Floor {
-  id         String @id @default(uuid())
+  id         String   @id @default(uuid())
   tenantId   String
   buildingId String
   entranceId String?
@@ -2022,7 +2219,7 @@ model Floor {
 
 /// @deprecated — use BuildingUnit. See note above Floor model.
 model Unit {
-  id         String @id @default(uuid())
+  id         String   @id @default(uuid())
   tenantId   String
   buildingId String
   floorId    String?
@@ -2042,15 +2239,15 @@ model Unit {
 }
 
 model BuildingSettings {
-  id            String @id @default(uuid())
-  buildingId    String @unique
-  currency      String @default("USD")
-  timezone      String @default("UTC")
-  billingCycle  String @default("monthly")
-  taxRules      Json?
-  locale        String @default("en")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(uuid())
+  buildingId   String   @unique
+  currency     String   @default("USD")
+  timezone     String   @default("UTC")
+  billingCycle String   @default("monthly")
+  taxRules     Json?
+  locale       String   @default("en")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
 
@@ -2058,7 +2255,7 @@ model BuildingSettings {
 }
 
 model Vendor {
-  id          String @id @default(uuid())
+  id          String   @id @default(uuid())
   tenantId    String
   name        String
   serviceType String?
@@ -2072,15 +2269,15 @@ model Vendor {
 }
 
 model Contract {
-  id           String @id @default(uuid())
-  tenantId     String
-  buildingId   String
-  vendorId     String
-  startDate    DateTime
-  endDate      DateTime?
-  monthlyCost  Float?
-  status       String   @default("active")
-  createdAt    DateTime @default(now())
+  id          String    @id @default(uuid())
+  tenantId    String
+  buildingId  String
+  vendorId    String
+  startDate   DateTime
+  endDate     DateTime?
+  monthlyCost Float?
+  status      String    @default("active")
+  createdAt   DateTime  @default(now())
 
   building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   vendor   Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
@@ -2090,12 +2287,12 @@ model Contract {
 }
 
 model Account {
-  id         String @id @default(uuid())
+  id         String   @id @default(uuid())
   tenantId   String
   buildingId String
   type       String
-  balance    Float  @default(0)
-  currency   String @default("USD")
+  balance    Float    @default(0)
+  currency   String   @default("USD")
   createdAt  DateTime @default(now())
 
   building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
@@ -2105,14 +2302,14 @@ model Account {
 }
 
 model MaintenancePlan {
-  id         String @id @default(uuid())
+  id         String    @id @default(uuid())
   tenantId   String
   buildingId String
   assetId    String
   frequency  String
   nextDueAt  DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
 
@@ -2121,14 +2318,14 @@ model MaintenancePlan {
 }
 
 model ResidentRequest {
-  id          String @id @default(uuid())
+  id          String   @id @default(uuid())
   tenantId    String
   buildingId  String
   unitId      String?
   createdBy   String
   category    String
-  priority    String  @default("normal")
-  status      String  @default("open")
+  priority    String   @default("normal")
+  status      String   @default("open")
   description String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -2140,14 +2337,14 @@ model ResidentRequest {
 }
 
 model Notification {
-  id         String @id @default(uuid())
+  id         String    @id @default(uuid())
   tenantId   String
   buildingId String?
   userId     String
   type       String
   content    String
   readAt     DateTime?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   building Building? @relation(fields: [buildingId], references: [id], onDelete: SetNull)
 
@@ -2175,9 +2372,9 @@ model BuildingFloor {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  building Building       @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  units    BuildingUnit[]
-  systems  BuildingSystem[]
+  building         Building          @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  units            BuildingUnit[]
+  systems          BuildingSystem[]
   floorAssignments FloorAssignment[]
 
   @@unique([buildingId, floorCode])
@@ -2217,14 +2414,14 @@ model FloorAssignment {
 // inserts when someone is absent. UNIQUE on (user, date) keeps history
 // honest if the toggle flips during the day.
 model UserAvailability {
-  id        String   @id @default(uuid())
-  tenantId  String
-  userId    String
-  date      DateTime @db.Date
-  status    String   // present | absent | on_leave | sick
-  reason    String?
-  setBy     String?
-  setAt     DateTime @default(now())
+  id       String   @id @default(uuid())
+  tenantId String
+  userId   String
+  date     DateTime @db.Date
+  status   String // present | absent | on_leave | sick
+  reason   String?
+  setBy    String?
+  setAt    DateTime @default(now())
 
   @@unique([tenantId, userId, date])
   @@index([userId, date])
@@ -2248,9 +2445,9 @@ model BuildingUnit {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  building    Building               @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  floor       BuildingFloor          @relation(fields: [floorId], references: [id], onDelete: Cascade)
-  group       BuildingUnitGroup?     @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  building    Building                @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  floor       BuildingFloor           @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  group       BuildingUnitGroup?      @relation(fields: [groupId], references: [id], onDelete: SetNull)
   occupancies BuildingUnitOccupancy[]
   contracts   BuildingContract[]
 
@@ -2275,9 +2472,9 @@ model BuildingUnitGroup {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  building         Building                 @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  occupantCompany  BuildingOccupantCompany? @relation(fields: [occupantCompanyId], references: [id], onDelete: SetNull)
-  units            BuildingUnit[]
+  building        Building                 @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  occupantCompany BuildingOccupantCompany? @relation(fields: [occupantCompanyId], references: [id], onDelete: SetNull)
+  units           BuildingUnit[]
 
   @@unique([buildingId, groupCode])
   @@index([tenantId, buildingId])
@@ -2296,9 +2493,9 @@ model BuildingLocation {
   tenantId     String
   buildingId   String
   floorId      String
-  code         String   // unique within the building
+  code         String // unique within the building
   name         String
-  locationType String   // restroom | corridor | lobby | shared_area | mechanical_room | storage | office | meeting_room | kitchen | custom
+  locationType String // restroom | corridor | lobby | shared_area | mechanical_room | storage | office | meeting_room | kitchen | custom
   areaSqm      Float?
   isLeasable   Boolean  @default(false)
   unitId       String?  @unique // optional back-link to BuildingUnit if this location IS a leasable unit
@@ -2358,24 +2555,24 @@ model BuildingSystem {
 }
 
 model BuildingOccupantCompany {
-  id           String   @id @default(uuid())
-  tenantId     String
-  buildingId   String
-  companyName  String
-  companyType  String?
-  contactName  String?
-  phone        String?
-  email        String?
-  notes        String?
+  id          String   @id @default(uuid())
+  tenantId    String
+  buildingId  String
+  companyName String
+  companyType String?
+  contactName String?
+  phone       String?
+  email       String?
+  notes       String?
   // INIT-007 Phase 4 — TENANT_COMPANY_ADMIN link. When populated the
   // referenced User gets RBAC grant TENANT_COMPANY_ADMIN with scope
   // tenantCompanyId = this.id. Nullable so companies without a designated
   // admin still work (requests stay at reception / manager visibility).
-  adminUserId  String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  adminUserId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  building    Building                @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  building    Building                 @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   occupancies BuildingUnitOccupancy[]
   contracts   BuildingContract[]
   unitGroups  BuildingUnitGroup[]
@@ -2391,30 +2588,30 @@ model BuildingOccupantCompany {
 // between tenants of the same building: cleaning frequency, insurance,
 // notification channels, allocations they purchased (parking count, storage).
 model OccupantCompanySettings {
-  id                   String  @id @default(uuid())
+  id                   String    @id @default(uuid())
   tenantId             String
-  occupantCompanyId    String  @unique
+  occupantCompanyId    String    @unique
   // Cleaning
-  cleaningFrequency    String  @default("daily")       // daily | weekdays | weekly | custom
-  cleaningSlaHours     Int     @default(24)
-  cleaningZone         String?                          // free-text zone label inside the shared scheme
+  cleaningFrequency    String    @default("daily") // daily | weekdays | weekly | custom
+  cleaningSlaHours     Int       @default(24)
+  cleaningZone         String? // free-text zone label inside the shared scheme
   // Allocations (what they paid for)
-  parkingCount         Int     @default(0)
-  storageCount         Int     @default(0)
+  parkingCount         Int       @default(0)
+  storageCount         Int       @default(0)
   // Compliance / access
-  insuranceRequired    Boolean @default(true)
+  insuranceRequired    Boolean   @default(true)
   insuranceExpiresAt   DateTime?
-  accessCardCount      Int     @default(0)
-  allowsAfterHours     Boolean @default(false)
+  accessCardCount      Int       @default(0)
+  allowsAfterHours     Boolean   @default(false)
   // Billing / comms
   billingEmail         String?
-  preferredLanguage    String  @default("en")
-  notificationChannels String[] @default([])            // ['email', 'sms', 'inapp']
+  preferredLanguage    String    @default("en")
+  notificationChannels String[]  @default([]) // ['email', 'sms', 'inapp']
   // Notes & custom
   notes                String?
   customFields         Json?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   occupantCompany BuildingOccupantCompany @relation(fields: [occupantCompanyId], references: [id], onDelete: Cascade)
 
@@ -2423,21 +2620,21 @@ model OccupantCompanySettings {
 }
 
 model BuildingUnitOccupancy {
-  id                 String    @id @default(uuid())
-  tenantId           String
-  buildingId         String
-  unitId             String
-  occupantCompanyId  String
-  startDate          DateTime?
-  endDate            DateTime?
-  occupancyStatus    String    @default("active")
-  notes              String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id                String    @id @default(uuid())
+  tenantId          String
+  buildingId        String
+  unitId            String
+  occupantCompanyId String
+  startDate         DateTime?
+  endDate           DateTime?
+  occupancyStatus   String    @default("active")
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  building         Building                @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  unit             BuildingUnit            @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  occupantCompany  BuildingOccupantCompany @relation(fields: [occupantCompanyId], references: [id], onDelete: Cascade)
+  building        Building                @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  unit            BuildingUnit            @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  occupantCompany BuildingOccupantCompany @relation(fields: [occupantCompanyId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, buildingId, unitId])
   @@index([occupantCompanyId])
@@ -2468,16 +2665,16 @@ model BuildingContract {
 
   // SSOT §P13 — escalation policy: { type: 'cpi'|'fixed_pct'|'stepped',
   // ratePct?: number, indexBase?: string, schedule?: [{ atMonth: number, ratePct: number }] }
-  escalationPolicy Json?
-  paymentFrequency String   @default("monthly") // monthly | quarterly | yearly
-  noticePeriodDays Int?
+  escalationPolicy    Json?
+  paymentFrequency    String  @default("monthly") // monthly | quarterly | yearly
+  noticePeriodDays    Int?
   insuranceDocumentId String?
 
-  building         Building                 @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-  occupantCompany  BuildingOccupantCompany? @relation(fields: [occupantCompanyId], references: [id], onDelete: Cascade)
-  vendorOrg        Organization?            @relation("BuildingContractVendor", fields: [vendorOrgId], references: [id], onDelete: SetNull)
-  unit             BuildingUnit?            @relation(fields: [unitId], references: [id], onDelete: SetNull)
-  allocations      LeaseAllocation[]
+  building        Building                 @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  occupantCompany BuildingOccupantCompany? @relation(fields: [occupantCompanyId], references: [id], onDelete: Cascade)
+  vendorOrg       Organization?            @relation("BuildingContractVendor", fields: [vendorOrgId], references: [id], onDelete: SetNull)
+  unit            BuildingUnit?            @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  allocations     LeaseAllocation[]
 
   @@index([tenantId, buildingId, contractType])
   @@index([occupantCompanyId])
@@ -2488,14 +2685,14 @@ model BuildingContract {
 // SSOT §P13 — single contract can cover multiple billable items: extra units,
 // parking spots, storage. Replaces hard-coded one-unit assumption.
 model LeaseAllocation {
-  id            String  @id @default(uuid())
+  id            String   @id @default(uuid())
   tenantId      String
   contractId    String
-  targetType    String  // unit | parking_spot | storage_unit
+  targetType    String // unit | parking_spot | storage_unit
   targetId      String
-  share         Float   @default(1.0)  // 0..1 portion of monthly amount apportioned here
-  monthlyAmount Float   @default(0)
-  currency      String  @default("ILS")
+  share         Float    @default(1.0) // 0..1 portion of monthly amount apportioned here
+  monthlyAmount Float    @default(0)
+  currency      String   @default("ILS")
   notes         String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -2517,7 +2714,7 @@ model TenantRepresentative {
   occupantCompanyId String
   userId            String
   role              String   @default("primary_contact") // primary_contact | building_committee | finance_contact
-  status            String   @default("active")          // active | revoked
+  status            String   @default("active") // active | revoked
   invitedByUserId   String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -2530,22 +2727,22 @@ model TenantRepresentative {
 
 // Transactional outbox (SSOT §P16)
 model OutboxEvent {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   tenantId        String
   buildingId      String?
-  specversion     String   @default("1.0")
+  specversion     String    @default("1.0")
   type            String
   source          String
   subject         String?
-  datacontenttype String   @default("application/json")
-  time            DateTime @default(now())
+  datacontenttype String    @default("application/json")
+  time            DateTime  @default(now())
   data            Json
-  status          String   @default("pending")
-  attempts        Int      @default(0)
+  status          String    @default("pending")
+  attempts        Int       @default(0)
   lastAttemptAt   DateTime?
   lastError       String?
   deliveredAt     DateTime?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
 
   @@index([tenantId, status, createdAt])
   @@index([type])
@@ -2553,15 +2750,15 @@ model OutboxEvent {
 }
 
 model WebhookSubscription {
-  id             String   @id @default(uuid())
-  tenantId       String
-  url            String
-  eventTypes     String[] @default([])
-  sharedSecret   String
-  isActive       Boolean  @default(true)
+  id              String   @id @default(uuid())
+  tenantId        String
+  url             String
+  eventTypes      String[] @default([])
+  sharedSecret    String
+  isActive        Boolean  @default(true)
   createdByUserId String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([tenantId, isActive])
   @@map("webhook_subscriptions")
@@ -2615,13 +2812,13 @@ model PersonalDataCategory {
 }
 
 model DsarRequest {
-  id                String   @id @default(uuid())
+  id                String    @id @default(uuid())
   tenantId          String
   subjectUserId     String?
   subjectEmail      String
   kind              String
-  status            String   @default("received")
-  requestedAt       DateTime @default(now())
+  status            String    @default("received")
+  requestedAt       DateTime  @default(now())
   verifiedAt        DateTime?
   completedAt       DateTime?
   fulfilmentSummary Json?
@@ -2635,22 +2832,22 @@ model DsarRequest {
 
 // SSOT §P19 — DPA templates + subprocessor registry
 model SubprocessorRegistry {
-  id              String   @id @default(uuid())
-  tenantId        String
-  name            String
-  legalEntity     String?
-  countryCode     String?
-  category        String   // hosting | email | sms | storage | analytics | accounting | other
-  websiteUrl      String?
-  dpoEmail        String?
-  region          String?  // e.g. "EU", "Israel", "US-East"
-  dataCategories  String[] @default([]) // PersonalDataCategory.key list this subprocessor touches
-  notes           String?
-  approvedAt      DateTime?
+  id               String    @id @default(uuid())
+  tenantId         String
+  name             String
+  legalEntity      String?
+  countryCode      String?
+  category         String // hosting | email | sms | storage | analytics | accounting | other
+  websiteUrl       String?
+  dpoEmail         String?
+  region           String? // e.g. "EU", "Israel", "US-East"
+  dataCategories   String[]  @default([]) // PersonalDataCategory.key list this subprocessor touches
+  notes            String?
+  approvedAt       DateTime?
   approvedByUserId String?
-  status          String   @default("active") // active | suspended | retired
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  status           String    @default("active") // active | suspended | retired
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@unique([tenantId, name])
   @@index([tenantId, status])
@@ -2658,22 +2855,22 @@ model SubprocessorRegistry {
 }
 
 model DpaTemplate {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   tenantId        String
-  key             String   // controller_to_processor | joint_controller | tom_addendum
+  key             String // controller_to_processor | joint_controller | tom_addendum
   name            String
-  jurisdiction    String   @default("EU")
-  version         Int      @default(1)
-  isActive        Boolean  @default(true)
+  jurisdiction    String    @default("EU")
+  version         Int       @default(1)
+  isActive        Boolean   @default(true)
   bodyMarkdown    String
-  placeholders    String[] @default([])
+  placeholders    String[]  @default([])
   retentionYears  Int?
-  effectiveFrom   DateTime @default(now())
+  effectiveFrom   DateTime  @default(now())
   effectiveUntil  DateTime?
   supersedesId    String?
   createdByUserId String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@unique([tenantId, key, jurisdiction, version])
   @@index([tenantId, isActive])
@@ -2683,32 +2880,32 @@ model DpaTemplate {
 // ── OIDC / SAML SSO (SSOT §P2) ──────────────────────────────────────
 // Per-tenant registration of an upstream identity provider.
 model IdentityProvider {
-  id              String   @id @default(uuid())
-  tenantId        String
-  key             String   // "google" | "microsoft" | "okta-acme" | custom
-  displayName     String
-  protocol        String   @default("oidc")  // oidc | saml
+  id                    String   @id @default(uuid())
+  tenantId              String
+  key                   String // "google" | "microsoft" | "okta-acme" | custom
+  displayName           String
+  protocol              String   @default("oidc") // oidc | saml
   // OIDC fields
-  issuerUrl       String?  // e.g. https://accounts.google.com
-  clientId        String?
-  clientSecret    String?  // encrypt at rest in production
-  scopes          String[] @default(["openid", "email", "profile"])
+  issuerUrl             String? // e.g. https://accounts.google.com
+  clientId              String?
+  clientSecret          String? // encrypt at rest in production
+  scopes                String[] @default(["openid", "email", "profile"])
   authorizationEndpoint String?
-  tokenEndpoint   String?
-  userinfoEndpoint String?
-  jwksUri         String?
+  tokenEndpoint         String?
+  userinfoEndpoint      String?
+  jwksUri               String?
   // SAML fields (metadata URL or inline entity descriptor)
-  samlMetadataUrl String?
-  samlEntityId    String?
+  samlMetadataUrl       String?
+  samlEntityId          String?
   // Mapping
-  emailClaim      String   @default("email")
-  nameClaim       String   @default("name")
-  groupClaim      String?  // if set, groups → role assignment
+  emailClaim            String   @default("email")
+  nameClaim             String   @default("name")
+  groupClaim            String? // if set, groups → role assignment
   // Status
-  isActive        Boolean  @default(true)
-  createdByUserId String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  isActive              Boolean  @default(true)
+  createdByUserId       String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   @@unique([tenantId, key])
   @@index([tenantId, isActive])
@@ -2717,15 +2914,15 @@ model IdentityProvider {
 
 // Federated identity link — maps an upstream subject (sub) to a local user.
 model FederatedIdentity {
-  id             String   @id @default(uuid())
-  userId         String
-  providerId     String
-  subject        String   // "sub" claim from upstream
-  email          String?
-  displayName    String?
-  rawClaims      Json?
-  createdAt      DateTime @default(now())
-  lastLoginAt    DateTime?
+  id          String    @id @default(uuid())
+  userId      String
+  providerId  String
+  subject     String // "sub" claim from upstream
+  email       String?
+  displayName String?
+  rawClaims   Json?
+  createdAt   DateTime  @default(now())
+  lastLoginAt DateTime?
 
   @@unique([providerId, subject])
   @@index([userId])
@@ -2753,13 +2950,13 @@ model OidcLoginState {
 // ── SCIM 2.0 (SSOT §P2) ─────────────────────────────────────────────
 // Bearer token exchanged with an enterprise IdP for /scim/v2/Users.
 model ScimToken {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   tenantId        String
-  tokenHash       String   @unique
+  tokenHash       String    @unique
   label           String
-  isActive        Boolean  @default(true)
+  isActive        Boolean   @default(true)
   createdByUserId String
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
   lastUsedAt      DateTime?
   revokedAt       DateTime?
 
@@ -2769,15 +2966,15 @@ model ScimToken {
 
 // ── Signed URLs for document reads (SSOT §P18) ──────────────────────
 model SignedUrl {
-  id         String   @id @default(uuid())
-  tenantId   String
-  documentId String
-  token      String   @unique
-  expiresAt  DateTime
-  usesLeft   Int      @default(1)
+  id              String    @id @default(uuid())
+  tenantId        String
+  documentId      String
+  token           String    @unique
+  expiresAt       DateTime
+  usesLeft        Int       @default(1)
   createdByUserId String
-  createdAt  DateTime @default(now())
-  usedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  usedAt          DateTime?
 
   @@index([tenantId, documentId])
   @@index([expiresAt])
@@ -2829,7 +3026,7 @@ model ContractorCompany {
   tenantId  String
   name      String
   legalName String?
-  domain    String   // cleaning | technical | security | generic
+  domain    String // cleaning | technical | security | generic
   phone     String?
   email     String?
   isActive  Boolean  @default(true)
@@ -2843,7 +3040,7 @@ model ContractorCompany {
 }
 
 model CleaningRole {
-  id           String @id @default(uuid())
+  id           String   @id @default(uuid())
   tenantId     String
   contractorId String
   code         String // boss | manager | supervisor | cleaner | dispatcher
@@ -2856,7 +3053,7 @@ model CleaningRole {
 }
 
 model CleaningStaff {
-  id           String  @id @default(uuid())
+  id           String   @id @default(uuid())
   tenantId     String
   contractorId String
   userId       String?
@@ -2865,7 +3062,7 @@ model CleaningStaff {
   email        String?
   roleId       String
   managerId    String?
-  isActive     Boolean @default(true)
+  isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -2876,19 +3073,19 @@ model CleaningStaff {
 }
 
 model CleaningZone {
-  id                 String  @id @default(uuid())
-  tenantId           String
-  buildingId         String
-  floorId            String?
-  locationId         String?
-  name               String
-  code               String
-  zoneType           String // floor | wc | office | lobby | corridor | shared_area | custom
-  contractorId       String?
-  supervisorStaffId  String?
-  isActive           Boolean @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                String   @id @default(uuid())
+  tenantId          String
+  buildingId        String
+  floorId           String?
+  locationId        String?
+  name              String
+  code              String
+  zoneType          String // floor | wc | office | lobby | corridor | shared_area | custom
+  contractorId      String?
+  supervisorStaffId String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@unique([buildingId, code])
   @@index([tenantId, buildingId, contractorId])
@@ -2897,18 +3094,18 @@ model CleaningZone {
 }
 
 model CleaningQrPoint {
-  id            String   @id @default(uuid())
+  id            String    @id @default(uuid())
   tenantId      String
   buildingId    String
   zoneId        String
   locationId    String?
-  code          String   @unique // short, random, unguessable public code
+  code          String    @unique // short, random, unguessable public code
   label         String
   publicUrl     String
-  isActive      Boolean  @default(true)
+  isActive      Boolean   @default(true)
   lastScannedAt DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([tenantId, buildingId, isActive])
   @@index([zoneId])
@@ -2916,7 +3113,7 @@ model CleaningQrPoint {
 }
 
 model CleaningRequest {
-  id                  String   @id @default(uuid())
+  id                  String    @id @default(uuid())
   tenantId            String
   buildingId          String
   zoneId              String
@@ -2924,15 +3121,15 @@ model CleaningRequest {
   createdByUserId     String?
   createdByGuestName  String?
   createdByGuestPhone String?
-  source              String   // dashboard | qr | admin | dispatcher
-  category            String   // regular_cleaning | urgent_cleaning | spill | restroom_issue | trash_overflow | other
+  source              String // dashboard | qr | admin | dispatcher
+  category            String // regular_cleaning | urgent_cleaning | spill | restroom_issue | trash_overflow | other
   title               String
   description         String?
-  priority            String   @default("normal") // low | normal | high | urgent
-  status              String   @default("new")    // new | assigned | in_progress | done | rejected | cancelled
+  priority            String    @default("normal") // low | normal | high | urgent
+  status              String    @default("new") // new | assigned | in_progress | done | rejected | cancelled
   contractorId        String?
   assignedStaffId     String?
-  requestedAt         DateTime @default(now())
+  requestedAt         DateTime  @default(now())
   assignedAt          DateTime?
   startedAt           DateTime?
   resolvedAt          DateTime?
@@ -2948,8 +3145,8 @@ model CleaningRequest {
   assignmentReason    String?
   floorId             String?
   tenantCompanyId     String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([tenantId, buildingId, status])
   @@index([contractorId, status])
@@ -2962,14 +3159,14 @@ model CleaningRequest {
 }
 
 model CleaningRequestComment {
-  id             String   @id @default(uuid())
-  tenantId       String
-  requestId      String
-  authorUserId   String?
-  authorStaffId  String?
-  body           String
-  isInternal     Boolean  @default(false)
-  createdAt      DateTime @default(now())
+  id            String   @id @default(uuid())
+  tenantId      String
+  requestId     String
+  authorUserId  String?
+  authorStaffId String?
+  body          String
+  isInternal    Boolean  @default(false)
+  createdAt     DateTime @default(now())
 
   @@index([requestId, createdAt])
   @@index([tenantId])
@@ -2977,14 +3174,14 @@ model CleaningRequestComment {
 }
 
 model CleaningRequestAttachment {
-  id                 String   @id @default(uuid())
-  tenantId           String
-  requestId          String
-  fileUrl            String
-  fileType           String
-  uploadedByUserId   String?
-  uploadedByStaffId  String?
-  createdAt          DateTime @default(now())
+  id                String   @id @default(uuid())
+  tenantId          String
+  requestId         String
+  fileUrl           String
+  fileType          String
+  uploadedByUserId  String?
+  uploadedByStaffId String?
+  createdAt         DateTime @default(now())
 
   @@index([requestId])
   @@index([tenantId])
@@ -2996,7 +3193,7 @@ model CleaningRequestHistory {
   tenantId    String
   requestId   String
   action      String
-  actorType   String   // user | staff | system | guest
+  actorType   String // user | staff | system | guest
   actorId     String?
   payloadJson Json?
   createdAt   DateTime @default(now())
@@ -3007,30 +3204,30 @@ model CleaningRequestHistory {
 }
 
 model UserMfa {
-  id          String   @id @default(uuid())
-  userId      String   @unique
-  secret      String
-  algorithm   String   @default("SHA1")
-  digits      Int      @default(6)
-  period      Int      @default(30)
-  enabledAt   DateTime?
-  lastUsedAt  DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String    @id @default(uuid())
+  userId     String    @unique
+  secret     String
+  algorithm  String    @default("SHA1")
+  digits     Int       @default(6)
+  period     Int       @default(30)
+  enabledAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@map("user_mfa")
 }
 
 model SeedRun {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   tenantId    String?
   seedName    String
   seedVersion String
   status      String
   checksum    String
-  startedAt   DateTime @default(now())
+  startedAt   DateTime  @default(now())
   finishedAt  DateTime?
-  createdBy   String   @default("seed:test-building")
+  createdBy   String    @default("seed:test-building")
   errorText   String?
 
   tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
@@ -3043,15 +3240,15 @@ model SeedRun {
 /// Tenant-scoped so admins can revoke devices for a specific workspace without
 /// touching the user's other sessions.
 model Device {
-  id           String   @id @default(uuid())
-  tenantId     String
-  userId       String
-  platform     String   // 'ios' | 'android' | 'web'
-  expoPushToken String  @unique
-  osVersion    String?
-  appVersion   String?
-  lastSeenAt   DateTime @default(now())
-  createdAt    DateTime @default(now())
+  id            String   @id @default(uuid())
+  tenantId      String
+  userId        String
+  platform      String // 'ios' | 'android' | 'web'
+  expoPushToken String   @unique
+  osVersion     String?
+  appVersion    String?
+  lastSeenAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)

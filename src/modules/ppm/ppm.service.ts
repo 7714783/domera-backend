@@ -10,6 +10,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { OutboxRegistry } from '../events/outbox.registry';
+import { RoleAssignmentsService } from '../role-assignments/role-assignments.service';
 import { requireManager, resolveBuildingId } from '../../common/building.helpers';
 import { approxMonths, nextAfter, addMonthsUtc } from './engine/recurrence';
 import { applyBlackouts, BlackoutRule } from './engine/blackout';
@@ -87,7 +88,33 @@ export class PpmService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly approvals: ApprovalsService,
     private readonly outboxRegistry: OutboxRegistry,
+    private readonly assignments: RoleAssignmentsService,
   ) {}
+
+  // INIT-013 — pick a TeamMember for a freshly scheduled PPM task.
+  // Returns null when no eligible member exists; the caller leaves the
+  // task in the unassigned queue and (optionally) emits a notification.
+  // Strategy: least_loaded by default. We don't compute open-task load
+  // here — the resolver handles equal-priority eligibles deterministically
+  // by id ordering when no load map is given.
+  private async autoRoutePpmAssignee(
+    tenantId: string,
+    buildingId: string,
+    systemId: string | null,
+  ): Promise<{ teamMemberId: string; reason: string } | null> {
+    const eligible = await this.assignments.findEligibleAssignees(tenantId, {
+      requiredPermission: 'task.complete',
+      buildingId,
+      systemId: systemId ?? undefined,
+      strategy: 'least_loaded',
+    });
+    if (!eligible.length) return null;
+    const pick = eligible[0];
+    return {
+      teamMemberId: pick.id,
+      reason: `auto-routed: ${eligible.length} eligible, picked least-loaded ${pick.displayName}`,
+    };
+  }
 
   onModuleInit() {
     // INIT-012 P2 step 3 — subscribe to asset.created. For now the
@@ -357,6 +384,13 @@ export class PpmService implements OnModuleInit {
     if (!plan) throw new NotFoundException('plan item not found');
 
     const due = targetDate ? new Date(targetDate) : plan.nextDueAt;
+    // INIT-013 — auto-route the assignee. systemId is taken from the
+    // plan's system scope when present; otherwise we resolve building-wide.
+    const route = await this.autoRoutePpmAssignee(
+      tenantId,
+      plan.buildingId,
+      (plan as any).systemId ?? null,
+    );
     const task = await this.prisma.taskInstance.create({
       data: {
         tenantId,
@@ -373,9 +407,20 @@ export class PpmService implements OnModuleInit {
         evidenceRequired: !!plan.template.evidenceDocTypeKey,
         requiredDocumentTypeKey: plan.template.evidenceDocTypeKey || null,
         createdBy: `user:${actorUserId}`,
+        ...(route
+          ? {
+              assignedTeamMemberId: route.teamMemberId,
+              assignmentSource: 'auto',
+              assignmentReason: route.reason,
+            }
+          : { assignmentSource: 'unassigned', assignmentReason: 'no eligible team member' }),
       },
     });
-    await this.log(tenantId, plan.buildingId, task.id, actorUserId, 'scheduled', { planItemId });
+    await this.log(tenantId, plan.buildingId, task.id, actorUserId, 'scheduled', {
+      planItemId,
+      assignedTeamMemberId: route?.teamMemberId ?? null,
+      assignmentSource: route ? 'auto' : 'unassigned',
+    });
     return task;
   }
 

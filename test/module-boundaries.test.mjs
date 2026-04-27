@@ -28,7 +28,10 @@ const modulesDir = join(here, '..', 'src', 'modules');
 // module is allowed to import their public services. The corresponding
 // NestModule is @Global() so DI resolves without an explicit imports[]
 // entry.
-const UNIVERSAL = new Set(['audit', 'auth', 'iam', 'events']);
+// INIT-013 — `team` and `role-assignments` are @Global() so PPM/Cleaning/
+// Reactive can inject the eligible-assignees resolver without listing
+// the module explicitly.
+const UNIVERSAL = new Set(['audit', 'auth', 'iam', 'events', 'role-assignments', 'team']);
 
 // Pairs already linked through DI (NestModule → exported service).
 // If module X imports module Y's *.service.ts directly, it should also

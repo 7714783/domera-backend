@@ -106,4 +106,22 @@ export class AuthController {
     if (!payload) throw new UnauthorizedException('invalid or revoked token');
     return this.auth.logoutAll(payload.sub);
   }
+
+  // INIT-013 — workspace switcher. Body: { tenantId }.
+  // Returns a freshly minted token; the old one is revoked.
+  @Post('switch-workspace')
+  async switchWorkspace(
+    @Body() body: { tenantId: string },
+    @Headers('authorization') auth?: string,
+    @Req() req?: any,
+  ) {
+    const token = extractBearer(auth);
+    const payload = await this.auth.verifySession(token);
+    if (!payload) throw new UnauthorizedException('invalid or revoked token');
+    if (!body?.tenantId) throw new HttpException('tenantId required', HttpStatus.BAD_REQUEST);
+    return this.auth.switchWorkspace(token, payload.sub, body.tenantId, {
+      userAgent: req?.headers?.['user-agent'],
+      ipAddress: clientIp(req),
+    });
+  }
 }

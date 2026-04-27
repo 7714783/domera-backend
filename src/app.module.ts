@@ -50,6 +50,12 @@ import { TasksModule } from './modules/tasks/tasks.module';
 import { TenantCompaniesModule } from './modules/tenant-companies/tenant-companies.module';
 import { AssignmentModule } from './modules/assignment/assignment.module';
 import { ContractorCompaniesModule } from './modules/contractor-companies/contractor-companies.module';
+// INIT-013 Roles & Team module
+import { ContractorsPublicModule } from './modules/contractors-public/contractors-public.module';
+import { ContractorsWorkspaceModule } from './modules/contractors-workspace/contractors-workspace.module';
+import { TeamModule } from './modules/team/team.module';
+import { RolesModule } from './modules/roles/roles.module';
+import { RoleAssignmentsModule } from './modules/role-assignments/role-assignments.module';
 
 @Module({
   imports: [
@@ -102,6 +108,11 @@ import { ContractorCompaniesModule } from './modules/contractor-companies/contra
     TenantCompaniesModule,
     AssignmentModule,
     ContractorCompaniesModule,
+    ContractorsPublicModule,
+    ContractorsWorkspaceModule,
+    TeamModule,
+    RolesModule,
+    RoleAssignmentsModule,
   ],
 })
 export class AppModule implements NestModule {
