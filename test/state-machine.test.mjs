@@ -47,40 +47,73 @@ const modulesDir = join(here, '..', 'src', 'modules');
 //   work_order — same place + reactive
 
 const REGISTRY = {
-  // PPM full case (contract § 2 canonical workflow)
+  // PPM task instance lifecycleStage (matches the actual Prisma values
+  // emitted by ppm.service.ts.transition()). The canonical narrative
+  // from platform-development-contract.md § 2 is the STORY this code
+  // implements; the field names below are what gets stored and what
+  // ppm-execution-log rows reference. Keeping the test in sync with
+  // real values so any drift surfaces here.
+  //
+  // Story → real-name mapping:
+  //   open / assign           → scheduled (default for new TaskInstance)
+  //   inspect → pass          → in_progress → completed (via record_completion)
+  //   inspect → fail / expense → quote_requested → quote_received → awaiting_approval
+  //   approval landed         → approved → ordered (PO issued)
+  //   contractor execution    → in_progress (after vendor accepts)
+  //   evidence + invoice      → completed → evidence_distributed
+  //   archive                 → archived (terminal)
   ppm_case: {
     STATES: new Set([
       'scheduled',
-      'opened',
-      'assigned',
-      'in_progress',
-      'check_passed',
-      'check_failed',
-      'approval_pending',
+      'quote_requested',
+      'quote_received',
+      'awaiting_approval',
       'approved',
-      'contractor_execution',
-      'finance_confirmation',
-      'closed',
+      'ordered',
+      'in_progress',
+      'completed',
+      'evidence_distributed',
+      'archived',
       'cancelled',
     ]),
     TRANSITIONS: {
-      scheduled: { opened: 'manager opens the case', cancelled: 'pre-open cancel' },
-      opened: { assigned: 'auto-resolver picks user', cancelled: 'no eligible assignee' },
-      assigned: { in_progress: 'assignee starts work', cancelled: 'reassignment elsewhere' },
+      scheduled: {
+        in_progress: 'in-house executor starts work',
+        quote_requested: 'ad-hoc approved task — request a quote',
+        cancelled: 'pre-start cancel',
+      },
+      quote_requested: {
+        quote_received: 'vendor returns the quote',
+        cancelled: 'cancel before quote arrives',
+      },
+      quote_received: {
+        awaiting_approval: 'submit for manager / SoD approval',
+        cancelled: 'cancel after quote — too expensive / wrong scope',
+      },
+      awaiting_approval: {
+        approved: 'all approvers signed off',
+        scheduled: 'rejected — back to scheduling for revised quote',
+        cancelled: 'rejected and abandoned',
+      },
+      approved: {
+        ordered: 'PO issued to vendor',
+        cancelled: 'cancel after approval (rare)',
+      },
+      ordered: {
+        in_progress: 'vendor accepts + starts',
+        cancelled: 'PO cancelled before work',
+      },
       in_progress: {
-        check_passed: 'inspection ok, no extra cost',
-        check_failed: 'needs corrective action',
+        completed: 'record_completion with evidence',
         cancelled: 'aborted mid-work',
       },
-      check_passed: { closed: 'evidence attached, finished' },
-      check_failed: { approval_pending: 'expense_request raised' },
-      approval_pending: {
-        approved: 'manager approval landed',
-        check_failed: 'rejected — back to triage',
+      completed: {
+        evidence_distributed: 'service report + photos attached + delivered',
+        archived: 'closed for reporting (no extra evidence required)',
       },
-      approved: { contractor_execution: 'contractor dispatched' },
-      contractor_execution: { finance_confirmation: 'work done, invoice in' },
-      finance_confirmation: { closed: 'invoice paid, case financially closed' },
+      evidence_distributed: {
+        archived: 'closed for reporting',
+      },
     },
   },
 
@@ -217,23 +250,14 @@ test('every workflow has at least 3 states (not a stub)', () => {
 });
 
 test('terminal states have no outgoing transitions', () => {
-  // closed / cancelled / rejected / fulfilled / superseded / completed
-  // are terminals by convention; warn (don't fail) if any has outgoing
-  // edges. Note: `archived` was previously here but the building lifecycle
-  // (INIT-012 P2) explicitly allows archived → active (re-activation), so
-  // archived is NOT universally terminal anymore. Each workflow's terminal
-  // set is implied by which states are NOT keys in TRANSITIONS — the
-  // assertion below catches the known terminal NAMES that should never
-  // sprout outgoing edges by accident.
-  const terminals = new Set([
-    'closed',
-    'cancelled',
-    'rejected',
-    'fulfilled',
-    'superseded',
-    'completed',
-    'done',
-  ]);
+  // Universally-terminal state names. These never sprout outgoing edges
+  // in any workflow without an architecture change. The list is small on
+  // purpose — `completed` / `archived` / `closed` ARE terminals in some
+  // workflows but extend further in others (PPM has completed →
+  // evidence_distributed → archived; building has archived → active for
+  // re-activation), so they are NOT in this list. Each workflow's
+  // terminal set is derived from absence in TRANSITIONS keys.
+  const terminals = new Set(['cancelled', 'rejected', 'superseded', 'fulfilled', 'done']);
   for (const [wf, def] of Object.entries(REGISTRY)) {
     for (const [from, edges] of Object.entries(def.TRANSITIONS)) {
       if (terminals.has(from)) {
