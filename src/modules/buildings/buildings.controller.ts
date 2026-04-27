@@ -67,6 +67,44 @@ export class BuildingsController {
     return this.buildings.update(tenantId, userId, slug, body);
   }
 
+  // INIT-012 P2 — lifecycle transitions (draft / active / archived).
+  // Manager-gated. Each call writes audit.transition.
+  @Post(':slug/publish')
+  @HttpCode(200)
+  async publish(
+    @Param('slug') slug: string,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    const tenantId = resolveTenantId(tenantIdHeader);
+    const userId = await extractUserId(authHeader, this.auth);
+    return this.buildings.publishBuilding(tenantId, userId, slug);
+  }
+
+  @Post(':slug/archive')
+  @HttpCode(200)
+  async archive(
+    @Param('slug') slug: string,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    const tenantId = resolveTenantId(tenantIdHeader);
+    const userId = await extractUserId(authHeader, this.auth);
+    return this.buildings.archiveBuilding(tenantId, userId, slug);
+  }
+
+  @Post(':slug/reactivate')
+  @HttpCode(200)
+  async reactivate(
+    @Param('slug') slug: string,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    const tenantId = resolveTenantId(tenantIdHeader);
+    const userId = await extractUserId(authHeader, this.auth);
+    return this.buildings.reactivateBuilding(tenantId, userId, slug);
+  }
+
   // Permanent destruction — owner-only, two-factor:
   //   1. Bearer token of a workspace_owner Membership
   //   2. body.confirmText must equal building.name verbatim (after trim)

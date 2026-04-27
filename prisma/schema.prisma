@@ -214,7 +214,19 @@ model Building {
   hasRooftopMechanical Boolean?
   compliance           Int                 @default(0)
   mandates             Int                 @default(0)
+  // Operational health indicator (compliance / overdue / etc.) — keep
+  // separate from the lifecycleStatus below.
   status               String              @default("warning")
+  // INIT-012 Phase 2 — building lifecycle.
+  //   draft     — freshly created during onboarding wizard; partial data;
+  //               only visible to managers; published when flipped to active.
+  //   active    — operational; default state.
+  //   archived  — decommissioned; read-only; excluded from listings by
+  //               default. Different from full deletion — archived keeps
+  //               history viewable; DELETE /v1/buildings/:slug removes it.
+  lifecycleStatus      String              @default("active")
+  publishedAt          DateTime?
+  archivedAt           DateTime?
   annualKwh            Float?
   notes                String?
   attributes           Json?

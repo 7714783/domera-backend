@@ -316,6 +316,94 @@ export class BuildingsService {
     return updated;
   }
 
+  // INIT-012 Phase 2 — building lifecycle state machine.
+  //
+  // Allowed transitions:
+  //   draft    → active     (publish — onboarding wizard finished)
+  //   draft    → archived   (cancel a never-finished onboarding)
+  //   active   → archived   (decommission)
+  //   archived → active     (re-activate)
+  //
+  // Forbidden:
+  //   active   → draft   (cannot un-publish; create a new draft instead)
+  //   archived → draft   (would lose audit + history)
+  //
+  // Mirrors apps/api/test/state-machine.test.mjs REGISTRY.building.
+  private readonly LIFECYCLE_TRANSITIONS: Record<string, string[]> = {
+    draft: ['active', 'archived'],
+    active: ['archived'],
+    archived: ['active'],
+  };
+
+  async publishBuilding(tenantId: string, actorUserId: string, slug: string) {
+    return this.transitionLifecycle(tenantId, actorUserId, slug, 'active');
+  }
+
+  async archiveBuilding(tenantId: string, actorUserId: string, slug: string) {
+    return this.transitionLifecycle(tenantId, actorUserId, slug, 'archived');
+  }
+
+  async reactivateBuilding(tenantId: string, actorUserId: string, slug: string) {
+    return this.transitionLifecycle(tenantId, actorUserId, slug, 'active');
+  }
+
+  private async transitionLifecycle(
+    tenantId: string,
+    actorUserId: string,
+    slug: string,
+    to: 'active' | 'archived',
+  ) {
+    await this.requireManager(tenantId, actorUserId);
+    const existing = await this.prisma.building.findUnique({
+      where: { tenantId_slug: { tenantId, slug } },
+    });
+    if (!existing) throw new NotFoundException('building not found');
+
+    const from = (existing as any).lifecycleStatus || 'active';
+    const allowed = this.LIFECYCLE_TRANSITIONS[from] || [];
+    if (!allowed.includes(to)) {
+      throw new BadRequestException(
+        `cannot transition building lifecycle ${from} → ${to}`,
+      );
+    }
+
+    const data: Record<string, any> = { lifecycleStatus: to };
+    if (to === 'active' && !(existing as any).publishedAt) {
+      data.publishedAt = new Date();
+    }
+    if (to === 'archived') {
+      data.archivedAt = new Date();
+    }
+    if (to === 'active' && from === 'archived') {
+      data.archivedAt = null;
+    }
+
+    const updated = await this.prisma.building.update({
+      where: { id: existing.id },
+      data,
+    });
+
+    await this.audit.transition({
+      tenantId,
+      actor: actorUserId,
+      actorRole: 'manager',
+      entityType: 'building',
+      entityId: existing.id,
+      from,
+      to,
+      buildingId: existing.id,
+      sensitive: true,
+      metadata: {
+        slug: existing.slug,
+        name: existing.name,
+        publishedAt: data.publishedAt,
+        archivedAt: data.archivedAt,
+      },
+    });
+
+    return updated;
+  }
+
   // Permanent destruction of a building + every building-scoped record.
   // Tenant-shared resources (User, ContractorCompany, AssetType, PpmTemplate
   // catalogue, Role, Membership, Document templates) survive untouched.

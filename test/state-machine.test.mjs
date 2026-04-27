@@ -149,6 +149,22 @@ const REGISTRY = {
       in_progress: { completed: 'completion recorded' },
     },
   },
+
+  // INIT-012 Phase 2 — building lifecycle.
+  // draft is the onboarding-wizard scratch space; active is operational;
+  // archived is decommissioned (read-only, history retained, separate
+  // from full delete).
+  building: {
+    STATES: new Set(['draft', 'active', 'archived']),
+    TRANSITIONS: {
+      draft: {
+        active: 'manager publishes a finished onboarding wizard',
+        archived: 'cancel an unfinished draft',
+      },
+      active: { archived: 'manager decommissions an operational building' },
+      archived: { active: 'manager re-activates a previously decommissioned building' },
+    },
+  },
 };
 
 // ── Self-validation ───────────────────────────────────────────
@@ -201,12 +217,17 @@ test('every workflow has at least 3 states (not a stub)', () => {
 });
 
 test('terminal states have no outgoing transitions', () => {
-  // closed / cancelled / archived / rejected / fulfilled / superseded / completed
-  // are terminals by convention; warn (don't fail) if any has outgoing edges.
+  // closed / cancelled / rejected / fulfilled / superseded / completed
+  // are terminals by convention; warn (don't fail) if any has outgoing
+  // edges. Note: `archived` was previously here but the building lifecycle
+  // (INIT-012 P2) explicitly allows archived → active (re-activation), so
+  // archived is NOT universally terminal anymore. Each workflow's terminal
+  // set is implied by which states are NOT keys in TRANSITIONS — the
+  // assertion below catches the known terminal NAMES that should never
+  // sprout outgoing edges by accident.
   const terminals = new Set([
     'closed',
     'cancelled',
-    'archived',
     'rejected',
     'fulfilled',
     'superseded',
