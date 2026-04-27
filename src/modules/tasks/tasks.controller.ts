@@ -54,6 +54,27 @@ export class TasksController {
     );
   }
 
+  // INIT-009 — Unified Tasks Inbox.
+  // GET /v1/tasks/inbox?kind=ppm|cleaning|incident|service_request|all
+  // Returns the union of every task assigned to the caller across
+  // PPM / cleaning / reactive. Read-only union — state changes still
+  // happen on each module's canonical endpoints (item.sourceUrl points
+  // there).
+  @Get('inbox')
+  async inbox(
+    @Query('kind') kind?: string,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    const tenantId = resolveTenantId(tenantIdHeader);
+    const actor = await uid(authHeader, this.auth);
+    const allowed = ['ppm', 'cleaning', 'incident', 'service_request', 'all'] as const;
+    const k = (allowed as readonly string[]).includes(kind || '')
+      ? (kind as (typeof allowed)[number])
+      : 'all';
+    return this.tasks.inbox(tenantId, actor, { kind: k });
+  }
+
   @Get(':id')
   async get(
     @Param('id') id: string,
