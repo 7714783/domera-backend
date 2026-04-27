@@ -1,4 +1,4 @@
-import { Controller, Get, Headers, Query, Res } from '@nestjs/common';
+import { Controller, Get, Headers, NotFoundException, Param, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuditService } from './audit.service';
@@ -12,6 +12,14 @@ export class AuditController {
     const tenantId = resolveTenantId(tenantIdHeader);
     const items = await this.auditService.list(tenantId);
     return { tenantId, total: items.length, items };
+  }
+
+  // INIT-011B — KPI aggregations for the audit dashboard. Lightweight enough
+  // to call alongside the list (returned in the same render pass).
+  @Get('stats')
+  async stats(@Headers('x-tenant-id') tenantIdHeader?: string) {
+    const tenantId = resolveTenantId(tenantIdHeader);
+    return this.auditService.stats(tenantId);
   }
 
   @Get('search')
@@ -28,9 +36,13 @@ export class AuditController {
     @Headers('x-tenant-id') th?: string,
   ) {
     return this.auditService.search(resolveTenantId(th), {
-      q, actor, action, entityType,
+      q,
+      actor,
+      action,
+      entityType,
       sensitiveOnly: sensitive === '1' || sensitive === 'true',
-      from, to,
+      from,
+      to,
       take: take ? Number(take) : undefined,
       skip: skip ? Number(skip) : undefined,
     });
@@ -49,13 +61,28 @@ export class AuditController {
     @Headers('x-tenant-id') th?: string,
   ) {
     const csv = await this.auditService.exportCsv(resolveTenantId(th), {
-      q, actor, action, entityType,
+      q,
+      actor,
+      action,
+      entityType,
       sensitiveOnly: sensitive === '1' || sensitive === 'true',
-      from, to,
+      from,
+      to,
     });
     const filename = `audit-${new Date().toISOString().slice(0, 10)}.csv`;
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(csv);
+  }
+
+  // INIT-011B — single event detail for the side drawer. Path-param order
+  // matters: `:id` must come AFTER the static `stats` / `search` /
+  // `export.csv` routes so Nest doesn't match those as ids.
+  @Get(':id')
+  async getOne(@Param('id') id: string, @Headers('x-tenant-id') tenantIdHeader?: string) {
+    const tenantId = resolveTenantId(tenantIdHeader);
+    const entry = await this.auditService.getOne(tenantId, id);
+    if (!entry) throw new NotFoundException('audit entry not found');
+    return entry;
   }
 }

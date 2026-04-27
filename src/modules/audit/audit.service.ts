@@ -28,6 +28,112 @@ export class AuditService {
     }));
   }
 
+  // INIT-011B audit drawer — single event detail with full metadata.
+  async getOne(tenantId: string, id: string) {
+    const entry = await this.prisma.auditEntry.findFirst({
+      where: { id, tenantId },
+    });
+    if (!entry) return null;
+    const actorSummary = await this.resolveActorSummaries([entry.actor]);
+    return {
+      id: entry.id,
+      tenantId: entry.tenantId,
+      timestamp: entry.timestamp.toISOString(),
+      actor: entry.actor,
+      actorSummary: actorSummary.get(entry.actor) ?? null,
+      role: entry.role,
+      action: entry.action,
+      entity: entry.entity,
+      entityType: entry.entityType,
+      building: entry.building,
+      buildingId: entry.buildingId,
+      ip: entry.ip,
+      sensitive: entry.sensitive,
+      eventType: entry.eventType,
+      resourceType: entry.resourceType,
+      resourceId: entry.resourceId,
+      metadata: entry.metadata,
+    };
+  }
+
+  // INIT-011B audit dashboard — KPI aggregates over the last 24h.
+  async stats(tenantId: string) {
+    const now = Date.now();
+    const since = new Date(now - 24 * 3600 * 1000);
+    const where = { tenantId, timestamp: { gte: since } };
+    const [eventsLast24h, sensitiveLast24h, distinctActors, lastCritical, byAction, byType] =
+      await Promise.all([
+        this.prisma.auditEntry.count({ where }),
+        this.prisma.auditEntry.count({ where: { ...where, sensitive: true } }),
+        this.prisma.auditEntry.findMany({
+          where,
+          select: { actor: true },
+          distinct: ['actor'],
+          take: 200,
+        }),
+        this.prisma.auditEntry.findFirst({
+          where: { tenantId, sensitive: true },
+          orderBy: { timestamp: 'desc' },
+        }),
+        this.prisma.auditEntry.groupBy({
+          by: ['action'],
+          where: { tenantId },
+          _count: { _all: true },
+          orderBy: { _count: { action: 'desc' } },
+          take: 30,
+        }),
+        this.prisma.auditEntry.groupBy({
+          by: ['entityType'],
+          where: { tenantId },
+          _count: { _all: true },
+          orderBy: { _count: { entityType: 'desc' } },
+          take: 20,
+        }),
+      ]);
+
+    return {
+      eventsLast24h,
+      sensitiveLast24h,
+      activeActorsLast24h: distinctActors.length,
+      lastCriticalEvent: lastCritical
+        ? {
+            id: lastCritical.id,
+            timestamp: lastCritical.timestamp.toISOString(),
+            action: lastCritical.action,
+            entity: lastCritical.entity,
+            entityType: lastCritical.entityType,
+          }
+        : null,
+      eventsByAction: byAction.map((r) => ({ action: r.action, count: r._count._all })),
+      eventsByEntityType: byType.map((r) => ({ entityType: r.entityType, count: r._count._all })),
+    };
+  }
+
+  // INIT-011B — resolve User UUIDs in actor strings to display names.
+  // Cross-module READ on User table is allowed (audit is universal); this
+  // module never WRITES to User. Non-UUID actors ('system', 'job-runner')
+  // return undefined and the FE falls back to the raw string.
+  private async resolveActorSummaries(
+    actors: string[],
+  ): Promise<Map<string, { id: string; displayName: string }>> {
+    const uuids = [...new Set(actors)].filter((a) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(a),
+    );
+    if (uuids.length === 0) return new Map();
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: uuids } },
+      select: { id: true, displayName: true, username: true, email: true },
+    });
+    const out = new Map<string, { id: string; displayName: string }>();
+    for (const u of users) {
+      out.set(u.id, {
+        id: u.id,
+        displayName: u.displayName || u.username || u.email || u.id.slice(0, 8),
+      });
+    }
+    return out;
+  }
+
   async search(
     tenantId: string,
     params: {
@@ -66,7 +172,11 @@ export class AuditService {
       this.prisma.auditEntry.findMany({ where, take, skip, orderBy: { timestamp: 'desc' } }),
       this.prisma.auditEntry.count({ where }),
     ]);
-    return { total, items };
+    // INIT-011B — enrich actor UUIDs with displayName so the FE can show
+    // "Иван Петров" instead of "63539b2e-00ff-...".
+    const summaries = await this.resolveActorSummaries(items.map((i) => i.actor));
+    const userSummaries = [...summaries.values()];
+    return { total, items, userSummaries };
   }
 
   async exportCsv(
