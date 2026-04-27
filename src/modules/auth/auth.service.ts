@@ -255,11 +255,46 @@ export class AuthService {
       : [];
     const availableRoles = roleRows.map((r) => ({ key: r.key, name: r.name, scope: r.scope }));
 
+    // 2026-04-26 — admin "view-as" mode. A workspace_owner or super-admin
+    // gets the FULL role catalogue + each role's permission set so the
+    // sidebar can be re-filtered as if the admin were that persona. This
+    // is a UI-only convenience — backend permission checks always run
+    // against the admin's REAL grants. Nothing here grants extra power;
+    // it lets the admin SEE the system through a cleaner / technician /
+    // contractor lens for QA + onboarding-flow review.
+    const isWorkspaceOwner = user.memberships.some(
+      (m) => m.roleKey === 'workspace_owner' && m.status === 'active',
+    );
+    const adminViewAsAllowed = !!user.isSuperAdmin || isWorkspaceOwner;
+    let roleCatalogue: Array<{ key: string; name: string; scope: string; permissions: string[] }> | undefined;
+    if (adminViewAsAllowed) {
+      const allRoles = await this.prisma.role.findMany({
+        select: { key: true, name: true, scope: true },
+        orderBy: { name: 'asc' },
+      });
+      const allPerms = await this.prisma.rolePermission.findMany({
+        select: { roleKey: true, permission: true },
+      });
+      const permsByRole = new Map<string, string[]>();
+      for (const r of allPerms) {
+        if (!permsByRole.has(r.roleKey)) permsByRole.set(r.roleKey, []);
+        permsByRole.get(r.roleKey)!.push(r.permission);
+      }
+      roleCatalogue = allRoles.map((r) => ({
+        key: r.key,
+        name: r.name,
+        scope: r.scope,
+        permissions: (permsByRole.get(r.key) || []).sort(),
+      }));
+    }
+
     return {
       ...user,
       memberships: normalizedMemberships,
       effectivePermissions,
       availableRoles,
+      adminViewAsAllowed,
+      roleCatalogue,
     };
   }
 
