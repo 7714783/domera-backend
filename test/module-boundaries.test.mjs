@@ -25,8 +25,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 const modulesDir = join(here, '..', 'src', 'modules');
 
 // Modules that are explicitly universal infrastructure — every other
-// module is allowed to import their public services.
-const UNIVERSAL = new Set(['audit', 'auth', 'iam']);
+// module is allowed to import their public services. The corresponding
+// NestModule is @Global() so DI resolves without an explicit imports[]
+// entry.
+const UNIVERSAL = new Set(['audit', 'auth', 'iam', 'events']);
 
 // Pairs already linked through DI (NestModule → exported service).
 // If module X imports module Y's *.service.ts directly, it should also

@@ -3,10 +3,13 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ApprovalsService } from '../approvals/approvals.service';
+import { OutboxRegistry } from '../events/outbox.registry';
 import { requireManager, resolveBuildingId } from '../../common/building.helpers';
 import { approxMonths, nextAfter, addMonthsUtc } from './engine/recurrence';
 import { applyBlackouts, BlackoutRule } from './engine/blackout';
@@ -77,11 +80,28 @@ function nextDueFrom(rule: string, from: Date, fallbackMonths: number | null): D
 }
 
 @Injectable()
-export class PpmService {
+export class PpmService implements OnModuleInit {
+  private readonly outboxLog = new Logger('PpmOutbox');
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly approvals: ApprovalsService,
+    private readonly outboxRegistry: OutboxRegistry,
   ) {}
+
+  onModuleInit() {
+    // INIT-012 P2 step 3 — subscribe to asset.created. For now the
+    // handler logs + records that PPM saw the event; a future Phase
+    // will use the asset's systemFamily to auto-suggest PPM templates
+    // (currently the wizard does that on-demand). Idempotent — safe
+    // under at-least-once delivery.
+    this.outboxRegistry.register('asset.created', async (event) => {
+      this.outboxLog.log(
+        `received asset.created — assetId=${event.subject} systemFamily=${(event.payload as any).systemFamily ?? '∅'}`,
+      );
+      // Phase 6 of INIT-010 will plug template-suggest logic here.
+    });
+  }
 
   // INIT-010 Phase 1 / P0-1 — entry point for condition-triggers.
   //

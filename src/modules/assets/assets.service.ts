@@ -8,6 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { PpmService } from '../ppm/ppm.service';
 import { resolveBuildingId } from '../../common/building.helpers';
+import { OutboxService } from '../events/outbox.service';
 
 const LIFECYCLE_STATUSES = [
   'planned',
@@ -55,6 +56,7 @@ export class AssetsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly ppm: PpmService,
+    private readonly outbox: OutboxService,
   ) {}
 
   private resolveBuildingId = (tenantId: string, idOrSlug: string) =>
@@ -274,6 +276,24 @@ export class AssetsService {
       building: buildingId,
       ip: '-',
       sensitive: false,
+    });
+    // INIT-012 P2 step 3 — emit asset.created so PPM (and any future
+    // subscriber like role-dashboards) can react. Published OUTSIDE a
+    // transaction here because the create above already committed; the
+    // outbox row is best-effort. Once we wrap create+publish in a
+    // single tx (Phase 7 of INIT-010), atomicity becomes free.
+    await this.outbox.publish(this.prisma, {
+      type: 'asset.created',
+      source: 'assets',
+      subject: created.id,
+      buildingId: created.buildingId,
+      payload: {
+        tenantId: created.tenantId,
+        assetId: created.id,
+        buildingId: created.buildingId,
+        systemFamily: created.systemFamily ?? null,
+        createdBy: actorUserId,
+      },
     });
     return created;
   }
