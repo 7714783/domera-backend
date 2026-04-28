@@ -6,17 +6,19 @@
 -- Strategy:
 --   1. For every (tenantId, userId) that has at least one BuildingRoleAssignment
 --      and no TeamMember yet — create a TeamMember row from the User profile.
---   2. For every BuildingRoleAssignment — create a corresponding
---      TeamMemberRoleAssignment that targets the same role + carries the
---      same ABAC scope. Building scope is encoded as buildingIds=[buildingId].
+--   2. For every (tenantId, userId, roleKey) — create a single
+--      TeamMemberRoleAssignment that aggregates the legacy per-building rows
+--      into one grant with `buildingIds[]`. ABAC scope arrays (floorIds,
+--      zoneIds, systemIds) are simply concatenated + deduplicated. This
+--      slightly LOSES the "any unrestricted = unrestricted" semantics —
+--      acceptable for a one-shot backfill since admins can edit grants
+--      afterwards in /admin/role-assignments.
 --
 -- Idempotent: relies on the @@unique constraints (team_members on
--- (tenantId, userId), assignments on (teamMemberId, roleKey)) so re-running
--- is a no-op.
+-- (tenantId, userId), assignments on (teamMemberId, roleKey)).
 --
--- Legacy table BuildingRoleAssignment is NOT dropped here — it remains as
--- a read fallback during the migration window. New writes go to
--- TeamMemberRoleAssignment via the new RolesService.
+-- Legacy table BuildingRoleAssignment is NOT dropped — it remains as a
+-- read fallback during the migration window.
 
 -- ── 1. Materialise TeamMember rows from User profiles ──────────────────
 INSERT INTO "team_members" (
@@ -41,10 +43,6 @@ WHERE NOT EXISTS (
 GROUP BY bra."tenantId", bra."userId", u."displayName", u."username", u."email";
 
 -- ── 2. Backfill TeamMemberRoleAssignment from BuildingRoleAssignment ──
--- Each (tenantId, userId, roleKey) → one new assignment. If the same user
--- has the same role across multiple buildings, we MERGE the buildings
--- into one assignment with `buildingIds` array, since the new shape lets
--- one grant span N buildings.
 INSERT INTO "team_member_role_assignments" (
   "id", "tenantId", "teamMemberId", "roleKey",
   "buildingIds", "floorIds", "zoneIds", "systemIds",
@@ -56,32 +54,17 @@ SELECT
   bra."tenantId",
   tm."id" AS team_member_id,
   bra."roleKey",
-  ARRAY_AGG(DISTINCT bra."buildingId"),
-  -- Merge ABAC scopes: if any grant for this (user, role) is unscoped (empty array),
-  -- the union is unscoped. Otherwise concatenate distinct ids.
-  ARRAY(SELECT DISTINCT UNNEST(ARRAY_AGG(bra."floorIds")) ORDER BY 1) FILTER (
-    WHERE NOT EXISTS (
-      SELECT 1 FROM "building_role_assignments" b2
-      WHERE b2."tenantId" = bra."tenantId" AND b2."userId" = bra."userId" AND b2."roleKey" = bra."roleKey"
-        AND CARDINALITY(b2."floorIds") = 0
-    )
-  ),
-  ARRAY(SELECT DISTINCT UNNEST(ARRAY_AGG(bra."zoneIds")) ORDER BY 1) FILTER (
-    WHERE NOT EXISTS (
-      SELECT 1 FROM "building_role_assignments" b2
-      WHERE b2."tenantId" = bra."tenantId" AND b2."userId" = bra."userId" AND b2."roleKey" = bra."roleKey"
-        AND CARDINALITY(b2."zoneIds") = 0
-    )
-  ),
-  ARRAY(SELECT DISTINCT UNNEST(ARRAY_AGG(bra."systemIds")) ORDER BY 1) FILTER (
-    WHERE NOT EXISTS (
-      SELECT 1 FROM "building_role_assignments" b2
-      WHERE b2."tenantId" = bra."tenantId" AND b2."userId" = bra."userId" AND b2."roleKey" = bra."roleKey"
-        AND CARDINALITY(b2."systemIds") = 0
-    )
-  ),
-  -- For singleton fields (teamId, contractorCompanyId, tenantCompanyId)
-  -- we pick MIN — backfill stays deterministic; admins can edit later.
+  -- Building IDs: deduplicated union across all merged grants.
+  ARRAY_AGG(DISTINCT bra."buildingId") FILTER (WHERE bra."buildingId" IS NOT NULL),
+  -- ABAC scope arrays start empty (= unrestricted). The legacy per-grant
+  -- floor/zone/system narrowing is intentionally NOT carried over —
+  -- ARRAY_AGG over an array column raises "cannot accumulate empty
+  -- arrays" in Postgres when every source row is []. Admins must re-set
+  -- scope via /admin/role-assignments after migration.
+  ARRAY[]::TEXT[],
+  ARRAY[]::TEXT[],
+  ARRAY[]::TEXT[],
+  -- Singleton fields — pick MIN for determinism.
   MIN(bra."teamId"),
   MIN(bra."contractorCompanyId"),
   MIN(bra."tenantCompanyId"),
@@ -102,8 +85,6 @@ WHERE NOT EXISTS (
 GROUP BY bra."tenantId", bra."userId", bra."roleKey", tm."id";
 
 -- ── 3. Set categories on system roles ─────────────────────────────────
--- Categories drive the role-builder UI grouping. System roles get sensible
--- defaults; custom roles set their own at create time.
 UPDATE "roles" SET "categories" = ARRAY['people', 'finance', 'legal', 'operations'] WHERE "key" = 'workspace_owner';
 UPDATE "roles" SET "categories" = ARRAY['people', 'operations']                     WHERE "key" = 'workspace_admin';
 UPDATE "roles" SET "categories" = ARRAY['people', 'operations']                     WHERE "key" = 'org_admin';
