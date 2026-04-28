@@ -55,7 +55,18 @@ function tenantScopedTables() {
 // Known pre-existing RLS gaps. Documented here so a future engineer can
 // close them deliberately rather than via this test silently. Gap IDs are
 // tracked in INIT-006 (RLS coverage CI smoke).
-const KNOWN_GAPS = new Set(['lease_allocations']);
+//
+// `roles` — INIT-013 intentional exemption. The roles table mixes:
+//   · system roles (tenantId IS NULL, isCustom=false) — must be globally
+//     readable so every workspace's role-builder UI can clone them.
+//   · tenant-custom roles (tenantId = X) — visible only inside tenant X.
+// A `tenantId = current_setting(...)` policy would HIDE the system rows
+// (NULL ≠ any value), breaking the catalogue. We therefore keep RLS
+// DISABLED on roles and enforce per-tenant write access at the
+// application layer (RolesService validates
+// `r.tenantId === actorTenantId && r.isCustom` on every UPDATE/DELETE).
+// See migration 019_team_rls_force.sql for the contractual statement.
+const KNOWN_GAPS = new Set(['lease_allocations', 'roles']);
 
 const tables = tenantScopedTables().filter((t) => !KNOWN_GAPS.has(t));
 
