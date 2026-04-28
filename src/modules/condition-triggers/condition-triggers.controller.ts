@@ -29,6 +29,11 @@ export class ConditionTriggersController {
     @Query('take') take?: string,
     @Headers('x-tenant-id') th?: string,
   ) {
-    return this.svc.listEvents(resolveTenantId(th), { triggerId, sensorPointId, action, take: take ? Number(take) : undefined });
+    return this.svc.listEvents(resolveTenantId(th), {
+      triggerId,
+      sensorPointId,
+      action,
+      take: take ? Number(take) : undefined,
+    });
   }
 }

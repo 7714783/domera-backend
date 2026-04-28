@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 type PolicyStep = {
@@ -15,15 +20,19 @@ function normaliseSteps(raw: unknown): PolicyStep[] {
   for (const s of raw) {
     if (!s || typeof s !== 'object') throw new BadRequestException('policy step must be object');
     const step = s as any;
-    if (typeof step.orderNo !== 'number' || step.orderNo < 1) throw new BadRequestException('step.orderNo must be >= 1');
-    if (typeof step.role !== 'string' || !step.role) throw new BadRequestException('step.role required');
-    if (seenOrders.has(step.orderNo)) throw new BadRequestException(`duplicate orderNo ${step.orderNo}`);
+    if (typeof step.orderNo !== 'number' || step.orderNo < 1)
+      throw new BadRequestException('step.orderNo must be >= 1');
+    if (typeof step.role !== 'string' || !step.role)
+      throw new BadRequestException('step.role required');
+    if (seenOrders.has(step.orderNo))
+      throw new BadRequestException(`duplicate orderNo ${step.orderNo}`);
     seenOrders.add(step.orderNo);
     out.push({
       orderNo: step.orderNo,
       role: step.role,
       mandatory: step.mandatory !== false,
-      escalateAfterHours: typeof step.escalateAfterHours === 'number' ? step.escalateAfterHours : undefined,
+      escalateAfterHours:
+        typeof step.escalateAfterHours === 'number' ? step.escalateAfterHours : undefined,
     });
   }
   out.sort((a, b) => a.orderNo - b.orderNo);
@@ -34,18 +43,22 @@ function normaliseSteps(raw: unknown): PolicyStep[] {
 export class ApprovalPoliciesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(tenantId: string, actorUserId: string, body: {
-    name: string;
-    type: string;
-    buildingId?: string | null;
-    currency?: string;
-    minAmount?: number;
-    maxAmount?: number | null;
-    stepsJson: PolicyStep[];
-    effectiveFrom?: string;
-    effectiveUntil?: string | null;
-    supersedesId?: string | null;
-  }) {
+  async create(
+    tenantId: string,
+    actorUserId: string,
+    body: {
+      name: string;
+      type: string;
+      buildingId?: string | null;
+      currency?: string;
+      minAmount?: number;
+      maxAmount?: number | null;
+      stepsJson: PolicyStep[];
+      effectiveFrom?: string;
+      effectiveUntil?: string | null;
+      supersedesId?: string | null;
+    },
+  ) {
     if (!body.name || !body.type) throw new BadRequestException('name, type required');
     const steps = normaliseSteps(body.stepsJson);
     if (!steps.length) throw new BadRequestException('policy requires ≥1 step');
@@ -87,12 +100,17 @@ export class ApprovalPoliciesService {
     return created;
   }
 
-  async supersede(tenantId: string, actorUserId: string, id: string, body: {
-    stepsJson: PolicyStep[];
-    minAmount?: number;
-    maxAmount?: number | null;
-    effectiveFrom?: string;
-  }) {
+  async supersede(
+    tenantId: string,
+    actorUserId: string,
+    id: string,
+    body: {
+      stepsJson: PolicyStep[];
+      minAmount?: number;
+      maxAmount?: number | null;
+      effectiveFrom?: string;
+    },
+  ) {
     const prev = await this.prisma.approvalPolicy.findFirst({ where: { id, tenantId } });
     if (!prev) throw new NotFoundException('policy not found');
     return this.create(tenantId, actorUserId, {
@@ -108,7 +126,10 @@ export class ApprovalPoliciesService {
     });
   }
 
-  async list(tenantId: string, params: { type?: string; buildingId?: string; includeInactive?: boolean }) {
+  async list(
+    tenantId: string,
+    params: { type?: string; buildingId?: string; includeInactive?: boolean },
+  ) {
     const where: any = { tenantId };
     if (params.type) where.type = params.type;
     if (params.buildingId) where.buildingId = params.buildingId;
@@ -129,7 +150,10 @@ export class ApprovalPoliciesService {
   }
 
   /** Resolve the single active policy that covers (type, buildingId, amount). */
-  async resolveActive(tenantId: string, params: { type: string; buildingId?: string | null; amount: number }) {
+  async resolveActive(
+    tenantId: string,
+    params: { type: string; buildingId?: string | null; amount: number },
+  ) {
     const candidates = await this.prisma.approvalPolicy.findMany({
       where: {
         tenantId,

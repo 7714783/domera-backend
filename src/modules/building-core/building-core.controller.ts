@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { BuildingCoreService } from './building-core.service';
@@ -78,12 +88,46 @@ export class BuildingCoreController {
     return this.core.updateUnit(resolveTenantId(th), await userId(ah, this.auth), id, unitId, body);
   }
 
-  // Unit-groups: feature lives in monorepo but not yet ported to this split-repo's
-  // Prisma schema (table `building_unit_groups` missing from Railway). Stub returns
-  // empty list so the frontend stops 404-erroring when it opens a building page.
   @Get('unit-groups')
-  async listUnitGroups() {
-    return [];
+  async listUnitGroups(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
+    return this.core.listUnitGroups(resolveTenantId(th), id);
+  }
+
+  @Post('unit-groups')
+  async createUnitGroup(
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
+  ) {
+    return this.core.createUnitGroup(resolveTenantId(th), await userId(ah, this.auth), id, body);
+  }
+
+  @Patch('unit-groups/:groupId')
+  async patchUnitGroup(
+    @Param('id') id: string,
+    @Param('groupId') groupId: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
+  ) {
+    return this.core.updateUnitGroup(
+      resolveTenantId(th),
+      await userId(ah, this.auth),
+      id,
+      groupId,
+      body,
+    );
+  }
+
+  @Delete('unit-groups/:groupId')
+  async deleteUnitGroup(
+    @Param('id') id: string,
+    @Param('groupId') groupId: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
+  ) {
+    return this.core.deleteUnitGroup(resolveTenantId(th), await userId(ah, this.auth), id, groupId);
   }
 
   @Get('transport')
@@ -124,7 +168,13 @@ export class BuildingCoreController {
     @Headers('x-tenant-id') th?: string,
     @Headers('authorization') ah?: string,
   ) {
-    return this.core.updateSystem(resolveTenantId(th), await userId(ah, this.auth), id, systemId, body);
+    return this.core.updateSystem(
+      resolveTenantId(th),
+      await userId(ah, this.auth),
+      id,
+      systemId,
+      body,
+    );
   }
 
   @Get('occupants')
@@ -174,8 +224,10 @@ export class BuildingCoreController {
 
   @Post('parking')
   async createParking(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.core.createParking(resolveTenantId(th), await userId(ah, this.auth), id, body);
   }
@@ -187,8 +239,10 @@ export class BuildingCoreController {
 
   @Post('storage')
   async createStorage(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.core.createStorage(resolveTenantId(th), await userId(ah, this.auth), id, body);
   }
@@ -200,10 +254,17 @@ export class BuildingCoreController {
 
   @Post('equipment-relations')
   async createRelation(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
-    return this.core.createEquipmentRelation(resolveTenantId(th), await userId(ah, this.auth), id, body);
+    return this.core.createEquipmentRelation(
+      resolveTenantId(th),
+      await userId(ah, this.auth),
+      id,
+      body,
+    );
   }
 
   @Get('elevators')
@@ -213,10 +274,17 @@ export class BuildingCoreController {
 
   @Post('elevators')
   async upsertElevatorProfile(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
-    return this.core.upsertElevatorProfile(resolveTenantId(th), await userId(ah, this.auth), id, body);
+    return this.core.upsertElevatorProfile(
+      resolveTenantId(th),
+      await userId(ah, this.auth),
+      id,
+      body,
+    );
   }
 
   @Get('sensors')
@@ -226,8 +294,10 @@ export class BuildingCoreController {
 
   @Post('sensors')
   async createSensorPoint(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.core.createSensorPoint(resolveTenantId(th), await userId(ah, this.auth), id, body);
   }
@@ -239,16 +309,21 @@ export class BuildingCoreController {
 
   @Post('alarms')
   async createAlarmSource(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.core.createAlarmSource(resolveTenantId(th), await userId(ah, this.auth), id, body);
   }
 
   @Patch('assets/:assetId/tags')
   async tagAsset(
-    @Param('id') id: string, @Param('assetId') assetId: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Param('assetId') assetId: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.core.tagAsset(resolveTenantId(th), await userId(ah, this.auth), id, assetId, body);
   }

@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { PrivacyService } from './privacy.service';
@@ -25,15 +34,14 @@ export class PrivacyController {
   @Post('categories')
   async upsertCategory(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.upsertCategory(resolveTenantId(th), await uid(ah, this.auth), body);
   }
 
   @Post('categories/seed-built-ins')
-  async seedBuiltIns(
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
-  ) {
+  async seedBuiltIns(@Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string) {
     return this.svc.seedBuiltIns(resolveTenantId(th), await uid(ah, this.auth));
   }
 
@@ -56,7 +64,8 @@ export class PrivacyController {
   @Post('dsar/:id/process')
   async processDsar(
     @Param('id') id: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.processDsar(resolveTenantId(th), await uid(ah, this.auth), id);
   }
@@ -74,7 +83,8 @@ export class PrivacyController {
   @Post('subprocessors')
   async upsertSubprocessor(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.upsertSubprocessor(resolveTenantId(th), await uid(ah, this.auth), body);
   }
@@ -82,7 +92,8 @@ export class PrivacyController {
   @Post('subprocessors/:id/approve')
   async approveSubprocessor(
     @Param('id') id: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.approveSubprocessor(resolveTenantId(th), await uid(ah, this.auth), id);
   }
@@ -90,14 +101,16 @@ export class PrivacyController {
   @Post('subprocessors/:id/retire')
   async retireSubprocessor(
     @Param('id') id: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.retireSubprocessor(resolveTenantId(th), await uid(ah, this.auth), id);
   }
 
   @Post('subprocessors/seed-built-ins')
   async seedSubprocessors(
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.seedSubprocessors(resolveTenantId(th), await uid(ah, this.auth));
   }
@@ -118,7 +131,8 @@ export class PrivacyController {
   @Post('dpa-templates')
   async createDpaTemplate(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.createDpaTemplate(resolveTenantId(th), await uid(ah, this.auth), body);
   }
@@ -134,7 +148,8 @@ export class PrivacyController {
 
   @Post('dpa-templates/seed-built-ins')
   async seedDpaTemplates(
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.seedDpaTemplates(resolveTenantId(th), await uid(ah, this.auth));
   }

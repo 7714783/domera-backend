@@ -38,32 +38,46 @@ function hex(bytes: number): string {
   return randomBytes(bytes).toString('hex');
 }
 
-async function exportSpan(completed: Span, endNs: bigint, status: 'ok' | 'error', errorMsg?: string) {
+async function exportSpan(
+  completed: Span,
+  endNs: bigint,
+  status: 'ok' | 'error',
+  errorMsg?: string,
+) {
   if (!OTLP_ENDPOINT) return;
   try {
     const body = {
-      resourceSpans: [{
-        resource: { attributes: [{ key: 'service.name', value: { stringValue: SERVICE_NAME } }] },
-        scopeSpans: [{
-          scope: { name: 'domera', version: '1.0.0' },
-          spans: [{
-            traceId: completed.traceId,
-            spanId: completed.spanId,
-            parentSpanId: completed.parentSpanId,
-            name: completed.name,
-            kind: 1,
-            startTimeUnixNano: String(completed.startNs),
-            endTimeUnixNano: String(endNs),
-            attributes: Object.entries(completed.attrs).map(([k, v]) => ({
-              key: k,
-              value: typeof v === 'string' ? { stringValue: v }
-                   : typeof v === 'boolean' ? { boolValue: v }
-                   : { intValue: String(v) },
-            })),
-            status: { code: status === 'ok' ? 1 : 2, message: errorMsg },
-          }],
-        }],
-      }],
+      resourceSpans: [
+        {
+          resource: { attributes: [{ key: 'service.name', value: { stringValue: SERVICE_NAME } }] },
+          scopeSpans: [
+            {
+              scope: { name: 'domera', version: '1.0.0' },
+              spans: [
+                {
+                  traceId: completed.traceId,
+                  spanId: completed.spanId,
+                  parentSpanId: completed.parentSpanId,
+                  name: completed.name,
+                  kind: 1,
+                  startTimeUnixNano: String(completed.startNs),
+                  endTimeUnixNano: String(endNs),
+                  attributes: Object.entries(completed.attrs).map(([k, v]) => ({
+                    key: k,
+                    value:
+                      typeof v === 'string'
+                        ? { stringValue: v }
+                        : typeof v === 'boolean'
+                          ? { boolValue: v }
+                          : { intValue: String(v) },
+                  })),
+                  status: { code: status === 'ok' ? 1 : 2, message: errorMsg },
+                },
+              ],
+            },
+          ],
+        },
+      ],
     };
     const res = await fetch(`${OTLP_ENDPOINT}/v1/traces`, {
       method: 'POST',
@@ -87,37 +101,56 @@ function parseTraceparent(h: string | undefined): { traceId?: string; parentSpan
 
 export const trace = {
   /** Start a span for the enclosing scope; if no OTLP endpoint, becomes a no-op. */
-  span<T>(name: string, attrs: Record<string, string | number | boolean>, fn: () => Promise<T> | T): Promise<T> {
+  span<T>(
+    name: string,
+    attrs: Record<string, string | number | boolean>,
+    fn: () => Promise<T> | T,
+  ): Promise<T> {
     const parent = als.getStore();
     const span: Span = {
       traceId: parent?.traceId || hex(16),
       spanId: hex(8),
       parentSpanId: parent?.spanId,
       name,
-      startNs: process.hrtime.bigint() + BigInt(Date.now() * 1_000_000) - BigInt(Math.floor(process.uptime() * 1_000_000_000)),
+      startNs:
+        process.hrtime.bigint() +
+        BigInt(Date.now() * 1_000_000) -
+        BigInt(Math.floor(process.uptime() * 1_000_000_000)),
       attrs,
     };
     return als.run(span, async () => {
       try {
         const res = await fn();
-        const endNs = process.hrtime.bigint() + BigInt(Date.now() * 1_000_000) - BigInt(Math.floor(process.uptime() * 1_000_000_000));
+        const endNs =
+          process.hrtime.bigint() +
+          BigInt(Date.now() * 1_000_000) -
+          BigInt(Math.floor(process.uptime() * 1_000_000_000));
         void exportSpan(span, endNs, 'ok');
         return res;
       } catch (e: any) {
-        const endNs = process.hrtime.bigint() + BigInt(Date.now() * 1_000_000) - BigInt(Math.floor(process.uptime() * 1_000_000_000));
+        const endNs =
+          process.hrtime.bigint() +
+          BigInt(Date.now() * 1_000_000) -
+          BigInt(Math.floor(process.uptime() * 1_000_000_000));
         void exportSpan(span, endNs, 'error', String(e?.message || e));
         throw e;
       }
     });
   },
   /** Seed a span from an incoming W3C `traceparent` header. */
-  fromHeader(traceparent: string | undefined, name: string, attrs: Record<string, string | number | boolean>, fn: () => Promise<any>) {
+  fromHeader(
+    traceparent: string | undefined,
+    name: string,
+    attrs: Record<string, string | number | boolean>,
+    fn: () => Promise<any>,
+  ) {
     const seed = parseTraceparent(traceparent);
     const span: Span = {
       traceId: seed.traceId || hex(16),
       spanId: hex(8),
       parentSpanId: seed.parentSpanId,
-      name, attrs,
+      name,
+      attrs,
       startNs: BigInt(Date.now() * 1_000_000),
     };
     return als.run(span, fn);

@@ -17,7 +17,7 @@ function emit(level: LogLevel, msg: string, fields?: Record<string, unknown>) {
     env: process.env.NODE_ENV || 'development',
     ...fields,
   };
-  // eslint-disable-next-line no-console
+
   (level === 'error' ? console.error : console.log)(JSON.stringify(line));
 }
 

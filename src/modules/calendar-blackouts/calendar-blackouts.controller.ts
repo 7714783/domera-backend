@@ -7,10 +7,7 @@ export class CalendarBlackoutsController {
   constructor(private readonly svc: CalendarBlackoutsService) {}
 
   @Get()
-  list(
-    @Query('buildingId') buildingId?: string,
-    @Headers('x-tenant-id') th?: string,
-  ) {
+  list(@Query('buildingId') buildingId?: string, @Headers('x-tenant-id') th?: string) {
     return this.svc.list(resolveTenantId(th), buildingId);
   }
 

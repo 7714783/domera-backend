@@ -1,4 +1,14 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, Param, Post, Req } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Req,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { rateLimit } from '../../common/rate-limit';
 import { CleaningQrService } from './cleaning.qr.service';
@@ -24,9 +34,14 @@ export class CleaningPublicController {
   @Post('qr/:code/request')
   async submit(
     @Param('code') code: string,
-    @Body() body: {
-      title: string; description?: string; category: string; priority?: string;
-      guestName?: string; guestPhone?: string;
+    @Body()
+    body: {
+      title: string;
+      description?: string;
+      category: string;
+      priority?: string;
+      guestName?: string;
+      guestPhone?: string;
     },
     @Req() req: Request,
   ) {

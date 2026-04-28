@@ -2,7 +2,13 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../../prisma/prisma.service';
 import { newSecret, otpauthUrl, verifyTotp } from './totp';
 
-const PRIVILEGED_ROLES = new Set(['workspace_owner', 'workspace_admin', 'finance_controller', 'approver', 'owner_representative']);
+const PRIVILEGED_ROLES = new Set([
+  'workspace_owner',
+  'workspace_admin',
+  'finance_controller',
+  'approver',
+  'owner_representative',
+]);
 
 @Injectable()
 export class MfaService {
@@ -10,7 +16,11 @@ export class MfaService {
 
   async status(userId: string) {
     const row = await this.prisma.userMfa.findUnique({ where: { userId } });
-    return { enrolled: !!row?.enabledAt, createdAt: row?.createdAt || null, lastUsedAt: row?.lastUsedAt || null };
+    return {
+      enrolled: !!row?.enabledAt,
+      createdAt: row?.createdAt || null,
+      lastUsedAt: row?.lastUsedAt || null,
+    };
   }
 
   async enrollStart(userId: string, userLabel: string) {
@@ -51,11 +61,16 @@ export class MfaService {
    * before they proceed). Returns true if the user doesn't need MFA (not
    * enrolled AND not in a privileged role), or the code verifies.
    */
-  async requireCode(userId: string, code: string | undefined, role?: string): Promise<{ ok: boolean; required: boolean; reason?: string }> {
+  async requireCode(
+    userId: string,
+    code: string | undefined,
+    role?: string,
+  ): Promise<{ ok: boolean; required: boolean; reason?: string }> {
     const row = await this.prisma.userMfa.findUnique({ where: { userId } });
     const mfaRequired = PRIVILEGED_ROLES.has(role || '') || !!row?.enabledAt;
     if (!mfaRequired) return { ok: true, required: false };
-    if (!row?.enabledAt) return { ok: false, required: true, reason: 'MFA required for this role but not enrolled' };
+    if (!row?.enabledAt)
+      return { ok: false, required: true, reason: 'MFA required for this role but not enrolled' };
     if (!code) return { ok: false, required: true, reason: 'MFA code required' };
     const ok = verifyTotp(row.secret, code);
     if (ok) {

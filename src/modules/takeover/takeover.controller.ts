@@ -8,7 +8,13 @@ export class TakeoverController {
 
   @Post('cases')
   async create(
-    @Body() body: { buildingSlug: string; outgoingOrgSeedKey?: string; incomingOrgSeedKey?: string; targetGoLiveAt?: string },
+    @Body()
+    body: {
+      buildingSlug: string;
+      outgoingOrgSeedKey?: string;
+      incomingOrgSeedKey?: string;
+      targetGoLiveAt?: string;
+    },
     @Headers('x-tenant-id') tenantIdHeader?: string,
     @Headers('x-actor-user-id') actorHeader?: string,
   ) {
@@ -36,6 +42,11 @@ export class TakeoverController {
     @Headers('x-actor-role') actorRoleHeader?: string,
   ) {
     const tenantId = resolveTenantId(tenantIdHeader);
-    return this.takeover.signoff(tenantId, id, actorHeader || 'system', actorRoleHeader || 'viewer');
+    return this.takeover.signoff(
+      tenantId,
+      id,
+      actorHeader || 'system',
+      actorRoleHeader || 'viewer',
+    );
   }
 }

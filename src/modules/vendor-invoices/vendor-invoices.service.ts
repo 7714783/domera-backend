@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 const TOLERANCE_PCT = 0.02;
@@ -7,13 +12,31 @@ const TOLERANCE_PCT = 0.02;
 export class VendorInvoicesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(tenantId: string, actorUserId: string, body: {
-    buildingId: string; purchaseOrderId: string; vendorOrgId?: string;
-    invoiceNumber: string; invoiceDate: string; amount: number; currency?: string;
-    taxAmount?: number; documentId?: string;
-  }) {
-    if (!body.buildingId || !body.purchaseOrderId || !body.invoiceNumber || !body.invoiceDate || !body.amount) {
-      throw new BadRequestException('buildingId, purchaseOrderId, invoiceNumber, invoiceDate, amount required');
+  async create(
+    tenantId: string,
+    actorUserId: string,
+    body: {
+      buildingId: string;
+      purchaseOrderId: string;
+      vendorOrgId?: string;
+      invoiceNumber: string;
+      invoiceDate: string;
+      amount: number;
+      currency?: string;
+      taxAmount?: number;
+      documentId?: string;
+    },
+  ) {
+    if (
+      !body.buildingId ||
+      !body.purchaseOrderId ||
+      !body.invoiceNumber ||
+      !body.invoiceDate ||
+      !body.amount
+    ) {
+      throw new BadRequestException(
+        'buildingId, purchaseOrderId, invoiceNumber, invoiceDate, amount required',
+      );
     }
     const po = await this.prisma.purchaseOrder.findFirst({
       where: { id: body.purchaseOrderId, tenantId, buildingId: body.buildingId },
@@ -38,7 +61,9 @@ export class VendorInvoicesService {
   async match(tenantId: string, actorUserId: string, id: string) {
     const invoice = await this.prisma.vendorInvoice.findFirst({ where: { id, tenantId } });
     if (!invoice) throw new NotFoundException('invoice not found');
-    const po = await this.prisma.purchaseOrder.findFirst({ where: { id: invoice.purchaseOrderId } });
+    const po = await this.prisma.purchaseOrder.findFirst({
+      where: { id: invoice.purchaseOrderId },
+    });
     if (!po) {
       return this.updateMatch(id, { matchStatus: 'no_po', varianceNotes: 'PO missing' });
     }
@@ -46,7 +71,10 @@ export class VendorInvoicesService {
     const completions = po.workOrderId
       ? await this.prisma.completionRecord.findMany({ where: { workOrderId: po.workOrderId } })
       : [];
-    const completionTotal = completions.reduce((sum, c) => sum + (c.labourCost || 0) + (c.materialsCost || 0), 0);
+    const completionTotal = completions.reduce(
+      (sum, c) => sum + (c.labourCost || 0) + (c.materialsCost || 0),
+      0,
+    );
 
     if (completions.length === 0) {
       return this.updateMatch(id, {
@@ -59,7 +87,8 @@ export class VendorInvoicesService {
     }
 
     const poDelta = Math.abs(invoice.amount - po.amount) / Math.max(po.amount, 1);
-    const completionDelta = Math.abs(invoice.amount - completionTotal) / Math.max(completionTotal, 1);
+    const completionDelta =
+      Math.abs(invoice.amount - completionTotal) / Math.max(completionTotal, 1);
     let matchStatus: string;
     let varianceNotes: string | null = null;
 
@@ -100,7 +129,9 @@ export class VendorInvoicesService {
       throw new BadRequestException('run /match before approval');
     }
     if (['over_amount', 'no_po', 'price_mismatch'].includes(invoice.matchStatus)) {
-      throw new ForbiddenException(`cannot auto-approve with matchStatus=${invoice.matchStatus}; requires manual override`);
+      throw new ForbiddenException(
+        `cannot auto-approve with matchStatus=${invoice.matchStatus}; requires manual override`,
+      );
     }
     if (invoice.matchedByUserId === actorUserId) {
       throw new ForbiddenException('SoD: matcher and approver must differ');

@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { LeasesService } from './leases.service';
@@ -20,8 +31,10 @@ export class LeasesController {
   // ─── Contract escalation + insurance ─────────────────────────
   @Patch('contracts/:id/escalation')
   async setEscalation(
-    @Param('id') id: string, @Body() body: { policy: any },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: { policy: any },
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     await uid(ah, this.auth);
     return this.svc.setEscalationPolicy(resolveTenantId(th), id, body?.policy);
@@ -29,8 +42,10 @@ export class LeasesController {
 
   @Patch('contracts/:id/insurance')
   async setInsurance(
-    @Param('id') id: string, @Body() body: { documentId: string | null },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: { documentId: string | null },
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     await uid(ah, this.auth);
     return this.svc.setInsuranceDocument(resolveTenantId(th), id, body?.documentId ?? null);
@@ -44,8 +59,10 @@ export class LeasesController {
 
   @Post('contracts/:id/allocations')
   async add(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     await uid(ah, this.auth);
     return this.svc.addAllocation(resolveTenantId(th), id, body);
@@ -54,7 +71,8 @@ export class LeasesController {
   @Delete('lease-allocations/:allocationId')
   async remove(
     @Param('allocationId') allocationId: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     await uid(ah, this.auth);
     return this.svc.removeAllocation(resolveTenantId(th), allocationId);
@@ -75,8 +93,10 @@ export class LeasesController {
 
   @Patch('documents/:id/expiry')
   async setExpiry(
-    @Param('id') id: string, @Body() body: { expiresAt: string | null },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: { expiresAt: string | null },
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     await uid(ah, this.auth);
     return this.svc.setDocumentExpiry(resolveTenantId(th), id, body?.expiresAt ?? null);

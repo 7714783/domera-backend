@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 const ALLOWED_TARGETS = ['purchase_order', 'work_order', 'completion', 'task_instance', 'quote'];
@@ -8,10 +13,17 @@ const RATIFICATION_WINDOW_HOURS: Record<string, number> = { P1: 24, P2: 72 };
 export class EmergencyOverridesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async invoke(tenantId: string, actorUserId: string, body: {
-    buildingId: string; targetType: string; targetId: string;
-    reason: string; severity?: string;
-  }) {
+  async invoke(
+    tenantId: string,
+    actorUserId: string,
+    body: {
+      buildingId: string;
+      targetType: string;
+      targetId: string;
+      reason: string;
+      severity?: string;
+    },
+  ) {
     if (!body.buildingId || !body.targetType || !body.targetId || !body.reason) {
       throw new BadRequestException('buildingId, targetType, targetId, reason required');
     }
@@ -34,10 +46,17 @@ export class EmergencyOverridesService {
     });
   }
 
-  async ratify(tenantId: string, actorUserId: string, id: string, decision: 'ratified' | 'rejected', notes?: string) {
+  async ratify(
+    tenantId: string,
+    actorUserId: string,
+    id: string,
+    decision: 'ratified' | 'rejected',
+    notes?: string,
+  ) {
     const ov = await this.prisma.emergencyOverride.findFirst({ where: { id, tenantId } });
     if (!ov) throw new NotFoundException('override not found');
-    if (ov.status !== 'pending_ratification') throw new BadRequestException(`already in status ${ov.status}`);
+    if (ov.status !== 'pending_ratification')
+      throw new BadRequestException(`already in status ${ov.status}`);
     if (ov.invokedByUserId === actorUserId) {
       throw new ForbiddenException('SoD: invoker and ratifier must differ');
     }
@@ -74,7 +93,12 @@ export class EmergencyOverridesService {
 
   async isActive(tenantId: string, targetType: string, targetId: string): Promise<boolean> {
     const ov = await this.prisma.emergencyOverride.findFirst({
-      where: { tenantId, targetType, targetId, status: { in: ['pending_ratification', 'ratified'] } },
+      where: {
+        tenantId,
+        targetType,
+        targetId,
+        status: { in: ['pending_ratification', 'ratified'] },
+      },
     });
     return !!ov;
   }

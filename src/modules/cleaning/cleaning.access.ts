@@ -7,9 +7,28 @@ import { ForbiddenException } from '@nestjs/common';
 export type CleaningActor =
   | { kind: 'building_manager'; userId: string; tenantId: string; buildingIds: string[] }
   | { kind: 'operations_manager'; userId: string; tenantId: string; buildingIds: string[] }
-  | { kind: 'cleaning_boss'; userId: string; tenantId: string; contractorIds: string[]; buildingId: string }
-  | { kind: 'cleaning_manager'; userId: string; tenantId: string; contractorIds: string[]; buildingId: string }
-  | { kind: 'cleaning_supervisor'; userId: string; tenantId: string; staffId: string; contractorId: string; zoneIds: string[] }
+  | {
+      kind: 'cleaning_boss';
+      userId: string;
+      tenantId: string;
+      contractorIds: string[];
+      buildingId: string;
+    }
+  | {
+      kind: 'cleaning_manager';
+      userId: string;
+      tenantId: string;
+      contractorIds: string[];
+      buildingId: string;
+    }
+  | {
+      kind: 'cleaning_supervisor';
+      userId: string;
+      tenantId: string;
+      staffId: string;
+      contractorId: string;
+      zoneIds: string[];
+    }
   | { kind: 'cleaner'; userId: string; tenantId: string; staffId: string; contractorId: string }
   | { kind: 'platform_admin'; userId: string; tenantId: string };
 
@@ -37,10 +56,7 @@ export function filterForActor(actor: CleaningActor): RequestFilter {
       return {
         ...base,
         contractorId: actor.contractorId,
-        OR: [
-          { zoneId: { in: actor.zoneIds } },
-          { assignedStaffId: actor.staffId },
-        ],
+        OR: [{ zoneId: { in: actor.zoneIds } }, { assignedStaffId: actor.staffId }],
       };
     case 'cleaner':
       return { ...base, contractorId: actor.contractorId, assignedStaffId: actor.staffId };
@@ -48,7 +64,15 @@ export function filterForActor(actor: CleaningActor): RequestFilter {
 }
 
 export function canAssign(actor: CleaningActor): boolean {
-  return ['platform_admin', 'building_manager', 'operations_manager', 'cleaning_boss', 'cleaning_manager', 'cleaning_supervisor', 'cleaning_dispatcher' as any].includes(actor.kind);
+  return [
+    'platform_admin',
+    'building_manager',
+    'operations_manager',
+    'cleaning_boss',
+    'cleaning_manager',
+    'cleaning_supervisor',
+    'cleaning_dispatcher' as any,
+  ].includes(actor.kind);
 }
 
 export function canChangeStatus(actor: CleaningActor, from: string, to: string): boolean {
@@ -64,7 +88,9 @@ export function canChangeStatus(actor: CleaningActor, from: string, to: string):
 
   // Role constraints
   if (actor.kind === 'cleaner') {
-    return (from === 'assigned' && to === 'in_progress') || (from === 'in_progress' && to === 'done');
+    return (
+      (from === 'assigned' && to === 'in_progress') || (from === 'in_progress' && to === 'done')
+    );
   }
   if (actor.kind === 'cleaning_supervisor') {
     return ['assigned', 'in_progress', 'done', 'cancelled'].includes(to);
@@ -72,7 +98,15 @@ export function canChangeStatus(actor: CleaningActor, from: string, to: string):
   return true; // managers + above
 }
 
-export function assertInScope(actor: CleaningActor, payload: { buildingId?: string; contractorId?: string | null; zoneId?: string; assignedStaffId?: string | null }) {
+export function assertInScope(
+  actor: CleaningActor,
+  payload: {
+    buildingId?: string;
+    contractorId?: string | null;
+    zoneId?: string;
+    assignedStaffId?: string | null;
+  },
+) {
   switch (actor.kind) {
     case 'platform_admin':
       return;
@@ -84,16 +118,22 @@ export function assertInScope(actor: CleaningActor, payload: { buildingId?: stri
       return;
     case 'cleaning_boss':
     case 'cleaning_manager':
-      if (payload.buildingId && payload.buildingId !== actor.buildingId) throw new ForbiddenException('building out of scope');
-      if (payload.contractorId && !actor.contractorIds.includes(payload.contractorId)) throw new ForbiddenException('contractor out of scope');
+      if (payload.buildingId && payload.buildingId !== actor.buildingId)
+        throw new ForbiddenException('building out of scope');
+      if (payload.contractorId && !actor.contractorIds.includes(payload.contractorId))
+        throw new ForbiddenException('contractor out of scope');
       return;
     case 'cleaning_supervisor':
-      if (payload.contractorId && payload.contractorId !== actor.contractorId) throw new ForbiddenException('contractor out of scope');
-      if (payload.zoneId && !actor.zoneIds.includes(payload.zoneId)) throw new ForbiddenException('zone out of scope');
+      if (payload.contractorId && payload.contractorId !== actor.contractorId)
+        throw new ForbiddenException('contractor out of scope');
+      if (payload.zoneId && !actor.zoneIds.includes(payload.zoneId))
+        throw new ForbiddenException('zone out of scope');
       return;
     case 'cleaner':
-      if (payload.contractorId && payload.contractorId !== actor.contractorId) throw new ForbiddenException('contractor out of scope');
-      if (payload.assignedStaffId && payload.assignedStaffId !== actor.staffId) throw new ForbiddenException('task not assigned to you');
+      if (payload.contractorId && payload.contractorId !== actor.contractorId)
+        throw new ForbiddenException('contractor out of scope');
+      if (payload.assignedStaffId && payload.assignedStaffId !== actor.staffId)
+        throw new ForbiddenException('task not assigned to you');
       return;
   }
 }

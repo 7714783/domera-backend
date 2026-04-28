@@ -62,6 +62,12 @@ const OWNERSHIP = {
   // seed-runtime is the dev-only demo harness — accepted exception.
   taskInstance: ['ppm', 'tasks', 'seed-runtime'],
 
+  // ── connectors (external integration) ─────────────────────────────
+  // INIT-010 Follow-up F (2026-04-28): Vendor model kept (Contract.vendorId
+  // FK still active). Single live writer: connectors.importVendorMaster
+  // (CSV ingest from external accounting). Full migration to
+  // Organization{type:vendor} is tracked as a separate follow-up.
+  vendor: 'connectors',
   // ── reactive ──────────────────────────────────────────────────────
   // Connectors creates incidents from inbound webhooks (legitimate
   // external integration path); public-qr creates service-requests
@@ -106,10 +112,10 @@ const OWNERSHIP = {
   // modules NEVER write here — they publish events; the subscriber
   // creates deliveries.
   // Legacy `notifications` (in-app inbox) — owner: notifications.
-  // Transitional: ppm.sla-reminder.worker writes legacy in-app rows
-  // directly until INIT-014 phase 2 routes SLA reminders through the
-  // notifications dispatcher.
-  notification: ['notifications', 'ppm'],
+  // INIT-010 Follow-up B (2026-04-28): the PPM SLA reminder worker now
+  // calls NotificationsService.recordInAppNotification(...) instead of
+  // writing prisma.notification directly, collapsing the dual-writer.
+  notification: 'notifications',
   notificationRule: 'notifications',
   notificationTemplate: 'notifications',
   notificationDelivery: 'notifications',

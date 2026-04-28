@@ -25,7 +25,10 @@ export class ConnectorsService {
     }));
   }
 
-  async exportAccounting(tenantId: string, params: { from?: string; to?: string; matchStatus?: string; approvedOnly?: boolean }) {
+  async exportAccounting(
+    tenantId: string,
+    params: { from?: string; to?: string; matchStatus?: string; approvedOnly?: boolean },
+  ) {
     const where: any = { tenantId };
     if (params.approvedOnly) where.approvalStatus = 'approved';
     if (params.matchStatus) where.matchStatus = params.matchStatus;
@@ -34,21 +37,30 @@ export class ConnectorsService {
       if (params.from) where.invoiceDate.gte = new Date(params.from);
       if (params.to) where.invoiceDate.lte = new Date(params.to);
     }
-    const invoices = await this.prisma.vendorInvoice.findMany({ where, orderBy: { invoiceDate: 'asc' } });
+    const invoices = await this.prisma.vendorInvoice.findMany({
+      where,
+      orderBy: { invoiceDate: 'asc' },
+    });
     const vendorIds = [...new Set(invoices.map((i) => i.vendorOrgId).filter(Boolean) as string[])];
     const vendors = vendorIds.length
-      ? await this.prisma.organization.findMany({ where: { id: { in: vendorIds } }, select: { id: true, name: true } })
+      ? await this.prisma.organization.findMany({
+          where: { id: { in: vendorIds } },
+          select: { id: true, name: true },
+        })
       : [];
     const vendorName = new Map(vendors.map((v) => [v.id, v.name]));
     const poIds = [...new Set(invoices.map((i) => i.purchaseOrderId))];
     const pos = poIds.length
-      ? await this.prisma.purchaseOrder.findMany({ where: { id: { in: poIds } }, select: { id: true, poNumber: true } })
+      ? await this.prisma.purchaseOrder.findMany({
+          where: { id: { in: poIds } },
+          select: { id: true, poNumber: true },
+        })
       : [];
     const poNumber = new Map(pos.map((p) => [p.id, p.poNumber]));
 
     const rows: InvoiceRow[] = invoices.map((i) => ({
       invoiceNumber: i.invoiceNumber,
-      vendorName: i.vendorOrgId ? (vendorName.get(i.vendorOrgId) || null) : null,
+      vendorName: i.vendorOrgId ? vendorName.get(i.vendorOrgId) || null : null,
       invoiceDate: i.invoiceDate.toISOString(),
       poNumber: poNumber.get(i.purchaseOrderId) || null,
       currency: i.currency,
@@ -69,7 +81,9 @@ export class ConnectorsService {
     for (const v of decoded) {
       const existing = await this.prisma.vendor.findFirst({ where: { tenantId, name: v.name } });
       const contactInfo = {
-        taxId: v.taxId, paymentTermsDays: v.paymentTermsDays, contactEmail: v.contactEmail,
+        taxId: v.taxId,
+        paymentTermsDays: v.paymentTermsDays,
+        contactEmail: v.contactEmail,
       };
       if (existing) {
         await this.prisma.vendor.update({
@@ -84,31 +98,52 @@ export class ConnectorsService {
         created.push(c.id);
       }
     }
-    return { createdVendors: created.length, updatedVendors: updated.length, totalRows: decoded.length };
+    return {
+      createdVendors: created.length,
+      updatedVendors: updated.length,
+      totalRows: decoded.length,
+    };
   }
 
   // ─── BACnet / OPC UA / MQTT bridge ingestion ─────────────────
-  async ingestBridge(tenantId: string, connectorId: string, actorUserId: string | null, raw: string) {
-    const conn = connectorId === 'bridge.bacnet.v1' ? bacnetBridgeConnector
-      : connectorId === 'bridge.opcua.v1' ? opcuaBridgeConnector
-      : connectorId === 'bridge.mqtt.v1' ? mqttBridgeConnector
-      : null;
+  async ingestBridge(
+    tenantId: string,
+    connectorId: string,
+    actorUserId: string | null,
+    raw: string,
+  ) {
+    const conn =
+      connectorId === 'bridge.bacnet.v1'
+        ? bacnetBridgeConnector
+        : connectorId === 'bridge.opcua.v1'
+          ? opcuaBridgeConnector
+          : connectorId === 'bridge.mqtt.v1'
+            ? mqttBridgeConnector
+            : null;
     if (!conn) throw new NotFoundException(`unknown bridge connector ${connectorId}`);
     if (!raw) throw new BadRequestException('empty payload');
 
     // Envelope tenant must match the request context — rejects mis-routed or
     // spoofed gateway packets.
     let env: BridgeIngestEnvelope;
-    try { env = JSON.parse(raw); } catch { throw new BadRequestException('invalid JSON envelope'); }
+    try {
+      env = JSON.parse(raw);
+    } catch {
+      throw new BadRequestException('invalid JSON envelope');
+    }
     if (env.tenantId !== tenantId) {
       throw new BadRequestException('envelope tenantId mismatch');
     }
     const building = await this.prisma.building.findFirst({
-      where: { id: env.buildingId, tenantId }, select: { id: true },
+      where: { id: env.buildingId, tenantId },
+      select: { id: true },
     });
     if (!building) throw new BadRequestException('envelope buildingId not in tenant');
 
-    const decoded: DecodedBridgeRow[] = await conn.decode!({ tenantId, buildingId: env.buildingId }, raw);
+    const decoded: DecodedBridgeRow[] = await conn.decode!(
+      { tenantId, buildingId: env.buildingId },
+      raw,
+    );
     const incidents: string[] = [];
     const readings: Array<{ ref: string; ts: string; value: any }> = [];
 
@@ -137,7 +172,9 @@ export class ConnectorsService {
       }
     }
     return {
-      connectorId, sourceId: env.sourceId, buildingId: env.buildingId,
+      connectorId,
+      sourceId: env.sourceId,
+      buildingId: env.buildingId,
       pointsReceived: env.points.length,
       incidentsCreated: incidents.length,
       incidentIds: incidents,

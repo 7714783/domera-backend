@@ -235,6 +235,29 @@ export class NotificationsService {
     }
   }
 
+  // Public helper for legacy in-app notifications written by domain
+  // workers (e.g. PPM SLA reminder worker). Routes the write through
+  // the notifications module so the SSOT contract for the `notification`
+  // table holds — see ssot-ownership.test.mjs OWNERSHIP[notification].
+  // INIT-010 Follow-up B (2026-04-28).
+  async recordInAppNotification(input: {
+    tenantId: string;
+    buildingId?: string | null;
+    userId: string;
+    type: string;
+    content: string;
+  }): Promise<void> {
+    await (this.migrator as any).notification.create({
+      data: {
+        tenantId: input.tenantId,
+        buildingId: input.buildingId ?? null,
+        userId: input.userId,
+        type: input.type,
+        content: input.content,
+      },
+    });
+  }
+
   // In-app inbox delivery — write to the legacy `notifications` table
   // so the existing user-facing inbox keeps working.
   private async deliverInApp(row: any): Promise<void> {

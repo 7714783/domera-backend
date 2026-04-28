@@ -11,7 +11,10 @@ export class ObligationsController {
   ) {}
 
   @Post('obligations/apply-templates')
-  async applyTemplates(@Param('slug') slug: string, @Headers('x-tenant-id') tenantIdHeader?: string) {
+  async applyTemplates(
+    @Param('slug') slug: string,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+  ) {
     const tenantId = resolveTenantId(tenantIdHeader);
     const building = await this.prisma.building.findFirst({ where: { tenantId, slug } });
     if (!building) return { error: 'building not found' };

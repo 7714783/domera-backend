@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { EmergencyOverridesService } from './emergency-overrides.service';
@@ -42,7 +51,13 @@ export class EmergencyOverridesController {
     @Headers('x-tenant-id') th?: string,
     @Headers('authorization') ah?: string,
   ) {
-    return this.svc.ratify(resolveTenantId(th), await uid(ah, this.auth), id, body.decision, body.notes);
+    return this.svc.ratify(
+      resolveTenantId(th),
+      await uid(ah, this.auth),
+      id,
+      body.decision,
+      body.notes,
+    );
   }
 
   @Post('mark-lapsed')

@@ -23,8 +23,10 @@ export class ImportsService {
     const regulatorRows = parsed.regulator?.rows || [];
     for (const r of regulatorRows) {
       for (const w of r.warnings) {
-        if (w.startsWith('unmapped_certification:')) unmappedCerts.add(w.slice('unmapped_certification:'.length).trim());
-        if (w.startsWith('unmapped_document_type:')) unmappedDocs.add(w.slice('unmapped_document_type:'.length).trim());
+        if (w.startsWith('unmapped_certification:'))
+          unmappedCerts.add(w.slice('unmapped_certification:'.length).trim());
+        if (w.startsWith('unmapped_document_type:'))
+          unmappedDocs.add(w.slice('unmapped_document_type:'.length).trim());
       }
     }
 
@@ -42,13 +44,22 @@ export class ImportsService {
         tenantId,
         kind: 'ppm_xlsx_regulator',
         sourceKey: `memory://${filename}`,
-        status: summary.regulator && summary.regulator.errors > 0 ? 'preview_ready' : 'preview_ready',
+        status:
+          summary.regulator && summary.regulator.errors > 0 ? 'preview_ready' : 'preview_ready',
         summary,
         createdBy: actorUserId,
       },
     });
 
-    const rowsToInsert: Array<{ importJobId: string; sheetName: string; rowNumber: number; rawJson: any; mappedJson: any; validationErrors: any; status: string }> = [];
+    const rowsToInsert: Array<{
+      importJobId: string;
+      sheetName: string;
+      rowNumber: number;
+      rawJson: any;
+      mappedJson: any;
+      validationErrors: any;
+      status: string;
+    }> = [];
     for (const r of regulatorRows) {
       rowsToInsert.push({
         importJobId: job.id,
@@ -57,7 +68,14 @@ export class ImportsService {
         rawJson: r.raw as any,
         mappedJson: r.mapped as any,
         validationErrors: { errors: r.errors, warnings: r.warnings } as any,
-        status: r.errors.length > 0 ? 'error' : r.warnings.length > 0 ? 'warning' : r.mapped ? 'ok' : 'skipped',
+        status:
+          r.errors.length > 0
+            ? 'error'
+            : r.warnings.length > 0
+              ? 'warning'
+              : r.mapped
+                ? 'ok'
+                : 'skipped',
       });
     }
     for (const r of parsed.ppm?.rows || []) {
@@ -90,7 +108,10 @@ export class ImportsService {
   }
 
   async getJob(id: string) {
-    const job = await this.prisma.importJob.findUnique({ where: { id }, include: { rows: { take: 500, orderBy: { rowNumber: 'asc' } } } });
+    const job = await this.prisma.importJob.findUnique({
+      where: { id },
+      include: { rows: { take: 500, orderBy: { rowNumber: 'asc' } } },
+    });
     if (!job) throw new NotFoundException('import job not found');
     return job;
   }
@@ -99,10 +120,13 @@ export class ImportsService {
     const job = await this.prisma.importJob.findUnique({ where: { id }, include: { rows: true } });
     if (!job) throw new NotFoundException('import job not found');
     if (job.status === 'committed') throw new BadRequestException('already committed');
-    if (job.status === 'rolled_back') throw new BadRequestException('job rolled back; cannot re-commit');
+    if (job.status === 'rolled_back')
+      throw new BadRequestException('job rolled back; cannot re-commit');
     const summary = (job.summary || {}) as any;
     if (summary.regulator && summary.regulator.errors > 0) {
-      throw new BadRequestException(`preview contains ${summary.regulator.errors} errors; fix source file`);
+      throw new BadRequestException(
+        `preview contains ${summary.regulator.errors} errors; fix source file`,
+      );
     }
 
     const templateIds: string[] = [];
@@ -146,16 +170,24 @@ export class ImportsService {
       templateIds.push(template.id);
       createdTemplates += 1;
 
-      await this.prisma.obligationBasis.deleteMany({ where: { obligationTemplateId: template.id } });
+      await this.prisma.obligationBasis.deleteMany({
+        where: { obligationTemplateId: template.id },
+      });
       for (const b of mapped.bases || []) {
         const basis = await this.prisma.obligationBasis.create({
-          data: { obligationTemplateId: template.id, type: b.type, referenceCode: b.reference || null },
+          data: {
+            obligationTemplateId: template.id,
+            type: b.type,
+            referenceCode: b.reference || null,
+          },
         });
         basisIds.push(basis.id);
         createdBases += 1;
       }
 
-      await this.prisma.applicabilityRule.deleteMany({ where: { obligationTemplateId: template.id } });
+      await this.prisma.applicabilityRule.deleteMany({
+        where: { obligationTemplateId: template.id },
+      });
       for (const a of mapped.applicability || []) {
         const rule = await this.prisma.applicabilityRule.create({
           data: { obligationTemplateId: template.id, predicate: a },
@@ -174,14 +206,23 @@ export class ImportsService {
         committedAt: now,
         occurredAt: occurred,
         finishedAt: now,
-        createdEntities: { obligationTemplate: templateIds, obligationBasis: basisIds, applicabilityRule: ruleIds } as any,
-        summary: { ...(job.summary as any), commit: { createdTemplates, createdBases, createdRules } } as any,
+        createdEntities: {
+          obligationTemplate: templateIds,
+          obligationBasis: basisIds,
+          applicabilityRule: ruleIds,
+        } as any,
+        summary: {
+          ...(job.summary as any),
+          commit: { createdTemplates, createdBases, createdRules },
+        } as any,
       },
     });
     return {
       ok: true,
       importJobId: updated.id,
-      createdTemplates, createdBases, createdRules,
+      createdTemplates,
+      createdBases,
+      createdRules,
       recordedAt: updated.createdAt,
       committedAt: updated.committedAt,
       occurredAt: updated.occurredAt,
@@ -192,7 +233,8 @@ export class ImportsService {
     const job = await this.prisma.importJob.findUnique({ where: { id } });
     if (!job) throw new NotFoundException('import job not found');
     if (job.tenantId !== tenantId) throw new NotFoundException('import job not found');
-    if (job.status !== 'committed') throw new BadRequestException(`cannot rollback job in status "${job.status}"`);
+    if (job.status !== 'committed')
+      throw new BadRequestException(`cannot rollback job in status "${job.status}"`);
 
     const created = (job.createdEntities || {}) as Record<string, string[]>;
     const templateIds = created.obligationTemplate || [];
@@ -212,11 +254,17 @@ export class ImportsService {
       removedBases = r.count;
     }
     if (templateIds.length > 0) {
-      const blocked = await this.prisma.ppmPlanItem.count({ where: { obligationTemplateId: { in: templateIds } } });
+      const blocked = await this.prisma.ppmPlanItem.count({
+        where: { obligationTemplateId: { in: templateIds } },
+      });
       if (blocked > 0) {
-        throw new BadRequestException(`cannot rollback: ${blocked} PPM plan item(s) reference imported obligations`);
+        throw new BadRequestException(
+          `cannot rollback: ${blocked} PPM plan item(s) reference imported obligations`,
+        );
       }
-      const r = await this.prisma.obligationTemplate.deleteMany({ where: { id: { in: templateIds } } });
+      const r = await this.prisma.obligationTemplate.deleteMany({
+        where: { id: { in: templateIds } },
+      });
       removedTemplates = r.count;
     }
 
@@ -242,7 +290,8 @@ export class ImportsService {
    * Returns a preview first; caller commits with /imports/pdf-bundle/:id/commit.
    */
   async pdfBundlePreview(
-    tenantId: string, actorUserId: string,
+    tenantId: string,
+    actorUserId: string,
     body: {
       buildingId: string;
       filename: string;
@@ -252,12 +301,13 @@ export class ImportsService {
         sizeBytes?: number;
         title: string;
         documentTypeKey: string;
-        targetType?: string;   // ppm_task | work_order | equipment | project | incident
+        targetType?: string; // ppm_task | work_order | equipment | project | incident
         targetId?: string;
-        completion?: {          // optional legacy-completion backfill
+        completion?: {
+          // optional legacy-completion backfill
           workOrderId?: string;
           taskInstanceId?: string;
-          completedAt: string;  // occurred_at (business date)
+          completedAt: string; // occurred_at (business date)
           labourHours?: number;
           labourCost?: number;
           materialsCost?: number;
@@ -272,7 +322,10 @@ export class ImportsService {
       throw new BadRequestException('manifest is empty');
     }
 
-    const building = await this.prisma.building.findFirst({ where: { id: body.buildingId, tenantId }, select: { id: true } });
+    const building = await this.prisma.building.findFirst({
+      where: { id: body.buildingId, tenantId },
+      select: { id: true },
+    });
     if (!building) throw new NotFoundException('building not found');
 
     const catalog = await this.loadCatalog();
@@ -283,7 +336,8 @@ export class ImportsService {
       if (!m.storageKey) errs.push('storageKey required');
       if (!m.title) errs.push('title required');
       if (!m.documentTypeKey) errs.push('documentTypeKey required');
-      else if (!knownDocKeys.has(m.documentTypeKey)) errs.push(`unknown documentTypeKey: ${m.documentTypeKey}`);
+      else if (!knownDocKeys.has(m.documentTypeKey))
+        errs.push(`unknown documentTypeKey: ${m.documentTypeKey}`);
       if (m.targetType && !m.targetId) errs.push('targetId required when targetType set');
       if (m.completion && !m.completion.completedAt) errs.push('completion.completedAt required');
       return { idx, errors: errs };
@@ -318,7 +372,8 @@ export class ImportsService {
     if (!job) throw new NotFoundException('import job not found');
     if (job.kind !== 'pdf_bundle') throw new BadRequestException('job is not a pdf_bundle');
     if (job.status === 'committed') throw new BadRequestException('already committed');
-    if (job.status === 'rolled_back') throw new BadRequestException('cannot re-commit rolled-back job');
+    if (job.status === 'rolled_back')
+      throw new BadRequestException('cannot re-commit rolled-back job');
     const summary = (job.summary || {}) as any;
     if (summary.errors > 0) throw new BadRequestException(`manifest has ${summary.errors} errors`);
 
@@ -332,7 +387,8 @@ export class ImportsService {
     for (const m of manifest) {
       const doc = await this.prisma.document.create({
         data: {
-          tenantId, buildingId,
+          tenantId,
+          buildingId,
           title: m.title,
           documentType: 'pdf_bundle',
           documentTypeKey: m.documentTypeKey,
@@ -364,7 +420,8 @@ export class ImportsService {
       if (m.completion) {
         const c = await this.prisma.completionRecord.create({
           data: {
-            tenantId, buildingId,
+            tenantId,
+            buildingId,
             workOrderId: m.completion.workOrderId || null,
             taskInstanceId: m.completion.taskInstanceId || null,
             completedByUserId: `import:${job.id}`,
@@ -373,7 +430,9 @@ export class ImportsService {
             labourCost: m.completion.labourCost ?? null,
             materialsCost: m.completion.materialsCost ?? null,
             serviceReportDocumentId: doc.id,
-            notes: [m.completion.notes, `backfilled from PDF bundle import ${job.id}`].filter(Boolean).join(' — '),
+            notes: [m.completion.notes, `backfilled from PDF bundle import ${job.id}`]
+              .filter(Boolean)
+              .join(' — '),
           },
         });
         createdCompletionIds.push(c.id);

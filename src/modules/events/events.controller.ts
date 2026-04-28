@@ -13,6 +13,10 @@ export class EventsController {
     @Query('take') take?: string,
     @Headers('x-tenant-id') th?: string,
   ) {
-    return this.svc.list(resolveTenantId(th), { status, type, take: take ? Number(take) : undefined });
+    return this.svc.list(resolveTenantId(th), {
+      status,
+      type,
+      take: take ? Number(take) : undefined,
+    });
   }
 }

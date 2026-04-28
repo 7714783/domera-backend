@@ -104,7 +104,8 @@ const EXEMPT = {
   ppmExecutionLog: 'written by ppm module',
   // taskInstance moved to OWNERSHIP map (sole owner: ppm) after INIT-010 P0-1 fix
   taskNote: 'written by tasks module',
-  maintenancePlan: 'legacy — replaced by ppmPlanItem; no active writers',
+  // maintenancePlan removed in INIT-010 Follow-up F (model dropped, table
+  // dropped via migration 022 — no active writers in the codebase).
 
   // Reactive family — owned by reactive module
   // (incident, serviceRequest, workOrder, quote, purchaseOrder, completionRecord
@@ -137,7 +138,8 @@ const EXEMPT = {
   inventoryItem: 'written by inventory module',
   stockLocation: 'written by inventory module',
   stockMovement: 'written by inventory module',
-  sparePart: 'legacy — superseded by AssetSparePart',
+  // sparePart removed in INIT-010 Follow-up F (model dropped, table
+  // dropped via migration 022 — superseded by AssetSparePart).
 
   // QR / public submission
   qrLocation: 'written by qr-locations module',
@@ -158,7 +160,10 @@ const EXEMPT = {
   account: 'reference data for accounting integration',
 
   // Vendors / contracts
-  vendor: 'legacy — replaced by Organization with type=vendor',
+  // vendor moved to OWNERSHIP[connectors] in INIT-010 Follow-up F —
+  // connectors.importVendorMaster is the single live writer (CSV ingest).
+  // The schema-level FK from Contract keeps the model alive; full migration
+  // to Organization{type:vendor} is tracked as a separate follow-up.
   contract: 'written by leases module',
 
   // Projects
@@ -189,7 +194,8 @@ const EXEMPT = {
 
   // Notifications: legacy `notification` row promoted to OWNERSHIP under
   // notifications module (INIT-014) — removed from EXEMPT.
-  residentRequest: 'legacy — superseded by ServiceRequest',
+  // residentRequest removed in INIT-010 Follow-up F (model dropped, table
+  // dropped via migration 022 — superseded by ServiceRequest).
 
   // Rounds
   round: 'written by rounds module',

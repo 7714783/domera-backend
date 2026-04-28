@@ -64,8 +64,6 @@ declare
     'vendors',
     'contracts',
     'accounts',
-    'maintenance_plans',
-    'resident_requests',
     'notifications',
     'building_floors',
     'building_units',
@@ -121,7 +119,6 @@ declare
     'asset_custom_attributes',
     'asset_documents',
     'asset_media',
-    'spare_parts',
     'asset_spare_parts'
   ];
 begin

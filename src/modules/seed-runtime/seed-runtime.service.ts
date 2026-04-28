@@ -17,7 +17,11 @@ export class SeedRuntimeService {
 
     const [organizationsCount, userMemberships, buildingsCount] = await Promise.all([
       this.prisma.organization.count({ where: { tenantId: workspace.id } }),
-      this.prisma.membership.findMany({ where: { tenantId: workspace.id }, distinct: ['userId'], select: { userId: true } }),
+      this.prisma.membership.findMany({
+        where: { tenantId: workspace.id },
+        distinct: ['userId'],
+        select: { userId: true },
+      }),
       this.prisma.building.count({ where: { tenantId: workspace.id } }),
     ]);
 
@@ -81,7 +85,10 @@ export class SeedRuntimeService {
       this.prisma.asset.count({ where: { buildingId: building.id } }),
       this.prisma.buildingObligation.count({ where: { buildingId: building.id } }),
       this.prisma.ppmPlanItem.count({ where: { buildingId: building.id } }),
-      this.prisma.taskInstance.findMany({ where: { buildingId: building.id }, select: { status: true } }),
+      this.prisma.taskInstance.findMany({
+        where: { buildingId: building.id },
+        select: { status: true },
+      }),
     ]);
 
     return {
@@ -103,8 +110,16 @@ export class SeedRuntimeService {
     const tasks = await this.prisma.taskInstance.findMany({ where: { buildingId: building.id } });
 
     const overdue = tasks.filter((x) => x.status === 'overdue').length;
-    const due30 = tasks.filter((x) => x.status === 'open' && x.dueAt <= new Date(Date.now() + 30 * 86400000)).length;
-    const missingEvidence = tasks.filter((x) => x.evidenceRequired && (!x.evidenceDocuments || (Array.isArray(x.evidenceDocuments) && x.evidenceDocuments.length === 0)) && x.status !== 'open').length;
+    const due30 = tasks.filter(
+      (x) => x.status === 'open' && x.dueAt <= new Date(Date.now() + 30 * 86400000),
+    ).length;
+    const missingEvidence = tasks.filter(
+      (x) =>
+        x.evidenceRequired &&
+        (!x.evidenceDocuments ||
+          (Array.isArray(x.evidenceDocuments) && x.evidenceDocuments.length === 0)) &&
+        x.status !== 'open',
+    ).length;
     const blockedApproval = tasks.filter((x) => x.blockedReason === 'missing_approval').length;
     const blockedDocument = tasks.filter((x) => x.blockedReason === 'missing_document').length;
 
@@ -125,8 +140,15 @@ export class SeedRuntimeService {
   async getBuildingBudgets(slug: string) {
     const building = await this.getBuildingBySlug(slug);
     const [budgets, invoices] = await Promise.all([
-      this.prisma.budget.findMany({ where: { buildingId: building.id }, include: { lines: true }, orderBy: { fiscalYear: 'desc' } }),
-      this.prisma.invoice.findMany({ where: { buildingId: building.id }, orderBy: { createdAt: 'desc' } }),
+      this.prisma.budget.findMany({
+        where: { buildingId: building.id },
+        include: { lines: true },
+        orderBy: { fiscalYear: 'desc' },
+      }),
+      this.prisma.invoice.findMany({
+        where: { buildingId: building.id },
+        orderBy: { createdAt: 'desc' },
+      }),
     ]);
 
     return { building, budgets, invoices };
@@ -144,7 +166,10 @@ export class SeedRuntimeService {
 
   async getBuildingDocuments(slug: string) {
     const building = await this.getBuildingBySlug(slug);
-    const documents = await this.prisma.document.findMany({ where: { buildingId: building.id }, orderBy: { createdAt: 'desc' } });
+    const documents = await this.prisma.document.findMany({
+      where: { buildingId: building.id },
+      orderBy: { createdAt: 'desc' },
+    });
     return { building, documents };
   }
 
@@ -158,12 +183,18 @@ export class SeedRuntimeService {
   }
 
   async completeTask(taskId: string, payload: any, actorUserId: string) {
-    const task = await this.prisma.taskInstance.findUnique({ where: { id: taskId }, include: { building: true } });
+    const task = await this.prisma.taskInstance.findUnique({
+      where: { id: taskId },
+      include: { building: true },
+    });
     if (!task) {
       throw new NotFoundException('Task not found');
     }
 
-    if (task.evidenceRequired && (!payload?.evidence_documents || payload.evidence_documents.length === 0)) {
+    if (
+      task.evidenceRequired &&
+      (!payload?.evidence_documents || payload.evidence_documents.length === 0)
+    ) {
       throw new Error('evidence required');
     }
 
@@ -180,10 +211,17 @@ export class SeedRuntimeService {
     await this.audit.write({
       tenantId: updated.tenantId,
       buildingId: updated.buildingId,
-      actor: actorUserId, role: 'operator',
-      action: 'Task completed', entity: updated.title, entityType: 'task',
-      building: task.building.name, ip: '127.0.0.1', sensitive: false,
-      eventType: 'task.completed', resourceType: 'task', resourceId: updated.id,
+      actor: actorUserId,
+      role: 'operator',
+      action: 'Task completed',
+      entity: updated.title,
+      entityType: 'task',
+      building: task.building.name,
+      ip: '127.0.0.1',
+      sensitive: false,
+      eventType: 'task.completed',
+      resourceType: 'task',
+      resourceId: updated.id,
       metadata: { comment: payload?.comment || null },
     });
 
@@ -213,7 +251,11 @@ export class SeedRuntimeService {
       if (actorRole === 'building_manager' && approval.amount > 25000) {
         throw new Error('building_manager limit exceeded');
       }
-      if (pendingStep.orderNo === 3 && approval.amount > 50000 && actorRole !== 'owner_representative') {
+      if (
+        pendingStep.orderNo === 3 &&
+        approval.amount > 50000 &&
+        actorRole !== 'owner_representative'
+      ) {
         throw new Error('owner_representative required for L3 approval above 50000 ILS');
       }
     }
@@ -250,11 +292,17 @@ export class SeedRuntimeService {
     await this.audit.write({
       tenantId: approval.tenantId,
       buildingId: approval.buildingId,
-      actor: actorUserId, role: actorRole,
-      action: 'Approval step approved', entity: approval.title, entityType: 'approval',
-      building: approval.building.name, ip: '127.0.0.1',
+      actor: actorUserId,
+      role: actorRole,
+      action: 'Approval step approved',
+      entity: approval.title,
+      entityType: 'approval',
+      building: approval.building.name,
+      ip: '127.0.0.1',
       sensitive: approval.type === 'spend_approval',
-      eventType: 'approval.step.approved', resourceType: 'approval', resourceId: approval.id,
+      eventType: 'approval.step.approved',
+      resourceType: 'approval',
+      resourceId: approval.id,
       metadata: { decision: payload?.decision || 'approve', comment: payload?.comment || null },
     });
 

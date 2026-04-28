@@ -1,18 +1,13 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import pkg from '@prisma/client';
-const { PrismaClient } = pkg;
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 const root = process.cwd();
-// Split-repo lives at repo root (prisma/seeds/...), monorepo lives at apps/api/prisma/seeds/...
-const candidates = [
-  path.join(root, 'prisma', 'seeds', 'test-building.seed.json'),
-  path.join(root, 'apps', 'api', 'prisma', 'seeds', 'test-building.seed.json'),
-];
-const manifestPath = candidates.find((p) => fs.existsSync(p)) || candidates[0];
+const apiRoot = root.endsWith(path.join('apps', 'api')) ? root : path.join(root, 'apps', 'api');
+const manifestPath = path.join(apiRoot, 'prisma', 'seeds', 'test-building.seed.json');
 
 function assertDevGuards() {
   if ((process.env.NODE_ENV || 'development') === 'production') {
@@ -26,11 +21,19 @@ function assertDevGuards() {
   const databaseUrl = process.env.DATABASE_URL || '';
   const localLike = /(localhost|127\.0\.0\.1|postgres|docker|dev)/i.test(databaseUrl);
   if (!localLike && process.env.ALLOW_NONLOCAL_DEMO_SEED !== 'true') {
-    throw new Error('seed aborted: DATABASE_URL is non-local and ALLOW_NONLOCAL_DEMO_SEED is not true');
+    throw new Error(
+      'seed aborted: DATABASE_URL is non-local and ALLOW_NONLOCAL_DEMO_SEED is not true',
+    );
   }
 
-  if (process.env.DEMO_DISABLE_EMAIL !== 'true' || process.env.DEMO_DISABLE_SMS !== 'true' || process.env.DEMO_DISABLE_WEBHOOKS !== 'true') {
-    throw new Error('seed aborted: DEMO_DISABLE_EMAIL/DEMO_DISABLE_SMS/DEMO_DISABLE_WEBHOOKS must be true');
+  if (
+    process.env.DEMO_DISABLE_EMAIL !== 'true' ||
+    process.env.DEMO_DISABLE_SMS !== 'true' ||
+    process.env.DEMO_DISABLE_WEBHOOKS !== 'true'
+  ) {
+    throw new Error(
+      'seed aborted: DEMO_DISABLE_EMAIL/DEMO_DISABLE_SMS/DEMO_DISABLE_WEBHOOKS must be true',
+    );
   }
 }
 
@@ -74,8 +77,12 @@ function requireReservedDomains(manifest) {
 }
 
 async function resetTenantData(tenantId) {
-  const buildingIds = (await prisma.building.findMany({ where: { tenantId }, select: { id: true } })).map((x) => x.id);
-  const organizationIds = (await prisma.organization.findMany({ where: { tenantId }, select: { id: true } })).map((x) => x.id);
+  const buildingIds = (
+    await prisma.building.findMany({ where: { tenantId }, select: { id: true } })
+  ).map((x) => x.id);
+  const organizationIds = (
+    await prisma.organization.findMany({ where: { tenantId }, select: { id: true } })
+  ).map((x) => x.id);
 
   await prisma.auditEntry.deleteMany({ where: { tenantId } });
   await prisma.document.deleteMany({ where: { tenantId } });
@@ -93,7 +100,9 @@ async function resetTenantData(tenantId) {
   await prisma.building.deleteMany({ where: { tenantId } });
 
   if (organizationIds.length) {
-    await prisma.organizationMembership.deleteMany({ where: { organizationId: { in: organizationIds } } });
+    await prisma.organizationMembership.deleteMany({
+      where: { organizationId: { in: organizationIds } },
+    });
   }
   await prisma.organization.deleteMany({ where: { tenantId } });
   await prisma.membership.deleteMany({ where: { tenantId } });
@@ -259,8 +268,13 @@ async function run() {
     await prisma.buildingMandate.upsert({
       where: { seedKey: 'mnd_owner_nt01' },
       create: {
-        tenantId, buildingId, organizationId: ownerOrgId, mandateType: 'owner',
-        effectiveFrom: new Date(), isDemo: true, seedKey: 'mnd_owner_nt01',
+        tenantId,
+        buildingId,
+        organizationId: ownerOrgId,
+        mandateType: 'owner',
+        effectiveFrom: new Date(),
+        isDemo: true,
+        seedKey: 'mnd_owner_nt01',
       },
       update: {},
     });
@@ -269,8 +283,13 @@ async function run() {
     await prisma.buildingMandate.upsert({
       where: { seedKey: 'mnd_operator_nt01' },
       create: {
-        tenantId, buildingId, organizationId: operatorOrgId, mandateType: 'management_company',
-        effectiveFrom: new Date(), isDemo: true, seedKey: 'mnd_operator_nt01',
+        tenantId,
+        buildingId,
+        organizationId: operatorOrgId,
+        mandateType: 'management_company',
+        effectiveFrom: new Date(),
+        isDemo: true,
+        seedKey: 'mnd_operator_nt01',
       },
       update: {},
     });
@@ -289,7 +308,8 @@ async function run() {
       await prisma.userCertification.upsert({
         where: { userId_certificationId: { userId, certificationId: cert.id } },
         create: {
-          userId, certificationId: cert.id,
+          userId,
+          certificationId: cert.id,
           issuedAt: new Date(Date.now() - 200 * 24 * 60 * 60 * 1000),
           expiresAt: new Date(Date.now() + 500 * 24 * 60 * 60 * 1000),
         },
@@ -502,11 +522,41 @@ async function run() {
   });
 
   const budgetLines = [
-    { key: 'bdgl_cleaning', budgetId: opexId, code: 'OPEX-CLEAN', name: 'Cleaning', amount: 180000 },
-    { key: 'bdgl_maintenance', budgetId: opexId, code: 'OPEX-MAINT', name: 'Planned Maintenance', amount: 420000 },
-    { key: 'bdgl_utilities', budgetId: opexId, code: 'OPEX-UTIL', name: 'Utilities', amount: 600000 },
-    { key: 'bdgl_vfd_upgrade', budgetId: capexId, code: 'CAPEX-HVAC-01', name: 'AHU VFD Upgrade', amount: 85000 },
-    { key: 'bdgl_access_upgrade', budgetId: capexId, code: 'CAPEX-SEC-01', name: 'Access Control Upgrade', amount: 120000 },
+    {
+      key: 'bdgl_cleaning',
+      budgetId: opexId,
+      code: 'OPEX-CLEAN',
+      name: 'Cleaning',
+      amount: 180000,
+    },
+    {
+      key: 'bdgl_maintenance',
+      budgetId: opexId,
+      code: 'OPEX-MAINT',
+      name: 'Planned Maintenance',
+      amount: 420000,
+    },
+    {
+      key: 'bdgl_utilities',
+      budgetId: opexId,
+      code: 'OPEX-UTIL',
+      name: 'Utilities',
+      amount: 600000,
+    },
+    {
+      key: 'bdgl_vfd_upgrade',
+      budgetId: capexId,
+      code: 'CAPEX-HVAC-01',
+      name: 'AHU VFD Upgrade',
+      amount: 85000,
+    },
+    {
+      key: 'bdgl_access_upgrade',
+      budgetId: capexId,
+      code: 'CAPEX-SEC-01',
+      name: 'Access Control Upgrade',
+      amount: 120000,
+    },
   ];
 
   for (const line of budgetLines) {
@@ -593,9 +643,7 @@ async function run() {
       requester: 'Maintenance Technician',
       threshold: null,
       hint: 'Evidence required',
-      steps: [
-        { key: 'aps_task_l1', orderNo: 1, role: 'chief_engineer', status: 'pending' },
-      ],
+      steps: [{ key: 'aps_task_l1', orderNo: 1, role: 'chief_engineer', status: 'pending' }],
     },
   ];
 
@@ -634,12 +682,48 @@ async function run() {
   }
 
   const docs = [
-    { key: 'doc_takeover_checklist', type: 'handover_checklist', title: 'NT01 Handover Checklist', status: 'published', versionNo: 1 },
-    { key: 'doc_fire_pump_cert', type: 'certificate', title: 'Fire Pump Annual Certificate', status: 'published', versionNo: 1 },
-    { key: 'doc_generator_report', type: 'service_report', title: 'Generator Load Bank Report', status: 'published', versionNo: 1 },
-    { key: 'doc_legionella_lab', type: 'lab_result', title: 'Legionella Q1 Lab Result', status: 'published', versionNo: 1 },
-    { key: 'doc_budget_memo', type: 'approval_memo', title: 'AHU-02 VFD Upgrade Memo', status: 'in_review', versionNo: 2 },
-    { key: 'doc_ppm_template', type: 'ppm_program', title: 'NT01 General PPM Program', status: 'published', versionNo: 1 },
+    {
+      key: 'doc_takeover_checklist',
+      type: 'handover_checklist',
+      title: 'NT01 Handover Checklist',
+      status: 'published',
+      versionNo: 1,
+    },
+    {
+      key: 'doc_fire_pump_cert',
+      type: 'certificate',
+      title: 'Fire Pump Annual Certificate',
+      status: 'published',
+      versionNo: 1,
+    },
+    {
+      key: 'doc_generator_report',
+      type: 'service_report',
+      title: 'Generator Load Bank Report',
+      status: 'published',
+      versionNo: 1,
+    },
+    {
+      key: 'doc_legionella_lab',
+      type: 'lab_result',
+      title: 'Legionella Q1 Lab Result',
+      status: 'published',
+      versionNo: 1,
+    },
+    {
+      key: 'doc_budget_memo',
+      type: 'approval_memo',
+      title: 'AHU-02 VFD Upgrade Memo',
+      status: 'in_review',
+      versionNo: 2,
+    },
+    {
+      key: 'doc_ppm_template',
+      type: 'ppm_program',
+      title: 'NT01 General PPM Program',
+      status: 'published',
+      versionNo: 1,
+    },
   ];
 
   const prefix = process.env.DEMO_STORAGE_PREFIX || 'demo/northstone-demo';

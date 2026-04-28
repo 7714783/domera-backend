@@ -1,4 +1,17 @@
-import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, Post, Query, Req, Res, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+  Req,
+  Res,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { DocumentsService } from './documents.service';
@@ -66,7 +79,8 @@ export class DocumentsController {
     @Headers('x-tenant-id') th?: string,
   ) {
     return this.svc.search(resolveTenantId(th), {
-      q, legalHoldOnly: legalHold === '1' || legalHold === 'true',
+      q,
+      legalHoldOnly: legalHold === '1' || legalHold === 'true',
       retentionClass,
       take: take ? Number(take) : undefined,
       skip: skip ? Number(skip) : undefined,
@@ -80,7 +94,13 @@ export class DocumentsController {
     @Headers('x-tenant-id') th?: string,
     @Headers('authorization') ah?: string,
   ) {
-    return this.svc.setLegalHold(resolveTenantId(th), await uid(ah, this.auth), id, !!body.on, body.reason);
+    return this.svc.setLegalHold(
+      resolveTenantId(th),
+      await uid(ah, this.auth),
+      id,
+      !!body.on,
+      body.reason,
+    );
   }
 
   @Post(':id/virus-scan')
@@ -107,7 +127,12 @@ export class DocumentsController {
     @Headers('x-tenant-id') th?: string,
     @Headers('authorization') ah?: string,
   ) {
-    return this.svc.issueSignedUrl(resolveTenantId(th), await uid(ah, this.auth), id, body?.ttlSeconds || 300);
+    return this.svc.issueSignedUrl(
+      resolveTenantId(th),
+      await uid(ah, this.auth),
+      id,
+      body?.ttlSeconds || 300,
+    );
   }
 }
 

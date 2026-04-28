@@ -42,7 +42,11 @@ function isInRange(date: Date, rule: BlackoutRule): boolean {
   return date.getTime() >= rule.startDate.getTime() && date.getTime() <= end.getTime();
 }
 
-function hitsAny(date: Date, rules: BlackoutRule[], buildingId: string): { rule: BlackoutRule | null; blocked: boolean } {
+function hitsAny(
+  date: Date,
+  rules: BlackoutRule[],
+  buildingId: string,
+): { rule: BlackoutRule | null; blocked: boolean } {
   for (const r of rules) {
     if (r.buildingId && r.buildingId !== buildingId) continue;
     if (isInRange(date, r)) return { rule: r, blocked: true };
@@ -57,11 +61,7 @@ function hitsAny(date: Date, rules: BlackoutRule[], buildingId: string): { rule:
  * - policy=defer_to_next_working_day | shift → rolls the date forward one day
  *   at a time up to 14 tries.
  */
-export function applyBlackouts(
-  date: Date,
-  rules: BlackoutRule[],
-  buildingId: string,
-): Date | null {
+export function applyBlackouts(date: Date, rules: BlackoutRule[], buildingId: string): Date | null {
   let cur = new Date(date.getTime());
   for (let i = 0; i < 14; i++) {
     const hit = hitsAny(cur, rules, buildingId);

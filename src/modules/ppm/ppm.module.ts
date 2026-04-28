@@ -1,19 +1,24 @@
-import { Module, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Module, OnModuleInit, OnModuleDestroy, Injectable } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { ApprovalsModule } from '../approvals/approvals.module';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PpmController } from './ppm.controller';
 import { PpmService } from './ppm.service';
 import { createSlaReminderInfra, scanAndSendReminders } from './sla-reminder.worker';
 import type { Queue, Worker } from 'bullmq';
 
-class PpmSlaReminderRunner implements OnModuleInit, OnModuleDestroy {
+@Injectable()
+export class PpmSlaReminderRunner implements OnModuleInit, OnModuleDestroy {
   private queue?: Queue;
   private worker?: Worker;
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
   async onModuleInit() {
     if (process.env.PPM_SLA_WORKER_ENABLED !== 'true') return;
-    const infra = createSlaReminderInfra(this.prisma);
+    const infra = createSlaReminderInfra(this.prisma, this.notifications);
     this.queue = infra.queue;
     this.worker = infra.worker;
   }
@@ -22,7 +27,7 @@ class PpmSlaReminderRunner implements OnModuleInit, OnModuleDestroy {
     await this.queue?.close();
   }
   runNow() {
-    return scanAndSendReminders(this.prisma);
+    return scanAndSendReminders(this.prisma, this.notifications);
   }
 }
 

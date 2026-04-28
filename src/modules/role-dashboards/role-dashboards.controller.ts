@@ -30,7 +30,8 @@ export class RoleDashboardsController {
   @Get('technician/:building')
   async technicianScoped(
     @Param('building') id: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.technicianQueue(resolveTenantId(th), await uid(ah, this.auth), id);
   }

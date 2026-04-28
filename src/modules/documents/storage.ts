@@ -5,7 +5,11 @@ import * as path from 'node:path';
 // swap for an S3 adapter by implementing `ObjectStorage` and binding to the
 // OBJECT_STORAGE provider in documents.module.ts.
 export interface ObjectStorage {
-  put(key: string, body: Buffer, meta: { mimeType?: string | null }): Promise<{ key: string; sizeBytes: number }>;
+  put(
+    key: string,
+    body: Buffer,
+    meta: { mimeType?: string | null },
+  ): Promise<{ key: string; sizeBytes: number }>;
   get(key: string): Promise<Buffer>;
   del(key: string): Promise<void>;
   describe(): string;

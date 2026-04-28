@@ -75,5 +75,8 @@ async function run() {
 }
 
 run()
-  .catch((err) => { console.error('[reset] failed', err); process.exit(1); })
+  .catch((err) => {
+    console.error('[reset] failed', err);
+    process.exit(1);
+  })
   .finally(() => prisma.$disconnect());

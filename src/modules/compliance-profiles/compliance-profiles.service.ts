@@ -7,18 +7,31 @@ export class ComplianceProfilesService {
 
   async list(tenantId: string) {
     return this.prisma.complianceProfile.findMany({
-      where: { tenantId }, orderBy: { key: 'asc' },
+      where: { tenantId },
+      orderBy: { key: 'asc' },
       include: { _count: { select: { assignments: true } } },
     });
   }
 
-  async createOrUpdate(tenantId: string, body: { key: string; name: string; jurisdiction?: string; description?: string; domains?: string[]; obligationTemplateIds?: string[]; isActive?: boolean }) {
+  async createOrUpdate(
+    tenantId: string,
+    body: {
+      key: string;
+      name: string;
+      jurisdiction?: string;
+      description?: string;
+      domains?: string[];
+      obligationTemplateIds?: string[];
+      isActive?: boolean;
+    },
+  ) {
     if (!body.key || !body.name) throw new BadRequestException('key and name required');
     return this.prisma.complianceProfile.upsert({
       where: { tenantId_key: { tenantId, key: body.key } },
       create: {
         tenantId,
-        key: body.key, name: body.name,
+        key: body.key,
+        name: body.name,
         jurisdiction: body.jurisdiction || null,
         description: body.description || null,
         domains: body.domains || [],
@@ -36,7 +49,12 @@ export class ComplianceProfilesService {
     });
   }
 
-  async assignToBuilding(tenantId: string, buildingIdOrSlug: string, profileKey: string, actorUserId: string) {
+  async assignToBuilding(
+    tenantId: string,
+    buildingIdOrSlug: string,
+    profileKey: string,
+    actorUserId: string,
+  ) {
     const b = await this.prisma.building.findFirst({
       where: { tenantId, OR: [{ id: buildingIdOrSlug }, { slug: buildingIdOrSlug }] },
     });
@@ -86,19 +104,32 @@ export class ComplianceProfilesService {
    */
   async seedBuiltIns(tenantId: string) {
     const allObligations = await this.prisma.obligationTemplate.findMany({
-      where: { tenantId }, select: { id: true, domain: true, basisType: true },
+      where: { tenantId },
+      select: { id: true, domain: true, basisType: true },
     });
 
-    const byDomain = (ds: string[]) => allObligations.filter((o) => o.domain && ds.includes(o.domain)).map((o) => o.id);
+    const byDomain = (ds: string[]) =>
+      allObligations.filter((o) => o.domain && ds.includes(o.domain)).map((o) => o.id);
 
     const defs = [
       {
         key: 'IL-SI1525',
         name: 'SI 1525 (Israel)',
         jurisdiction: 'IL',
-        description: 'Israeli Standard 1525 parts 3 & 4 — planned operation of non-residential building services + as-made documentation.',
-        domains: ['fire_life_safety', 'electrical', 'water_plumbing', 'vertical_transport', 'hvac', 'ventilation', 'energy'],
-        obligationTemplateIds: allObligations.filter((o) => o.basisType === 'statutory' || o.basisType === 'standard').map((o) => o.id),
+        description:
+          'Israeli Standard 1525 parts 3 & 4 — planned operation of non-residential building services + as-made documentation.',
+        domains: [
+          'fire_life_safety',
+          'electrical',
+          'water_plumbing',
+          'vertical_transport',
+          'hvac',
+          'ventilation',
+          'energy',
+        ],
+        obligationTemplateIds: allObligations
+          .filter((o) => o.basisType === 'statutory' || o.basisType === 'standard')
+          .map((o) => o.id),
       },
       {
         key: 'ASHRAE-180',

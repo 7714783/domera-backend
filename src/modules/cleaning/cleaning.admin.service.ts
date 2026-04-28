@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CleaningActor, assertInScope } from './cleaning.access';
 
@@ -13,7 +18,15 @@ const ROLE_NAMES: Record<string, string> = {
 };
 
 function requireManagerActor(actor: CleaningActor) {
-  if (!['platform_admin', 'operations_manager', 'building_manager', 'cleaning_boss', 'cleaning_manager'].includes(actor.kind)) {
+  if (
+    ![
+      'platform_admin',
+      'operations_manager',
+      'building_manager',
+      'cleaning_boss',
+      'cleaning_manager',
+    ].includes(actor.kind)
+  ) {
     throw new ForbiddenException('requires manager role');
   }
 }
@@ -35,24 +48,41 @@ export class CleaningAdminService {
     return this.prisma.cleaningContractor.findMany({ where, orderBy: { name: 'asc' } });
   }
 
-  async createContractor(actor: CleaningActor, body: {
-    buildingId: string; name: string; legalName?: string; phone?: string; email?: string; notes?: string;
-  }) {
+  async createContractor(
+    actor: CleaningActor,
+    body: {
+      buildingId: string;
+      name: string;
+      legalName?: string;
+      phone?: string;
+      email?: string;
+      notes?: string;
+    },
+  ) {
     requireManagerActor(actor);
     assertInScope(actor, { buildingId: body.buildingId });
-    if (!body.name || !body.buildingId) throw new BadRequestException('name and buildingId required');
+    if (!body.name || !body.buildingId)
+      throw new BadRequestException('name and buildingId required');
     const contractor = await this.prisma.cleaningContractor.create({
       data: {
-        tenantId: actor.tenantId, buildingId: body.buildingId,
-        name: body.name, legalName: body.legalName || null,
-        phone: body.phone || null, email: body.email || null,
+        tenantId: actor.tenantId,
+        buildingId: body.buildingId,
+        name: body.name,
+        legalName: body.legalName || null,
+        phone: body.phone || null,
+        email: body.email || null,
         notes: body.notes || null,
       },
     });
     // Seed default role set for the contractor.
     for (const code of VALID_ROLES) {
       await this.prisma.cleaningRole.create({
-        data: { tenantId: actor.tenantId, contractorId: contractor.id, code, name: ROLE_NAMES[code] },
+        data: {
+          tenantId: actor.tenantId,
+          contractorId: contractor.id,
+          code,
+          name: ROLE_NAMES[code],
+        },
       });
     }
     return contractor;
@@ -67,20 +97,32 @@ export class CleaningAdminService {
     });
   }
 
-  async createStaff(actor: CleaningActor, body: {
-    contractorId: string; fullName: string; phone?: string; email?: string;
-    roleCode: string; managerId?: string; userId?: string;
-  }) {
+  async createStaff(
+    actor: CleaningActor,
+    body: {
+      contractorId: string;
+      fullName: string;
+      phone?: string;
+      email?: string;
+      roleCode: string;
+      managerId?: string;
+      userId?: string;
+    },
+  ) {
     requireManagerActor(actor);
     assertInScope(actor, { contractorId: body.contractorId });
-    if (!body.fullName || !body.roleCode) throw new BadRequestException('fullName and roleCode required');
-    if (!VALID_ROLES.includes(body.roleCode)) throw new BadRequestException(`roleCode must be ${VALID_ROLES.join(', ')}`);
+    if (!body.fullName || !body.roleCode)
+      throw new BadRequestException('fullName and roleCode required');
+    if (!VALID_ROLES.includes(body.roleCode))
+      throw new BadRequestException(`roleCode must be ${VALID_ROLES.join(', ')}`);
     const role = await this.prisma.cleaningRole.findUnique({
       where: { contractorId_code: { contractorId: body.contractorId, code: body.roleCode } },
     });
     if (!role) throw new NotFoundException(`role ${body.roleCode} not found for contractor`);
     if (body.managerId) {
-      const mgr = await this.prisma.cleaningStaff.findFirst({ where: { id: body.managerId, contractorId: body.contractorId } });
+      const mgr = await this.prisma.cleaningStaff.findFirst({
+        where: { id: body.managerId, contractorId: body.contractorId },
+      });
       if (!mgr) throw new NotFoundException('managerId not found in this contractor');
     }
     return this.prisma.cleaningStaff.create({
@@ -108,14 +150,25 @@ export class CleaningAdminService {
     return this.prisma.cleaningZone.findMany({ where, orderBy: [{ code: 'asc' }] });
   }
 
-  async createZone(actor: CleaningActor, body: {
-    buildingId: string; name: string; code: string; zoneType: string;
-    floorId?: string; locationId?: string; contractorId?: string; supervisorStaffId?: string;
-  }) {
+  async createZone(
+    actor: CleaningActor,
+    body: {
+      buildingId: string;
+      name: string;
+      code: string;
+      zoneType: string;
+      floorId?: string;
+      locationId?: string;
+      contractorId?: string;
+      supervisorStaffId?: string;
+    },
+  ) {
     requireManagerActor(actor);
     assertInScope(actor, { buildingId: body.buildingId, contractorId: body.contractorId });
-    if (!body.name || !body.code || !body.zoneType) throw new BadRequestException('name, code, zoneType required');
-    if (!VALID_ZONE_TYPES.includes(body.zoneType)) throw new BadRequestException(`zoneType must be ${VALID_ZONE_TYPES.join(', ')}`);
+    if (!body.name || !body.code || !body.zoneType)
+      throw new BadRequestException('name, code, zoneType required');
+    if (!VALID_ZONE_TYPES.includes(body.zoneType))
+      throw new BadRequestException(`zoneType must be ${VALID_ZONE_TYPES.join(', ')}`);
     if (body.contractorId) {
       const c = await this.prisma.cleaningContractor.findFirst({
         where: { id: body.contractorId, tenantId: actor.tenantId, buildingId: body.buildingId },
@@ -128,23 +181,35 @@ export class CleaningAdminService {
         buildingId: body.buildingId,
         floorId: body.floorId || null,
         locationId: body.locationId || null,
-        name: body.name, code: body.code, zoneType: body.zoneType,
+        name: body.name,
+        code: body.code,
+        zoneType: body.zoneType,
         contractorId: body.contractorId || null,
         supervisorStaffId: body.supervisorStaffId || null,
       },
     });
   }
 
-  async assignZone(actor: CleaningActor, zoneId: string, body: { contractorId?: string | null; supervisorStaffId?: string | null }) {
+  async assignZone(
+    actor: CleaningActor,
+    zoneId: string,
+    body: { contractorId?: string | null; supervisorStaffId?: string | null },
+  ) {
     requireManagerActor(actor);
-    const zone = await this.prisma.cleaningZone.findFirst({ where: { id: zoneId, tenantId: actor.tenantId } });
+    const zone = await this.prisma.cleaningZone.findFirst({
+      where: { id: zoneId, tenantId: actor.tenantId },
+    });
     if (!zone) throw new NotFoundException('zone not found');
-    assertInScope(actor, { buildingId: zone.buildingId, contractorId: body.contractorId ?? zone.contractorId });
+    assertInScope(actor, {
+      buildingId: zone.buildingId,
+      contractorId: body.contractorId ?? zone.contractorId,
+    });
     return this.prisma.cleaningZone.update({
       where: { id: zoneId },
       data: {
         contractorId: body.contractorId === undefined ? undefined : body.contractorId,
-        supervisorStaffId: body.supervisorStaffId === undefined ? undefined : body.supervisorStaffId,
+        supervisorStaffId:
+          body.supervisorStaffId === undefined ? undefined : body.supervisorStaffId,
       },
     });
   }

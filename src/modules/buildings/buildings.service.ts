@@ -426,7 +426,7 @@ export class BuildingsService {
   //   - BuildingSystem / BuildingVerticalTransport / ElevatorProfile
   //   - BuildingOccupantCompany / BuildingUnitOccupancy / BuildingContract
   //   - BuildingMandate / BuildingComplianceProfile / BuildingObligation
-  //   - Asset (and its CustomAttribute / Document / Media / SparePart rows)
+  //   - Asset (and its CustomAttribute / Document / Media / AssetSparePart rows)
   //   - PpmPlanItem / TaskInstance / PpmExecutionLog / PpmTemplate (per-bldg)
   //   - Incident / ServiceRequest / WorkOrder / Quote / PurchaseOrder /
   //     CompletionRecord / Budget / BudgetLine / Invoice
@@ -441,8 +441,9 @@ export class BuildingsService {
   //     (per-building rows; tenant-level blackouts where buildingId IS NULL stay)
   //   - Document / DocumentLink (per-building rows)
   //   - BuildingRoleAssignment (per-building grants — Users + Membership stay)
-  //   - ResidentRequest / Notification / Account / Entrance / Floor / Unit
-  //     (legacy parallel models also cascade)
+  //   - Notification / Account / Entrance / Floor / Unit
+  //     (legacy parallel models also cascade; ResidentRequest dropped in
+  //      INIT-010 Follow-up F)
   //
   // What survives:
   //   - User, Membership (tenant-level), Role, RolePermission, Certification,

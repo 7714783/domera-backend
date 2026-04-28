@@ -1,8 +1,18 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { PpmService } from './ppm.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { scanAndSendReminders } from './sla-reminder.worker';
 
 async function uid(auth: string | undefined, s: AuthService): Promise<string> {
@@ -18,12 +28,13 @@ export class PpmController {
     private readonly ppm: PpmService,
     private readonly auth: AuthService,
     private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   @Post('ppm/sla/scan-now')
   async slaScanNow(@Headers('authorization') ah?: string) {
     await uid(ah, this.auth); // auth required but result is tenant-agnostic administrative
-    return scanAndSendReminders(this.prisma as any);
+    return scanAndSendReminders(this.prisma as any, this.notifications);
   }
 
   @Get('buildings/:id/ppm/programs')
@@ -33,14 +44,17 @@ export class PpmController {
     @Headers('x-tenant-id') th?: string,
   ) {
     return this.ppm.listPrograms(resolveTenantId(th), id, {
-      includeAwaitingOnboarding: includeAwaitingOnboarding === '1' || includeAwaitingOnboarding === 'true',
+      includeAwaitingOnboarding:
+        includeAwaitingOnboarding === '1' || includeAwaitingOnboarding === 'true',
     });
   }
 
   @Post('buildings/:id/ppm/programs')
   async createProgram(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.ppm.createProgram(resolveTenantId(th), await uid(ah, this.auth), id, body);
   }
@@ -54,21 +68,34 @@ export class PpmController {
     @Headers('x-tenant-id') th?: string,
   ) {
     return this.ppm.listExecutions(resolveTenantId(th), id, {
-      stage: stage || undefined, scope: scope || undefined, limit: limit ? Number(limit) : undefined,
+      stage: stage || undefined,
+      scope: scope || undefined,
+      limit: limit ? Number(limit) : undefined,
     });
   }
 
   @Get('buildings/:id/ppm/calendar')
-  async calendar(@Param('id') id: string, @Query('days') days?: string, @Headers('x-tenant-id') th?: string) {
+  async calendar(
+    @Param('id') id: string,
+    @Query('days') days?: string,
+    @Headers('x-tenant-id') th?: string,
+  ) {
     return this.ppm.calendar(resolveTenantId(th), id, days ? Number(days) : 90);
   }
 
   @Post('ppm/plan-items/:planItemId/schedule')
   async schedule(
-    @Param('planItemId') planItemId: string, @Body() body: { targetDate?: string },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('planItemId') planItemId: string,
+    @Body() body: { targetDate?: string },
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
-    return this.ppm.scheduleExecution(resolveTenantId(th), await uid(ah, this.auth), planItemId, body?.targetDate);
+    return this.ppm.scheduleExecution(
+      resolveTenantId(th),
+      await uid(ah, this.auth),
+      planItemId,
+      body?.targetDate,
+    );
   }
 
   @Get('buildings/:id/ppm/wizard/catalog')
@@ -78,10 +105,17 @@ export class PpmController {
 
   @Post('buildings/:id/ppm/wizard/apply')
   async wizardApply(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
-    return this.ppm.wizardApply(resolveTenantId(th), await uid(ah, this.auth), id, body || { items: [] });
+    return this.ppm.wizardApply(
+      resolveTenantId(th),
+      await uid(ah, this.auth),
+      id,
+      body || { items: [] },
+    );
   }
 
   @Get('buildings/:id/ppm/plan-items')
@@ -96,8 +130,10 @@ export class PpmController {
   @Post('ppm/plan-items/:planItemId/baseline')
   async recordBaseline(
     @Param('planItemId') planItemId: string,
-    @Body() body: { lastPerformedAt: string; evidenceDocumentId?: string | null; notes?: string | null },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Body()
+    body: { lastPerformedAt: string; evidenceDocumentId?: string | null; notes?: string | null },
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.ppm.recordBaseline(resolveTenantId(th), await uid(ah, this.auth), planItemId, body);
   }
@@ -105,10 +141,25 @@ export class PpmController {
   @Post('buildings/:id/ppm/setup-baseline')
   async setupBaseline(
     @Param('id') id: string,
-    @Body() body: { items: Array<{ planItemId: string; lastPerformedAt?: string; evidenceDocumentId?: string | null; notes?: string | null; skip?: boolean }> },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Body()
+    body: {
+      items: Array<{
+        planItemId: string;
+        lastPerformedAt?: string;
+        evidenceDocumentId?: string | null;
+        notes?: string | null;
+        skip?: boolean;
+      }>;
+    },
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
-    return this.ppm.recordBaselineBulk(resolveTenantId(th), await uid(ah, this.auth), id, body || { items: [] });
+    return this.ppm.recordBaselineBulk(
+      resolveTenantId(th),
+      await uid(ah, this.auth),
+      id,
+      body || { items: [] },
+    );
   }
 
   @Get('ppm/executions/:id')
@@ -118,16 +169,20 @@ export class PpmController {
 
   @Post('ppm/executions/:id/request-quote')
   async requestQuote(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.ppm.requestQuote(resolveTenantId(th), await uid(ah, this.auth), id, body || {});
   }
 
   @Post('ppm/executions/:id/record-quote')
   async recordQuote(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.ppm.recordQuote(resolveTenantId(th), await uid(ah, this.auth), id, body || {});
   }
@@ -135,7 +190,8 @@ export class PpmController {
   @Post('ppm/executions/:id/submit-for-approval')
   async submit(
     @Param('id') id: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.ppm.submitForApproval(resolveTenantId(th), await uid(ah, this.auth), id);
   }
@@ -143,7 +199,8 @@ export class PpmController {
   @Post('ppm/executions/:id/mark-approved')
   async markApproved(
     @Param('id') id: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.ppm.markApproved(resolveTenantId(th), await uid(ah, this.auth), id);
   }
@@ -151,7 +208,8 @@ export class PpmController {
   @Post('ppm/executions/:id/place-order')
   async place(
     @Param('id') id: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.ppm.placeOrder(resolveTenantId(th), await uid(ah, this.auth), id);
   }
@@ -159,47 +217,62 @@ export class PpmController {
   @Post('ppm/executions/:id/mark-in-progress')
   async inProgress(
     @Param('id') id: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.ppm.markInProgress(resolveTenantId(th), await uid(ah, this.auth), id);
   }
 
   @Post('ppm/executions/:id/record-completion')
   async complete(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.ppm.recordCompletion(resolveTenantId(th), await uid(ah, this.auth), id, body || {});
   }
 
   @Post('ppm/executions/:id/review-completion')
   async reviewCompletion(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.ppm.reviewCompletion(resolveTenantId(th), await uid(ah, this.auth), id, body || {});
   }
 
   @Post('ppm/executions/:id/distribute-evidence')
   async distribute(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
-    return this.ppm.distributeEvidence(resolveTenantId(th), await uid(ah, this.auth), id, body || { recipients: [] });
+    return this.ppm.distributeEvidence(
+      resolveTenantId(th),
+      await uid(ah, this.auth),
+      id,
+      body || { recipients: [] },
+    );
   }
 
   @Post('ppm/executions/:id/archive')
   async archive(
     @Param('id') id: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.ppm.archive(resolveTenantId(th), await uid(ah, this.auth), id);
   }
 
   @Post('ppm/executions/:id/cancel')
   async cancel(
-    @Param('id') id: string, @Body() body: { reason?: string },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.ppm.cancel(resolveTenantId(th), await uid(ah, this.auth), id, body?.reason);
   }

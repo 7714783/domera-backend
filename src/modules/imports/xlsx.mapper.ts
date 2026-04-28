@@ -71,15 +71,15 @@ function classifyDomain(hebrew: string | null): string | null {
   if (!hebrew) return null;
   const h = hebrew.replace(/\s+/g, ' ').trim();
   const map: Record<string, string> = {
-    'אנרגיה': 'energy',
+    אנרגיה: 'energy',
     'בדיקות מהנדס': 'engineer_inspections',
     'גז / דלק': 'gas_fuel',
     'גילוי וכיבוי אש': 'fire_life_safety',
-    'חשמל': 'electrical',
+    חשמל: 'electrical',
     'מים ושפכים': 'water_plumbing',
-    'מעליות': 'vertical_transport',
+    מעליות: 'vertical_transport',
     'ציוד הרמה ומכלים בלחץ': 'lifting_pressure',
-    'שונות': 'misc_hse',
+    שונות: 'misc_hse',
   };
   return map[h] || null;
 }
@@ -92,7 +92,10 @@ function frequencyToRrule(freqMonths: number | null): string {
   return `FREQ=MONTHLY;INTERVAL=${m}`;
 }
 
-function parseApplicability(siteType: string | null, name: string): Array<{ attr: string; op: string; value: number | string }> {
+function parseApplicability(
+  siteType: string | null,
+  name: string,
+): Array<{ attr: string; op: string; value: number | string }> {
   const rules: Array<{ attr: string; op: string; value: number | string }> = [];
   if (siteType && /בניין בעל 10 קומות ויותר/.test(siteType)) {
     rules.push({ attr: 'building.floors_count', op: '>=', value: 10 });
@@ -111,7 +114,10 @@ function parseApplicability(siteType: string | null, name: string): Array<{ attr
   return rules;
 }
 
-function matchCert(performer: string | null, catalog: FileCatalog): { key: string | null; warn: string | null } {
+function matchCert(
+  performer: string | null,
+  catalog: FileCatalog,
+): { key: string | null; warn: string | null } {
   if (!performer) return { key: null, warn: null };
   const p = performer.replace(/\s+/g, ' ').trim();
   const rules: Array<[RegExp, string]> = [
@@ -137,7 +143,10 @@ function matchCert(performer: string | null, catalog: FileCatalog): { key: strin
   return { key: null, warn: `unmapped_certification: ${p}` };
 }
 
-function matchDocType(doc: string | null, catalog: FileCatalog): { key: string | null; warn: string | null } {
+function matchDocType(
+  doc: string | null,
+  catalog: FileCatalog,
+): { key: string | null; warn: string | null } {
   if (!doc) return { key: null, warn: null };
   const d = doc.replace(/\s+/g, ' ').trim();
   const fsNum = d.match(/טופס\s*(?:מספר\s*)?(\d+[אב]?)/);
@@ -160,7 +169,10 @@ function matchDocType(doc: string | null, catalog: FileCatalog): { key: string |
   return { key: null, warn: `unmapped_document_type: ${d}` };
 }
 
-export function parseRegulator(ws: XLSX.WorkSheet, catalog: FileCatalog): SheetPreview<RegulatorMapped> {
+export function parseRegulator(
+  ws: XLSX.WorkSheet,
+  catalog: FileCatalog,
+): SheetPreview<RegulatorMapped> {
   const rows = toRows(ws);
   const out: SheetPreview<RegulatorMapped>['rows'] = [];
   let n = 0;
@@ -178,7 +190,8 @@ export function parseRegulator(ws: XLSX.WorkSheet, catalog: FileCatalog): SheetP
     const standard = textOrNull(pick(raw, 'תקן 1525'));
     const internal = textOrNull(pick(raw, 'דרישה פנימית ', 'דרישה פנימית'));
     const freqRaw = pick(raw, 'תדירות (חודשים)');
-    const freqMonths = typeof freqRaw === 'number' ? freqRaw : freqRaw ? Number(String(freqRaw)) : null;
+    const freqMonths =
+      typeof freqRaw === 'number' ? freqRaw : freqRaw ? Number(String(freqRaw)) : null;
 
     if (!typeRaw) {
       out.push({ rowNumber: n, raw, mapped: null, errors: [], warnings: ['empty_row'] });
@@ -186,9 +199,12 @@ export function parseRegulator(ws: XLSX.WorkSheet, catalog: FileCatalog): SheetP
     }
 
     const bases: Array<{ type: string; reference: string | null }> = [];
-    if (statutory && statutory !== 'NA') bases.push({ type: 'statutory', reference: statutory === 'X' ? null : statutory });
-    if (standard && standard !== 'NA') bases.push({ type: 'standard', reference: standard === 'X' ? 'SI 1525' : standard });
-    if (internal && internal !== 'NA') bases.push({ type: 'internal', reference: internal === 'X' ? null : internal });
+    if (statutory && statutory !== 'NA')
+      bases.push({ type: 'statutory', reference: statutory === 'X' ? null : statutory });
+    if (standard && standard !== 'NA')
+      bases.push({ type: 'standard', reference: standard === 'X' ? 'SI 1525' : standard });
+    if (internal && internal !== 'NA')
+      bases.push({ type: 'internal', reference: internal === 'X' ? null : internal });
     if (bases.length === 0) bases.push({ type: 'recommended_best_practice', reference: null });
 
     const certMatch = matchCert(performer, catalog);
@@ -204,7 +220,9 @@ export function parseRegulator(ws: XLSX.WorkSheet, catalog: FileCatalog): SheetP
       authorizedPerformer: performer,
       requiredDocumentation: doc,
       frequencyMonths: Number.isFinite(freqMonths as number) ? (freqMonths as number) : null,
-      recurrenceRule: frequencyToRrule(Number.isFinite(freqMonths as number) ? (freqMonths as number) : null),
+      recurrenceRule: frequencyToRrule(
+        Number.isFinite(freqMonths as number) ? (freqMonths as number) : null,
+      ),
       bases,
       applicability,
       requiredCertificationKey: certMatch.key,
@@ -227,7 +245,20 @@ export function parsePpm(ws: XLSX.WorkSheet): SheetPreview<PpmMapped> {
   const rows = toRows(ws);
   const out: SheetPreview<PpmMapped>['rows'] = [];
   let n = 0;
-  const monthKeys = ['Jan ', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthKeys = [
+    'Jan ',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
   const freqMap: Record<string, string> = {
     monthly: 'FREQ=MONTHLY;INTERVAL=1',
     annual: 'FREQ=YEARLY;INTERVAL=1',
@@ -245,18 +276,28 @@ export function parsePpm(ws: XLSX.WorkSheet): SheetPreview<PpmMapped> {
     n += 1;
     const site = textOrNull(pick(raw, 'אתר / Site'));
     const kind = textOrNull(pick(raw, 'סוג / Type'));
-    const desc = textOrNull(pick(raw, 'תיאור הבדיקה / המערכת\nInspection Description / Systems', 'תיאור טכני / מערכת\nTechnical Description / Systems'));
+    const desc = textOrNull(
+      pick(
+        raw,
+        'תיאור הבדיקה / המערכת\nInspection Description / Systems',
+        'תיאור טכני / מערכת\nTechnical Description / Systems',
+      ),
+    );
     const freq = textOrNull(pick(raw, 'תדירות\nFreq.'));
     const statutory = textOrNull(pick(raw, 'סטטוטורי Statutory'));
     if (!desc) {
       out.push({ rowNumber: n, raw, mapped: null, errors: [], warnings: ['empty_row'] });
       continue;
     }
-    const months = monthKeys.filter((k) => {
-      const v = pick(raw, k);
-      return v !== null && v !== undefined && String(v).trim().length > 0;
-    }).map((k) => k.trim());
-    const rrule = freq ? (freqMap[freq.toLowerCase()] || 'FREQ=YEARLY;INTERVAL=1') : 'FREQ=YEARLY;INTERVAL=1';
+    const months = monthKeys
+      .filter((k) => {
+        const v = pick(raw, k);
+        return v !== null && v !== undefined && String(v).trim().length > 0;
+      })
+      .map((k) => k.trim());
+    const rrule = freq
+      ? freqMap[freq.toLowerCase()] || 'FREQ=YEARLY;INTERVAL=1'
+      : 'FREQ=YEARLY;INTERVAL=1';
     const mapped: PpmMapped = {
       site,
       templateName: desc,
@@ -317,12 +358,24 @@ export function parseStPm(ws: XLSX.WorkSheet): SheetPreview<StPmMapped> {
       const last = excelDateToIso(pick(raw, s.last));
       const next = excelDateToIso(pick(raw, s.next));
       if (last || next) {
-        mapped = { site: s.site, taskName: typeRaw, lastCompletedAt: last, nextDueAt: next, domain: classifyDomain(domainRaw) };
+        mapped = {
+          site: s.site,
+          taskName: typeRaw,
+          lastCompletedAt: last,
+          nextDueAt: next,
+          domain: classifyDomain(domainRaw),
+        };
         break;
       }
     }
     if (!mapped) {
-      mapped = { site: 'NTN 01', taskName: typeRaw, lastCompletedAt: null, nextDueAt: null, domain: classifyDomain(domainRaw) };
+      mapped = {
+        site: 'NTN 01',
+        taskName: typeRaw,
+        lastCompletedAt: null,
+        nextDueAt: null,
+        domain: classifyDomain(domainRaw),
+      };
     }
     out.push({ rowNumber: n, raw, mapped, errors: [], warnings: [] });
   }

@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { ProjectsService } from './projects.service';
@@ -34,7 +44,8 @@ export class ProjectsController {
   @Post()
   async create(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.createProject(resolveTenantId(th), await uid(ah, this.auth), body);
   }
@@ -43,7 +54,8 @@ export class ProjectsController {
   async classify(
     @Param('id') id: string,
     @Body() body: { classification: string; reason?: string },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.classify(resolveTenantId(th), await uid(ah, this.auth), id, body);
   }
@@ -52,7 +64,8 @@ export class ProjectsController {
   async advanceStage(
     @Param('id') id: string,
     @Body() body: { stage: string },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.advanceStage(resolveTenantId(th), await uid(ah, this.auth), id, body.stage);
   }
@@ -64,7 +77,11 @@ export class ProjectsController {
   }
 
   @Patch('stages/:stageId')
-  updateStage(@Param('stageId') stageId: string, @Body() body: any, @Headers('x-tenant-id') th?: string) {
+  updateStage(
+    @Param('stageId') stageId: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+  ) {
     return this.svc.updateStage(resolveTenantId(th), stageId, body);
   }
 
@@ -78,16 +95,25 @@ export class ProjectsController {
   async convertLine(
     @Param('lineId') lineId: string,
     @Body() body: { to: string; reason?: string },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
-    return this.svc.convertLineClassification(resolveTenantId(th), await uid(ah, this.auth), lineId, body.to, body.reason);
+    return this.svc.convertLineClassification(
+      resolveTenantId(th),
+      await uid(ah, this.auth),
+      lineId,
+      body.to,
+      body.reason,
+    );
   }
 
   // Change orders
   @Post(':id/change-orders')
   async createCO(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.createChangeOrder(resolveTenantId(th), await uid(ah, this.auth), id, body);
   }
@@ -96,9 +122,15 @@ export class ProjectsController {
   async decideCO(
     @Param('coId') coId: string,
     @Body() body: { decision: 'approved' | 'rejected' },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
-    return this.svc.decideChangeOrder(resolveTenantId(th), await uid(ah, this.auth), coId, body.decision);
+    return this.svc.decideChangeOrder(
+      resolveTenantId(th),
+      await uid(ah, this.auth),
+      coId,
+      body.decision,
+    );
   }
 
   // Acceptance pack
@@ -110,7 +142,8 @@ export class ProjectsController {
   @Post(':id/acceptance-pack/submit')
   async submitPack(
     @Param('id') id: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.submitAcceptancePack(resolveTenantId(th), await uid(ah, this.auth), id);
   }
@@ -119,17 +152,29 @@ export class ProjectsController {
   async signoffPack(
     @Param('id') id: string,
     @Body() body: { signoff: 'contractor' | 'manager' | 'chief_engineer' | 'owner' },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
-    return this.svc.signoffAcceptancePack(resolveTenantId(th), await uid(ah, this.auth), id, body.signoff);
+    return this.svc.signoffAcceptancePack(
+      resolveTenantId(th),
+      await uid(ah, this.auth),
+      id,
+      body.signoff,
+    );
   }
 
   @Post(':id/acceptance-pack/reject')
   async rejectPack(
     @Param('id') id: string,
     @Body() body: { reason: string },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
-    return this.svc.rejectAcceptancePack(resolveTenantId(th), await uid(ah, this.auth), id, body.reason);
+    return this.svc.rejectAcceptancePack(
+      resolveTenantId(th),
+      await uid(ah, this.auth),
+      id,
+      body.reason,
+    );
   }
 }

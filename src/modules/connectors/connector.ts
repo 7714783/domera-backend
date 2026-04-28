@@ -16,7 +16,10 @@ export interface Connector<InShape = any, OutShape = any> {
   readonly eventTypes: string[];
 
   /** Outbound: serialize a batch of domain events into the target format. */
-  encode?(ctx: ConnectorContext, events: InShape[]): Promise<{ filename: string; mime: string; body: string }>;
+  encode?(
+    ctx: ConnectorContext,
+    events: InShape[],
+  ): Promise<{ filename: string; mime: string; body: string }>;
 
   /** Inbound: parse a payload from the external system into domain-object creates. */
   decode?(ctx: ConnectorContext, raw: string): Promise<OutShape[]>;
@@ -53,25 +56,35 @@ export const accountingCsvConnector: Connector<InvoiceRow, never> = {
   eventTypes: ['domera.vendor_invoice.approved', 'domera.vendor_invoice.matched'],
   async encode(_ctx, rows) {
     const header = [
-      'invoice_number', 'vendor', 'invoice_date', 'po_number', 'currency',
-      'amount_net', 'amount_tax', 'amount_gross', 'match_status', 'approved_at',
+      'invoice_number',
+      'vendor',
+      'invoice_date',
+      'po_number',
+      'currency',
+      'amount_net',
+      'amount_tax',
+      'amount_gross',
+      'match_status',
+      'approved_at',
     ];
     const lines = [header.join(',')];
     for (const r of rows) {
       const net = r.taxAmount != null ? r.amount - r.taxAmount : r.amount;
       const tax = r.taxAmount ?? 0;
-      lines.push([
-        csvEscape(r.invoiceNumber),
-        csvEscape(r.vendorName),
-        csvEscape(r.invoiceDate.slice(0, 10)),
-        csvEscape(r.poNumber),
-        csvEscape(r.currency),
-        csvEscape(net.toFixed(2)),
-        csvEscape(tax.toFixed(2)),
-        csvEscape(r.amount.toFixed(2)),
-        csvEscape(r.matchStatus),
-        csvEscape(r.approvedAt ? r.approvedAt.slice(0, 10) : null),
-      ].join(','));
+      lines.push(
+        [
+          csvEscape(r.invoiceNumber),
+          csvEscape(r.vendorName),
+          csvEscape(r.invoiceDate.slice(0, 10)),
+          csvEscape(r.poNumber),
+          csvEscape(r.currency),
+          csvEscape(net.toFixed(2)),
+          csvEscape(tax.toFixed(2)),
+          csvEscape(r.amount.toFixed(2)),
+          csvEscape(r.matchStatus),
+          csvEscape(r.approvedAt ? r.approvedAt.slice(0, 10) : null),
+        ].join(','),
+      );
     }
     return {
       filename: `invoices-${new Date().toISOString().slice(0, 10)}.csv`,
@@ -119,10 +132,7 @@ export const vendorMasterCsvConnector: Connector<never, VendorImportRow> = {
   },
 };
 
-export const registeredConnectors: Connector[] = [
-  accountingCsvConnector,
-  vendorMasterCsvConnector,
-];
+export const registeredConnectors: Connector[] = [accountingCsvConnector, vendorMasterCsvConnector];
 
 // ─── Bridge connectors for BACnet / OPC UA / MQTT ───────────────────
 // Production Domera never speaks BACnet/OPC UA/MQTT directly — a separate
@@ -186,7 +196,11 @@ function buildBridgeDecoder(
     eventTypes: ['domera.sensor.reading', 'domera.incident.opened'],
     async decode(_ctx, raw) {
       let env: BridgeIngestEnvelope;
-      try { env = JSON.parse(raw); } catch { throw new Error(`${id}: invalid JSON envelope`); }
+      try {
+        env = JSON.parse(raw);
+      } catch {
+        throw new Error(`${id}: invalid JSON envelope`);
+      }
       if (!env || !Array.isArray(env.points)) throw new Error(`${id}: envelope missing points[]`);
       const out: DecodedBridgeRow[] = [];
       for (const p of env.points) {

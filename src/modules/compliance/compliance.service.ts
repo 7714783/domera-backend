@@ -77,7 +77,9 @@ export class ComplianceService {
     });
 
     const totalPlans = planItems.length || 1;
-    const compliantPct = Math.round((planItems.filter((p) => p.nextDueAt.getTime() > in30.getTime()).length / totalPlans) * 100);
+    const compliantPct = Math.round(
+      (planItems.filter((p) => p.nextDueAt.getTime() > in30.getTime()).length / totalPlans) * 100,
+    );
     const overduePct = Math.round((overduePlans.length / totalPlans) * 100);
     const warningPct = Math.round((upcomingPlans.length / totalPlans) * 100);
     const pendingPct = Math.max(0, 100 - compliantPct - warningPct - overduePct);
@@ -102,7 +104,10 @@ export class ComplianceService {
       .sort((a, b) => a.nextDueAt.getTime() - b.nextDueAt.getTime())
       .slice(0, 12)
       .map((p) => {
-        const days = Math.max(1, Math.floor((now.getTime() - p.nextDueAt.getTime()) / (24 * 60 * 60 * 1000)));
+        const days = Math.max(
+          1,
+          Math.floor((now.getTime() - p.nextDueAt.getTime()) / (24 * 60 * 60 * 1000)),
+        );
         const needsEvidence = !!(p as any).template?.evidenceDocTypeKey;
         return {
           id: p.id,
@@ -123,7 +128,8 @@ export class ComplianceService {
       0,
       100 - overduePlans.length * 6 - blockedTasks.length * 4 - missingEvidence.length * 3,
     );
-    const riskScore = scoreValue >= 90 ? 'A' : scoreValue >= 75 ? 'B+' : scoreValue >= 60 ? 'C' : 'D';
+    const riskScore =
+      scoreValue >= 90 ? 'A' : scoreValue >= 75 ? 'B+' : scoreValue >= 60 ? 'C' : 'D';
 
     return {
       summary: {

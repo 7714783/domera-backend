@@ -11,14 +11,21 @@ export class ApplicabilityService {
     const v = ctx[predicate.attr];
     if (v === null || v === undefined) return false;
     switch (predicate.op) {
-      case '>': return Number(v) > Number(predicate.value);
-      case '>=': return Number(v) >= Number(predicate.value);
-      case '<': return Number(v) < Number(predicate.value);
-      case '<=': return Number(v) <= Number(predicate.value);
+      case '>':
+        return Number(v) > Number(predicate.value);
+      case '>=':
+        return Number(v) >= Number(predicate.value);
+      case '<':
+        return Number(v) < Number(predicate.value);
+      case '<=':
+        return Number(v) <= Number(predicate.value);
       case '=':
-      case '==': return String(v) === String(predicate.value);
-      case '!=': return String(v) !== String(predicate.value);
-      default: return false;
+      case '==':
+        return String(v) === String(predicate.value);
+      case '!=':
+        return String(v) !== String(predicate.value);
+      default:
+        return false;
     }
   }
 
@@ -41,7 +48,10 @@ export class ApplicabilityService {
     return ctx;
   }
 
-  async applyTemplatesToBuilding(tenantId: string, buildingId: string): Promise<{ applied: number; skipped: number }> {
+  async applyTemplatesToBuilding(
+    tenantId: string,
+    buildingId: string,
+  ): Promise<{ applied: number; skipped: number }> {
     const templates = await this.prisma.obligationTemplate.findMany({
       where: { tenantId },
       include: { applicabilityRules: true },
@@ -52,8 +62,12 @@ export class ApplicabilityService {
     let skipped = 0;
     for (const tpl of templates) {
       const rules = tpl.applicabilityRules;
-      const allPass = rules.length === 0 || rules.every((r) => this.evaluate(r.predicate as any, ctx));
-      if (!allPass) { skipped += 1; continue; }
+      const allPass =
+        rules.length === 0 || rules.every((r) => this.evaluate(r.predicate as any, ctx));
+      if (!allPass) {
+        skipped += 1;
+        continue;
+      }
 
       const seedKey = `bo:auto:${tpl.id}:${buildingId}`;
       await this.prisma.buildingObligation.upsert({

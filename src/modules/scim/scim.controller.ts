@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Put, Query, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { ScimService } from './scim.service';
@@ -26,7 +38,8 @@ export class ScimController {
   @Post('tokens')
   async createToken(
     @Body() body: { label: string },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.createToken(resolveTenantId(th), await uid(ah, this.auth), body.label);
   }
@@ -62,7 +75,8 @@ export class ScimController {
     const tenantId = resolveTenantId(th);
     await this.svc.authenticate(tenantId, ah);
     return this.svc.listUsers(
-      tenantId, filter,
+      tenantId,
+      filter,
       start ? Number(start) : 1,
       count ? Number(count) : 100,
     );
@@ -71,7 +85,8 @@ export class ScimController {
   @Get('v2/Users/:id')
   async getUser(
     @Param('id') id: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     await this.svc.authenticate(tenantId, ah);
@@ -81,7 +96,8 @@ export class ScimController {
   @Post('v2/Users')
   async createUser(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     await this.svc.authenticate(tenantId, ah);
@@ -90,8 +106,10 @@ export class ScimController {
 
   @Patch('v2/Users/:id')
   async patchUser(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     await this.svc.authenticate(tenantId, ah);
@@ -100,8 +118,10 @@ export class ScimController {
 
   @Put('v2/Users/:id')
   async replaceUser(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     await this.svc.authenticate(tenantId, ah);
@@ -111,7 +131,8 @@ export class ScimController {
   @Delete('v2/Users/:id')
   async deleteUser(
     @Param('id') id: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     await this.svc.authenticate(tenantId, ah);

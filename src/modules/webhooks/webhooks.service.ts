@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -23,14 +28,24 @@ export class WebhooksService {
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
       select: {
-        id: true, url: true, eventTypes: true, isActive: true,
-        createdAt: true, updatedAt: true, createdByUserId: true,
+        id: true,
+        url: true,
+        eventTypes: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+        createdByUserId: true,
       },
     });
   }
 
-  async createSubscription(tenantId: string, actorUserId: string, body: { url: string; eventTypes?: string[] }) {
-    if (!body.url || !/^https?:\/\//i.test(body.url)) throw new BadRequestException('valid url required');
+  async createSubscription(
+    tenantId: string,
+    actorUserId: string,
+    body: { url: string; eventTypes?: string[] },
+  ) {
+    if (!body.url || !/^https?:\/\//i.test(body.url))
+      throw new BadRequestException('valid url required');
     const secret = randomBytes(32).toString('hex');
     const sub = await this.prisma.webhookSubscription.create({
       data: {
@@ -57,15 +72,26 @@ export class WebhooksService {
       where: { tenantId },
       orderBy: { channel: 'asc' },
       select: {
-        id: true, channel: true, signatureHeader: true, signatureAlgo: true,
-        isActive: true, createdAt: true, createdByUserId: true,
+        id: true,
+        channel: true,
+        signatureHeader: true,
+        signatureAlgo: true,
+        isActive: true,
+        createdAt: true,
+        createdByUserId: true,
       },
     });
   }
 
-  async registerInbound(tenantId: string, actorUserId: string, body: {
-    channel: string; signatureHeader?: string; signatureAlgo?: string;
-  }) {
+  async registerInbound(
+    tenantId: string,
+    actorUserId: string,
+    body: {
+      channel: string;
+      signatureHeader?: string;
+      signatureAlgo?: string;
+    },
+  ) {
     if (!body.channel) throw new BadRequestException('channel required');
     const secret = randomBytes(32).toString('hex');
     const src = await this.prisma.inboundWebhookSource.create({
@@ -87,10 +113,14 @@ export class WebhooksService {
    * compared against HMAC(secret, rawBody).
    */
   async ingestInbound(
-    tenantId: string, channel: string,
-    headers: Record<string, string>, rawBody: string,
+    tenantId: string,
+    channel: string,
+    headers: Record<string, string>,
+    rawBody: string,
   ) {
-    const src = await this.prisma.inboundWebhookSource.findFirst({ where: { tenantId, channel, isActive: true } });
+    const src = await this.prisma.inboundWebhookSource.findFirst({
+      where: { tenantId, channel, isActive: true },
+    });
     if (!src) throw new NotFoundException(`no active inbound source for channel ${channel}`);
 
     const provided = headers[src.signatureHeader.toLowerCase()] || '';
@@ -118,10 +148,16 @@ export class WebhooksService {
     const where: any = { tenantId };
     if (params.channel) where.channel = params.channel;
     return this.prisma.inboundWebhookEvent.findMany({
-      where, take, orderBy: { receivedAt: 'desc' },
+      where,
+      take,
+      orderBy: { receivedAt: 'desc' },
       select: {
-        id: true, channel: true, receivedAt: true, signatureOk: true,
-        action: true, notes: true,
+        id: true,
+        channel: true,
+        receivedAt: true,
+        signatureOk: true,
+        action: true,
+        notes: true,
       },
     });
   }

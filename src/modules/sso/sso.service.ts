@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
@@ -12,7 +17,9 @@ function decodeJwtPayload(jwt: string): any {
   const parts = jwt.split('.');
   if (parts.length !== 3) throw new Error('invalid jwt');
   const pad = (s: string) => s + '==='.slice((s.length + 3) % 4);
-  const json = Buffer.from(pad(parts[1]).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+  const json = Buffer.from(pad(parts[1]).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString(
+    'utf8',
+  );
   return JSON.parse(json);
 }
 
@@ -30,36 +37,65 @@ export class SsoService {
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
       select: {
-        id: true, key: true, displayName: true, protocol: true,
-        issuerUrl: true, clientId: true, scopes: true, emailClaim: true,
-        nameClaim: true, groupClaim: true, isActive: true, createdAt: true,
+        id: true,
+        key: true,
+        displayName: true,
+        protocol: true,
+        issuerUrl: true,
+        clientId: true,
+        scopes: true,
+        emailClaim: true,
+        nameClaim: true,
+        groupClaim: true,
+        isActive: true,
+        createdAt: true,
       },
     });
   }
 
-  async upsertProvider(tenantId: string, actorUserId: string, body: {
-    key: string; displayName: string; protocol?: string;
-    issuerUrl?: string; clientId?: string; clientSecret?: string;
-    scopes?: string[]; authorizationEndpoint?: string; tokenEndpoint?: string;
-    userinfoEndpoint?: string; jwksUri?: string;
-    samlMetadataUrl?: string; samlEntityId?: string;
-    emailClaim?: string; nameClaim?: string; groupClaim?: string;
-    isActive?: boolean;
-  }) {
-    if (!body.key || !body.displayName) throw new BadRequestException('key and displayName required');
+  async upsertProvider(
+    tenantId: string,
+    actorUserId: string,
+    body: {
+      key: string;
+      displayName: string;
+      protocol?: string;
+      issuerUrl?: string;
+      clientId?: string;
+      clientSecret?: string;
+      scopes?: string[];
+      authorizationEndpoint?: string;
+      tokenEndpoint?: string;
+      userinfoEndpoint?: string;
+      jwksUri?: string;
+      samlMetadataUrl?: string;
+      samlEntityId?: string;
+      emailClaim?: string;
+      nameClaim?: string;
+      groupClaim?: string;
+      isActive?: boolean;
+    },
+  ) {
+    if (!body.key || !body.displayName)
+      throw new BadRequestException('key and displayName required');
     const protocol = body.protocol || 'oidc';
-    if (!['oidc', 'saml'].includes(protocol)) throw new BadRequestException('protocol must be oidc|saml');
+    if (!['oidc', 'saml'].includes(protocol))
+      throw new BadRequestException('protocol must be oidc|saml');
     if (protocol === 'oidc' && (!body.issuerUrl || !body.clientId || !body.clientSecret)) {
       throw new BadRequestException('oidc requires issuerUrl, clientId, clientSecret');
     }
     const row = await this.prisma.identityProvider.upsert({
       where: { tenantId_key: { tenantId, key: body.key } },
       create: {
-        tenantId, key: body.key, displayName: body.displayName, protocol,
+        tenantId,
+        key: body.key,
+        displayName: body.displayName,
+        protocol,
         issuerUrl: body.issuerUrl || null,
         clientId: body.clientId || null,
         clientSecret: body.clientSecret || null,
-        scopes: body.scopes && body.scopes.length > 0 ? body.scopes : ['openid', 'email', 'profile'],
+        scopes:
+          body.scopes && body.scopes.length > 0 ? body.scopes : ['openid', 'email', 'profile'],
         authorizationEndpoint: body.authorizationEndpoint || null,
         tokenEndpoint: body.tokenEndpoint || null,
         userinfoEndpoint: body.userinfoEndpoint || null,
@@ -89,15 +125,26 @@ export class SsoService {
       },
     });
     await this.audit.write({
-      tenantId, actor: actorUserId, role: 'workspace_admin',
-      action: 'sso.provider.upserted', entity: row.id, entityType: 'identity_provider',
-      building: '-', ip: '-', sensitive: true,
+      tenantId,
+      actor: actorUserId,
+      role: 'workspace_admin',
+      action: 'sso.provider.upserted',
+      entity: row.id,
+      entityType: 'identity_provider',
+      building: '-',
+      ip: '-',
+      sensitive: true,
     });
     return { ...row, clientSecret: undefined };
   }
 
   // ── OIDC flow: /authorize → /callback ───────────────────
-  async buildAuthorizeUrl(tenantId: string, providerKey: string, redirectTo: string, frontendBaseUrl: string) {
+  async buildAuthorizeUrl(
+    tenantId: string,
+    providerKey: string,
+    redirectTo: string,
+    frontendBaseUrl: string,
+  ) {
     const provider = await this.prisma.identityProvider.findFirst({
       where: { tenantId, key: providerKey, isActive: true, protocol: 'oidc' },
     });
@@ -146,7 +193,9 @@ export class SsoService {
     }
     if (login.tenantId !== tenantId) throw new UnauthorizedException('tenant mismatch');
 
-    const provider = await this.prisma.identityProvider.findUnique({ where: { id: login.providerId } });
+    const provider = await this.prisma.identityProvider.findUnique({
+      where: { id: login.providerId },
+    });
     if (!provider || !provider.tokenEndpoint || !provider.clientId || !provider.clientSecret) {
       throw new BadRequestException('provider mis-configured for token exchange');
     }
@@ -154,7 +203,7 @@ export class SsoService {
     // Exchange code for tokens
     const tokenRes = await fetch(provider.tokenEndpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code,
@@ -166,7 +215,9 @@ export class SsoService {
     });
     if (!tokenRes.ok) {
       const body = await tokenRes.text();
-      throw new UnauthorizedException(`token endpoint error: ${tokenRes.status} ${body.slice(0, 200)}`);
+      throw new UnauthorizedException(
+        `token endpoint error: ${tokenRes.status} ${body.slice(0, 200)}`,
+      );
     }
     const tokens: any = await tokenRes.json();
     const idToken = tokens.id_token;
@@ -180,7 +231,9 @@ export class SsoService {
     // Enrich with /userinfo when provider exposes it
     let userinfo: any = null;
     if (provider.userinfoEndpoint && accessToken) {
-      const ui = await fetch(provider.userinfoEndpoint, { headers: { Authorization: `Bearer ${accessToken}` } });
+      const ui = await fetch(provider.userinfoEndpoint, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
       if (ui.ok) userinfo = await ui.json();
     }
 
@@ -208,15 +261,23 @@ export class SsoService {
       user = await this.prisma.user.upsert({
         where: { emailNormalized: email },
         create: {
-          email, emailNormalized: email,
-          displayName, status: 'active', lastLoginAt: new Date(),
+          email,
+          emailNormalized: email,
+          displayName,
+          status: 'active',
+          lastLoginAt: new Date(),
         },
         update: { lastLoginAt: new Date() },
       });
       await this.prisma.federatedIdentity.create({
         data: {
-          userId: user.id, providerId: provider.id, subject,
-          email, displayName, rawClaims: merged as any, lastLoginAt: new Date(),
+          userId: user.id,
+          providerId: provider.id,
+          subject,
+          email,
+          displayName,
+          rawClaims: merged as any,
+          lastLoginAt: new Date(),
         },
       });
       // Ensure the user has a baseline membership in this tenant
@@ -228,13 +289,22 @@ export class SsoService {
       }
     }
 
-    const issued = await this.auth.issueSession(user.id, { source: 'sso', providerKey: provider.key });
+    const issued = await this.auth.issueSession(user.id, {
+      source: 'sso',
+      providerKey: provider.key,
+    });
 
     await this.prisma.oidcLoginState.delete({ where: { id: login.id } });
     await this.audit.write({
-      tenantId, actor: user.id, role: 'sso',
-      action: `sso.login.${provider.key}`, entity: user.id, entityType: 'user',
-      building: '-', ip: '-', sensitive: true,
+      tenantId,
+      actor: user.id,
+      role: 'sso',
+      action: `sso.login.${provider.key}`,
+      entity: user.id,
+      entityType: 'user',
+      building: '-',
+      ip: '-',
+      sensitive: true,
     });
 
     return {

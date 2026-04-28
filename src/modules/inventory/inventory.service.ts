@@ -2,7 +2,14 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../../prisma/prisma.service';
 
 type MovementType = 'receipt' | 'issue' | 'transfer' | 'adjustment' | 'return' | 'write_off';
-const VALID_TYPES: MovementType[] = ['receipt', 'issue', 'transfer', 'adjustment', 'return', 'write_off'];
+const VALID_TYPES: MovementType[] = [
+  'receipt',
+  'issue',
+  'transfer',
+  'adjustment',
+  'return',
+  'write_off',
+];
 
 @Injectable()
 export class InventoryService {
@@ -18,14 +25,26 @@ export class InventoryService {
 
   async upsertItem(
     tenantId: string,
-    body: { sku: string; name: string; category?: string; uom?: string; alternates?: string[]; minLevel?: number; maxLevel?: number; reorderLevel?: number; description?: string; isActive?: boolean },
+    body: {
+      sku: string;
+      name: string;
+      category?: string;
+      uom?: string;
+      alternates?: string[];
+      minLevel?: number;
+      maxLevel?: number;
+      reorderLevel?: number;
+      description?: string;
+      isActive?: boolean;
+    },
   ) {
     if (!body.sku || !body.name) throw new BadRequestException('sku + name required');
     return this.prisma.inventoryItem.upsert({
       where: { tenantId_sku: { tenantId, sku: body.sku } },
       create: {
         tenantId,
-        sku: body.sku, name: body.name,
+        sku: body.sku,
+        name: body.name,
         category: body.category || null,
         uom: body.uom || 'piece',
         alternates: body.alternates || [],
@@ -66,7 +85,8 @@ export class InventoryService {
       where: { tenantId_code: { tenantId, code: body.code } },
       create: {
         tenantId,
-        code: body.code, name: body.name,
+        code: body.code,
+        name: body.name,
         buildingId: body.buildingId || null,
         kind: body.kind || 'storeroom',
         isActive: body.isActive ?? true,
@@ -85,7 +105,13 @@ export class InventoryService {
   async balance(tenantId: string, filter?: { itemId?: string; locationId?: string }) {
     const movements = await this.prisma.stockMovement.findMany({
       where: { tenantId, itemId: filter?.itemId || undefined },
-      select: { itemId: true, fromLocationId: true, toLocationId: true, quantity: true, movementType: true },
+      select: {
+        itemId: true,
+        fromLocationId: true,
+        toLocationId: true,
+        quantity: true,
+        movementType: true,
+      },
     });
     const map = new Map<string, { itemId: string; locationId: string; qty: number }>();
     const add = (itemId: string, locationId: string | null, delta: number) => {
@@ -97,7 +123,11 @@ export class InventoryService {
       map.set(key, cur);
     };
     for (const m of movements) {
-      if (m.movementType === 'receipt' || m.movementType === 'return' || m.movementType === 'adjustment') {
+      if (
+        m.movementType === 'receipt' ||
+        m.movementType === 'return' ||
+        m.movementType === 'adjustment'
+      ) {
         add(m.itemId, m.toLocationId, m.quantity);
       } else if (m.movementType === 'issue' || m.movementType === 'write_off') {
         add(m.itemId, m.fromLocationId, -m.quantity);
@@ -120,7 +150,10 @@ export class InventoryService {
   }
 
   // ── Movements ──────────────────────────────────────────
-  async listMovements(tenantId: string, filter?: { itemId?: string; workOrderId?: string; limit?: number }) {
+  async listMovements(
+    tenantId: string,
+    filter?: { itemId?: string; workOrderId?: string; limit?: number },
+  ) {
     return this.prisma.stockMovement.findMany({
       where: {
         tenantId,
@@ -149,16 +182,24 @@ export class InventoryService {
       occurredAt?: string;
     },
   ) {
-    if (!body.itemSku || !body.movementType || !body.quantity) throw new BadRequestException('itemSku, movementType, quantity required');
-    if (!VALID_TYPES.includes(body.movementType)) throw new BadRequestException(`movementType must be one of ${VALID_TYPES.join('|')}`);
+    if (!body.itemSku || !body.movementType || !body.quantity)
+      throw new BadRequestException('itemSku, movementType, quantity required');
+    if (!VALID_TYPES.includes(body.movementType))
+      throw new BadRequestException(`movementType must be one of ${VALID_TYPES.join('|')}`);
     if (body.quantity <= 0) throw new BadRequestException('quantity must be > 0');
 
-    const item = await this.prisma.inventoryItem.findFirst({ where: { tenantId, sku: body.itemSku } });
+    const item = await this.prisma.inventoryItem.findFirst({
+      where: { tenantId, sku: body.itemSku },
+    });
     if (!item) throw new NotFoundException(`item sku ${body.itemSku} not found`);
 
     const [fromLoc, toLoc] = await Promise.all([
-      body.fromLocationCode ? this.prisma.stockLocation.findFirst({ where: { tenantId, code: body.fromLocationCode } }) : null,
-      body.toLocationCode ? this.prisma.stockLocation.findFirst({ where: { tenantId, code: body.toLocationCode } }) : null,
+      body.fromLocationCode
+        ? this.prisma.stockLocation.findFirst({ where: { tenantId, code: body.fromLocationCode } })
+        : null,
+      body.toLocationCode
+        ? this.prisma.stockLocation.findFirst({ where: { tenantId, code: body.toLocationCode } })
+        : null,
     ]);
 
     // Movement-specific validation
@@ -170,11 +211,14 @@ export class InventoryService {
         break;
       case 'issue':
       case 'write_off':
-        if (!fromLoc) throw new BadRequestException(`${body.movementType} requires fromLocationCode`);
+        if (!fromLoc)
+          throw new BadRequestException(`${body.movementType} requires fromLocationCode`);
         break;
       case 'transfer':
-        if (!fromLoc || !toLoc) throw new BadRequestException('transfer requires fromLocationCode + toLocationCode');
-        if (fromLoc.id === toLoc.id) throw new BadRequestException('transfer locations must differ');
+        if (!fromLoc || !toLoc)
+          throw new BadRequestException('transfer requires fromLocationCode + toLocationCode');
+        if (fromLoc.id === toLoc.id)
+          throw new BadRequestException('transfer locations must differ');
         break;
     }
 
@@ -182,7 +226,9 @@ export class InventoryService {
     if (['issue', 'transfer', 'write_off'].includes(body.movementType) && fromLoc) {
       const balance = await this.balanceAt(tenantId, item.id, fromLoc.id);
       if (balance < body.quantity) {
-        throw new BadRequestException(`insufficient stock at ${fromLoc.code}: on hand ${balance}, requested ${body.quantity}`);
+        throw new BadRequestException(
+          `insufficient stock at ${fromLoc.code}: on hand ${balance}, requested ${body.quantity}`,
+        );
       }
     }
 
@@ -224,9 +270,13 @@ export class InventoryService {
     const report = items.map((it) => {
       const s = byItem.get(it.id)!;
       return {
-        itemId: it.id, sku: it.sku, name: it.name, uom: it.uom,
+        itemId: it.id,
+        sku: it.sku,
+        name: it.name,
+        uom: it.uom,
         onHand: s.onHand,
-        minLevel: it.minLevel, reorderLevel: it.reorderLevel,
+        minLevel: it.minLevel,
+        reorderLevel: it.reorderLevel,
         needsReorder: it.reorderLevel != null && s.onHand <= it.reorderLevel,
         belowMin: it.minLevel != null && s.onHand < it.minLevel,
       };

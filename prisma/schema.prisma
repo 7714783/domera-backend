@@ -432,7 +432,6 @@ model Building {
   settings            BuildingSettings?
   accounts            Account[]
   contracts           Contract[]
-  requests            ResidentRequest[]
   notifications       Notification[]
   buildingFloors      BuildingFloor[]
   buildingUnits       BuildingUnit[]
@@ -502,7 +501,6 @@ model Asset {
   building         Building          @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   parent           Asset?            @relation("AssetTree", fields: [parentAssetId], references: [id], onDelete: Cascade)
   children         Asset[]           @relation("AssetTree")
-  maintenancePlans MaintenancePlan[]
   ppmPlanItems     PpmPlanItem[]     @relation("AssetPpmPlanItems")
 
   @@index([tenantId, buildingId])
@@ -593,26 +591,9 @@ model AssetMedia {
   @@map("asset_media")
 }
 
-// Spare parts catalogue (tenant-scoped). Spare parts are their own
-// entities in inventory and get linked to one or more asset types (or
-// specific assets) via AssetSparePart.
-model SparePart {
-  id           String   @id @default(uuid())
-  tenantId     String
-  partNo       String
-  name         String
-  manufacturer String?
-  supplierId   String?
-  unit         String?  @default("pc")
-  reorderPoint Int?
-  notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@unique([tenantId, partNo])
-  @@index([tenantId, supplierId])
-  @@map("spare_parts")
-}
+// (SparePart model removed in INIT-010 Follow-up F — superseded by
+//  AssetSparePart, no live writers. See migration
+//  022_drop_legacy_models.sql.)
 
 // Many-to-many: which spare parts are recommended for a given asset.
 model AssetSparePart {
@@ -2301,40 +2282,10 @@ model Account {
   @@map("accounts")
 }
 
-model MaintenancePlan {
-  id         String    @id @default(uuid())
-  tenantId   String
-  buildingId String
-  assetId    String
-  frequency  String
-  nextDueAt  DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-
-  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId, buildingId])
-  @@map("maintenance_plans")
-}
-
-model ResidentRequest {
-  id          String   @id @default(uuid())
-  tenantId    String
-  buildingId  String
-  unitId      String?
-  createdBy   String
-  category    String
-  priority    String   @default("normal")
-  status      String   @default("open")
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId, buildingId, status])
-  @@map("resident_requests")
-}
+// (MaintenancePlan + ResidentRequest models removed in INIT-010
+//  Follow-up F — superseded by ppmPlanItem and ServiceRequest
+//  respectively, no live writers. Tables dropped via migration
+//  022_drop_legacy_models.sql.)
 
 model Notification {
   id         String    @id @default(uuid())

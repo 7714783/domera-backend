@@ -5,10 +5,16 @@ import { IamService } from './iam.service';
 
 @Controller('buildings/:slug/roles')
 export class IamController {
-  constructor(private readonly iam: IamService, private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly iam: IamService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   private async buildingId(tenantId: string, slug: string): Promise<string | null> {
-    const b = await this.prisma.building.findFirst({ where: { tenantId, slug }, select: { id: true } });
+    const b = await this.prisma.building.findFirst({
+      where: { tenantId, slug },
+      select: { id: true },
+    });
     return b?.id || null;
   }
 

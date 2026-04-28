@@ -1,4 +1,16 @@
-import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, Post, Query, Req, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+  Req,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
@@ -27,7 +39,8 @@ export class WebhooksController {
   @Post('subscriptions')
   async createSub(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.createSubscription(resolveTenantId(th), await uid(ah, this.auth), body);
   }
@@ -46,7 +59,8 @@ export class WebhooksController {
   @Post('inbound')
   async registerInbound(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.registerInbound(resolveTenantId(th), await uid(ah, this.auth), body);
   }
@@ -57,7 +71,10 @@ export class WebhooksController {
     @Query('take') take?: string,
     @Headers('x-tenant-id') th?: string,
   ) {
-    return this.svc.listInboundEvents(resolveTenantId(th), { channel, take: take ? Number(take) : undefined });
+    return this.svc.listInboundEvents(resolveTenantId(th), {
+      channel,
+      take: take ? Number(take) : undefined,
+    });
   }
 
   // Inbound receiver — public, auth via HMAC signature
@@ -69,7 +86,8 @@ export class WebhooksController {
   ) {
     const tenantId = resolveTenantId(th);
     const raw: Buffer | undefined = (req as any).rawBody;
-    if (!raw) throw new BadRequestException('rawBody required — ensure rawBody middleware is configured');
+    if (!raw)
+      throw new BadRequestException('rawBody required — ensure rawBody middleware is configured');
     const headers: Record<string, string> = {};
     for (const [k, v] of Object.entries(req.headers)) {
       headers[k.toLowerCase()] = Array.isArray(v) ? v.join(',') : String(v || '');

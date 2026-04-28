@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Post,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { ComplianceProfilesService } from './compliance-profiles.service';
@@ -39,15 +48,18 @@ export class ComplianceProfilesController {
 
   @Post('buildings/:id/compliance-profiles/:key')
   async assign(
-    @Param('id') id: string, @Param('key') key: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Param('key') key: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.assignToBuilding(resolveTenantId(th), id, key, await uid(ah, this.auth));
   }
 
   @Delete('buildings/:id/compliance-profiles/:key')
   unassign(
-    @Param('id') id: string, @Param('key') key: string,
+    @Param('id') id: string,
+    @Param('key') key: string,
     @Headers('x-tenant-id') th?: string,
   ) {
     return this.svc.unassignFromBuilding(resolveTenantId(th), id, key);

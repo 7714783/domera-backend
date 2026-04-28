@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { DocumentTemplatesService } from './document-templates.service';
@@ -25,7 +36,8 @@ export class DocumentTemplatesController {
     @Headers('x-tenant-id') th?: string,
   ) {
     return this.svc.list(resolveTenantId(th), {
-      buildingId, kind,
+      buildingId,
+      kind,
       includeInactive: includeInactive === '1' || includeInactive === 'true',
     });
   }
@@ -43,7 +55,8 @@ export class DocumentTemplatesController {
   @Post()
   async create(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     return this.svc.create(resolveTenantId(th), await uid(ah, this.auth), body);
   }

@@ -25,18 +25,24 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-// 2026-04-28 baseline — INIT-010 entry state.
+// 2026-04-28 baseline — INIT-010 entry state, then Follow-up A applied.
 const PINNED = {
-  rfcRetroPending: 30,        // 35 → 30 (P1 RFCs landed)
+  // 35 → 30 (P1 RFCs landed in the main PR) → 0 (Follow-up A wrote
+  // baseline RFCs for the remaining 30 modules via
+  // scripts/write-retro-rfcs.mjs). Pin is now 0; any new module
+  // shipped without an RFC fails the gate immediately.
+  rfcRetroPending: 0,
   rlsKnownGaps: 3,            // 4 → 3 (lease_allocations closed)
   // Dual-writer baseline at INIT-010 audit start: each documented in §3
   // of docs/architecture/INIT-010-legacy-violations-2026-04-28.md.
-  // Buckets:
+  // INIT-010 Follow-up B (2026-04-28): notification collapsed (10 → 9)
+  // — PPM SLA worker now calls NotificationsService.recordInAppNotification.
+  // Remaining buckets (9 entries):
   //   buildingOccupantCompany (3) · buildingUnitOccupancy (2) ·
   //   buildingContract (2) · taskInstance (3) · incident (2) ·
-  //   serviceRequest (2) · completionRecord (3) · notification (2) ·
+  //   serviceRequest (2) · completionRecord (3) ·
   //   teamMember (2) · teamMemberRoleAssignment (3)
-  ownershipDualWriters: 10,
+  ownershipDualWriters: 9,
 };
 
 // Allow a small grace margin for normal PR churn (e.g. adding a new

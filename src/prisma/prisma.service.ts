@@ -2,7 +2,10 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { Prisma, PrismaClient } from '@prisma/client';
 import { TenantContext } from '../common/tenant-context';
 
-export type TenantScopedTx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
+export type TenantScopedTx = Omit<
+  PrismaClient,
+  '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
+>;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SAFE_ID_RE = /^[a-z0-9_-]+$/i;
@@ -58,7 +61,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
     return new Proxy(this, {
       get(target, prop, receiver) {
-        if (typeof prop === 'string' && prop in target._extended && !['$connect', '$disconnect', '$use', '$on'].includes(prop)) {
+        if (
+          typeof prop === 'string' &&
+          prop in target._extended &&
+          !['$connect', '$disconnect', '$use', '$on'].includes(prop)
+        ) {
           const v = (target._extended as any)[prop];
           return typeof v === 'function' ? v.bind(target._extended) : v;
         }
@@ -69,7 +76,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   async onModuleInit() {
     await this.$connect();
-    this.log.log('RLS auto-wrap active (tenant-aware $extends; set_config per tenant-scoped request)');
+    this.log.log(
+      'RLS auto-wrap active (tenant-aware $extends; set_config per tenant-scoped request)',
+    );
   }
 
   async onModuleDestroy() {

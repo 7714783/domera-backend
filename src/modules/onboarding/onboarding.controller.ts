@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AuthService } from '../auth/auth.service';
 import { OnboardingService } from './onboarding.service';
 
@@ -33,7 +42,13 @@ export class OnboardingController {
 
   @Post('organization')
   async organization(
-    @Body() body: { tenantId: string; name: string; slug?: string; type: 'owner' | 'management_company' | 'vendor' | 'consultant' },
+    @Body()
+    body: {
+      tenantId: string;
+      name: string;
+      slug?: string;
+      type: 'owner' | 'management_company' | 'vendor' | 'consultant';
+    },
     @Headers('authorization') auth?: string,
   ) {
     const userId = await extractUserId(auth, this.auth);
@@ -41,17 +56,23 @@ export class OnboardingController {
   }
 
   @Post('building')
-  async building(
-    @Body() body: any,
-    @Headers('authorization') auth?: string,
-  ) {
+  async building(@Body() body: any, @Headers('authorization') auth?: string) {
     const userId = await extractUserId(auth, this.auth);
     return this.onboarding.createBuilding(userId, body);
   }
 
   @Post('bootstrap')
   async bootstrap(
-    @Body() body: { buildingName: string; addressLine1: string; city: string; countryCode: string; timezone: string; buildingType?: any; workspaceName?: string },
+    @Body()
+    body: {
+      buildingName: string;
+      addressLine1: string;
+      city: string;
+      countryCode: string;
+      timezone: string;
+      buildingType?: any;
+      workspaceName?: string;
+    },
     @Headers('authorization') auth?: string,
   ) {
     const userId = await extractUserId(auth, this.auth);
@@ -64,7 +85,10 @@ export class OnboardingController {
     @Headers('authorization') auth?: string,
     @Headers('x-tenant-id') tenantIdHeader?: string,
   ) {
-    extractUserId(auth, this.auth);
+    // Verify the token (throws UnauthorizedException on bad/missing auth)
+    // even though we don't need the user id here. Must be awaited or the
+    // handler runs before the check resolves.
+    await extractUserId(auth, this.auth);
     const { resolveTenantId } = await import('../../common/tenant.utils');
     const tenantId = resolveTenantId(tenantIdHeader);
     return this.onboarding.buildingFull(tenantId, slug);

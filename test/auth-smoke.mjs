@@ -21,14 +21,26 @@ const TENANT_FAKE = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 async function call(path, opts = {}) {
   const res = await fetch(BASE + path, opts);
   const text = await res.text();
-  let body; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+  let body;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = text;
+  }
   return { status: res.status, body, text };
 }
 
-let passed = 0, failed = 0;
+let passed = 0,
+  failed = 0;
 async function test(name, fn) {
-  try { await fn(); console.log('\u2713', name); passed++; }
-  catch (e) { console.error('\u2717', name, '-', e.message); failed++; }
+  try {
+    await fn();
+    console.log('\u2713', name);
+    passed++;
+  } catch (e) {
+    console.error('\u2717', name, '-', e.message);
+    failed++;
+  }
 }
 
 await test('health is public', async () => {
@@ -81,8 +93,11 @@ await test('privacy ROPA endpoint is tenant-scoped', async () => {
   const fake = await call('/v1/privacy/ropa', { headers: { 'x-tenant-id': TENANT_FAKE } });
   assert.equal(real.status, 200);
   assert.equal(fake.status, 200);
-  assert.notDeepEqual(real.body.subjectCounts, fake.body.subjectCounts,
-    'real tenant should see different subject counts than fake tenant');
+  assert.notDeepEqual(
+    real.body.subjectCounts,
+    fake.body.subjectCounts,
+    'real tenant should see different subject counts than fake tenant',
+  );
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

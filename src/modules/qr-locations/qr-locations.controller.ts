@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post, Query, Req, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+  Req,
+  Res,
+} from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { PublicQrService } from '../public-qr/public-qr.service';
@@ -22,12 +33,25 @@ export class QrLocationsController {
     const tenantId = resolveTenantId(th);
     const { items } = await this.qr.list(tenantId, id);
     const proto = (req.headers['x-forwarded-proto'] as string) || 'http';
-    const host = (req.headers['x-forwarded-host'] as string) || req.headers.host || 'localhost:3000';
-    const baseUrl = (base || process.env.APP_PUBLIC_BASE_URL || `${proto}://${host}`).replace(/\/$/, '');
-    const cards = await Promise.all(items.map(async (q: any) => {
-      const { dataUrl } = await this.pub.qrPngDataUrl(q.id, baseUrl);
-      return { id: q.id, code: q.code, label: q.label, targetType: q.targetType, dataUrl, scanUrl: `${baseUrl}/qr/${q.id}` };
-    }));
+    const host =
+      (req.headers['x-forwarded-host'] as string) || req.headers.host || 'localhost:3000';
+    const baseUrl = (base || process.env.APP_PUBLIC_BASE_URL || `${proto}://${host}`).replace(
+      /\/$/,
+      '',
+    );
+    const cards = await Promise.all(
+      items.map(async (q: any) => {
+        const { dataUrl } = await this.pub.qrPngDataUrl(q.id, baseUrl);
+        return {
+          id: q.id,
+          code: q.code,
+          label: q.label,
+          targetType: q.targetType,
+          dataUrl,
+          scanUrl: `${baseUrl}/qr/${q.id}`,
+        };
+      }),
+    );
     const html = renderPrintSheet(cards, baseUrl);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
@@ -63,17 +87,34 @@ export class QrLocationsController {
 }
 
 function escape(s: string): string {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+  return String(s ?? '').replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+  );
 }
 
-function renderPrintSheet(cards: Array<{ id: string; code: string; label: string; targetType: string; dataUrl: string; scanUrl: string }>, baseUrl: string): string {
-  const grid = cards.map((c) => `
+function renderPrintSheet(
+  cards: Array<{
+    id: string;
+    code: string;
+    label: string;
+    targetType: string;
+    dataUrl: string;
+    scanUrl: string;
+  }>,
+  baseUrl: string,
+): string {
+  const grid = cards
+    .map(
+      (c) => `
     <div class="card">
       <img src="${c.dataUrl}" width="240" height="240" alt="QR ${escape(c.code)}" />
       <div class="code">${escape(c.code)}</div>
       <div class="label">${escape(c.label)}</div>
       <div class="meta">${escape(c.targetType)} · ${escape(c.scanUrl)}</div>
-    </div>`).join('');
+    </div>`,
+    )
+    .join('');
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>QR print sheet</title>
 <style>

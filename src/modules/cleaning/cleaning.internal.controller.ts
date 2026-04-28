@@ -1,4 +1,16 @@
-import { BadRequestException, Body, Controller, Get, Headers, Param, Patch, Post, Query, Res, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
@@ -41,15 +53,22 @@ export class CleaningInternalController {
     const tenantId = resolveTenantId(th);
     const actor = await this.access.resolve(tenantId, await uid(ah, this.auth));
     return this.reqSvc.list(actor, {
-      status, priority, contractorId, zoneId, source, buildingId,
-      take: take ? Number(take) : undefined, skip: skip ? Number(skip) : undefined,
+      status,
+      priority,
+      contractorId,
+      zoneId,
+      source,
+      buildingId,
+      take: take ? Number(take) : undefined,
+      skip: skip ? Number(skip) : undefined,
     });
   }
 
   @Get('requests/:id')
   async getRequest(
     @Param('id') id: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     const actor = await this.access.resolve(tenantId, await uid(ah, this.auth));
@@ -59,7 +78,8 @@ export class CleaningInternalController {
   @Post('requests')
   async createRequest(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     const actor = await this.access.resolve(tenantId, await uid(ah, this.auth));
@@ -68,8 +88,10 @@ export class CleaningInternalController {
 
   @Patch('requests/:id/status')
   async patchStatus(
-    @Param('id') id: string, @Body() body: { status: string },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: { status: string },
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     const actor = await this.access.resolve(tenantId, await uid(ah, this.auth));
@@ -78,8 +100,10 @@ export class CleaningInternalController {
 
   @Patch('requests/:id/assign')
   async assign(
-    @Param('id') id: string, @Body() body: { contractorId?: string; assignedStaffId?: string },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: { contractorId?: string; assignedStaffId?: string },
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     const actor = await this.access.resolve(tenantId, await uid(ah, this.auth));
@@ -88,8 +112,10 @@ export class CleaningInternalController {
 
   @Post('requests/:id/comments')
   async comment(
-    @Param('id') id: string, @Body() body: { body: string; isInternal?: boolean },
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: { body: string; isInternal?: boolean },
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     const actor = await this.access.resolve(tenantId, await uid(ah, this.auth));
@@ -100,7 +126,8 @@ export class CleaningInternalController {
   @Get('contractors')
   async listContractors(
     @Query('buildingId') buildingId?: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     const actor = await this.access.resolve(tenantId, await uid(ah, this.auth));
@@ -110,7 +137,8 @@ export class CleaningInternalController {
   @Post('contractors')
   async createContractor(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     const actor = await this.access.resolve(tenantId, await uid(ah, this.auth));
@@ -120,7 +148,8 @@ export class CleaningInternalController {
   @Get('contractors/:id/staff')
   async listStaff(
     @Param('id') id: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     const actor = await this.access.resolve(tenantId, await uid(ah, this.auth));
@@ -129,8 +158,10 @@ export class CleaningInternalController {
 
   @Post('contractors/:id/staff')
   async createStaff(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     const actor = await this.access.resolve(tenantId, await uid(ah, this.auth));
@@ -141,7 +172,8 @@ export class CleaningInternalController {
   @Get('zones')
   async listZones(
     @Query('buildingId') buildingId?: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     const actor = await this.access.resolve(tenantId, await uid(ah, this.auth));
@@ -151,7 +183,8 @@ export class CleaningInternalController {
   @Post('zones')
   async createZone(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     const actor = await this.access.resolve(tenantId, await uid(ah, this.auth));
@@ -160,8 +193,10 @@ export class CleaningInternalController {
 
   @Patch('zones/:id/assignment')
   async assignZone(
-    @Param('id') id: string, @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     const actor = await this.access.resolve(tenantId, await uid(ah, this.auth));
@@ -172,7 +207,8 @@ export class CleaningInternalController {
   @Get('qr-points')
   async listQr(
     @Query('buildingId') buildingId?: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     await this.access.resolve(tenantId, await uid(ah, this.auth));
@@ -182,7 +218,8 @@ export class CleaningInternalController {
   @Get('qr-locations')
   async listQrLocations(
     @Query('buildingId') buildingId: string,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     if (!buildingId) throw new BadRequestException('buildingId query param required');
     const tenantId = resolveTenantId(th);
@@ -193,7 +230,8 @@ export class CleaningInternalController {
   @Post('qr-points')
   async createQr(
     @Body() body: any,
-    @Headers('x-tenant-id') th?: string, @Headers('authorization') ah?: string,
+    @Headers('x-tenant-id') th?: string,
+    @Headers('authorization') ah?: string,
   ) {
     const tenantId = resolveTenantId(th);
     await this.access.resolve(tenantId, await uid(ah, this.auth));

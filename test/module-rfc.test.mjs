@@ -30,43 +30,17 @@ const docsDir = join(here, '..', '..', '..', 'docs', 'modules');
 // 2026-04-26 (INIT-010 Phase 1 / Task 4): top-12 RFCs landed —
 // approvals, assets, assignment, audit, building-core, cleaning,
 // contractor-companies, documents, iam, ppm, reactive, tenant-companies.
-// INIT-010 — retro-RFC debt. Each module folder listed here ships
-// without docs/modules/<name>/RFC.md as a transitional waiver.
-// 2026-04-28 reduced 35 → 29 by landing P1 RFCs (auth, buildings, events,
-// tasks, leases, privacy). Roadmap and per-module deadlines in
-// docs/architecture/INIT-010-legacy-violations-2026-04-28.md.
-const RETRO_RFC_PENDING = new Set([
-  'calendar-blackouts',
-  'compliance',
-  'compliance-profiles',
-  'condition-triggers',
-  'connectors',
-  'devices',
-  'document-links',
-  'document-templates',
-  'emergency-overrides',
-  'health',
-  'imports',
-  'inventory',
-  'metrics',
-  'mfa',
-  'obligations',
-  'occupants',
-  'onboarding',
-  'organizations',
-  'projects',
-  'public-qr',
-  'qr-locations',
-  'role-dashboards',
-  'rounds',
-  'scim',
-  'seed-runtime',
-  'sso',
-  'takeover',
-  'tenancy',
-  'vendor-invoices',
-  'webhooks',
-]);
+// 2026-04-28 (INIT-010 Phase 1 + Follow-up A): all retro-RFC debt
+// closed. P1 set (auth, buildings, events, tasks, leases, privacy)
+// landed in the main PR; the remaining 30 modules graduated via
+// scripts/write-retro-rfcs.mjs (baseline RFC per module — purpose,
+// scope, ownership, surface, hard rules — enough to leave the pending
+// list). Future PRs can deepen any one without ceremony.
+//
+// The set stays declared as a contract: any new module folder added
+// without docs/modules/<name>/RFC.md will fail the gate immediately.
+// Architecture-owner approval required to re-introduce an entry here.
+const RETRO_RFC_PENDING = new Set([]);
 
 const folders = readdirSync(modulesDir).filter((f) => {
   const p = join(modulesDir, f);

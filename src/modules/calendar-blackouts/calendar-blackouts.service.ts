@@ -17,13 +17,23 @@ export class CalendarBlackoutsService {
     });
   }
 
-  async create(tenantId: string, body: {
-    buildingId?: string; kind: string; label: string;
-    dayOfWeek?: number; startDate?: string; endDate?: string;
-    annualRecurring?: boolean; policy?: string; isActive?: boolean;
-  }) {
+  async create(
+    tenantId: string,
+    body: {
+      buildingId?: string;
+      kind: string;
+      label: string;
+      dayOfWeek?: number;
+      startDate?: string;
+      endDate?: string;
+      annualRecurring?: boolean;
+      policy?: string;
+      isActive?: boolean;
+    },
+  ) {
     if (!body.kind || !body.label) throw new BadRequestException('kind and label required');
-    if (!KINDS.includes(body.kind)) throw new BadRequestException(`kind must be one of ${KINDS.join(', ')}`);
+    if (!KINDS.includes(body.kind))
+      throw new BadRequestException(`kind must be one of ${KINDS.join(', ')}`);
     if (body.policy && !POLICIES.includes(body.policy)) {
       throw new BadRequestException(`policy must be one of ${POLICIES.join(', ')}`);
     }
@@ -31,7 +41,9 @@ export class CalendarBlackoutsService {
       throw new BadRequestException('dayOfWeek must be 0..6');
     }
     if (body.dayOfWeek === undefined && !body.startDate) {
-      throw new BadRequestException('provide dayOfWeek for weekly, or startDate for one-shot/annual');
+      throw new BadRequestException(
+        'provide dayOfWeek for weekly, or startDate for one-shot/annual',
+      );
     }
     return this.prisma.calendarBlackout.create({
       data: {
@@ -62,9 +74,13 @@ export class CalendarBlackoutsService {
       where: { id: `seed-il-sat-${tenantId}-${buildingId || 'all'}` },
       create: {
         id: `seed-il-sat-${tenantId}-${buildingId || 'all'}`,
-        tenantId, buildingId: buildingId || null,
-        kind: 'weekend', label: 'Shabbat (Saturday)',
-        dayOfWeek: 6, policy: 'defer_to_next_working_day', isActive: true,
+        tenantId,
+        buildingId: buildingId || null,
+        kind: 'weekend',
+        label: 'Shabbat (Saturday)',
+        dayOfWeek: 6,
+        policy: 'defer_to_next_working_day',
+        isActive: true,
       },
       update: {},
     });

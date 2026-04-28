@@ -19,44 +19,86 @@ export class RoleDashboardsService {
     const now = new Date();
     const in14 = new Date(now.getTime() + 14 * 86400000);
 
-    const [urgentDue, ppmInFlight, incidents, serviceOpen, approvals, openTasks] = await Promise.all([
-      this.prisma.ppmPlanItem.findMany({
-        where: { tenantId, buildingId: building.id, nextDueAt: { lte: in14 } },
-        include: { template: { select: { name: true, executionMode: true } } },
-        orderBy: { nextDueAt: 'asc' }, take: 20,
-      }),
-      this.prisma.taskInstance.count({
-        where: { tenantId, buildingId: building.id, lifecycleStage: { in: ['quote_requested', 'quote_received', 'awaiting_approval', 'approved', 'ordered', 'in_progress'] } },
-      }),
-      this.prisma.incident.findMany({
-        where: { tenantId, buildingId: building.id, status: { in: ['new', 'triaged', 'dispatched'] } },
-        orderBy: [{ severity: 'asc' }, { reportedAt: 'desc' }], take: 10,
-      }),
-      this.prisma.serviceRequest.findMany({
-        where: { tenantId, buildingId: building.id, status: { in: ['new', 'triaged'] } },
-        orderBy: { createdAt: 'desc' }, take: 10,
-      }),
-      this.prisma.approvalRequest.findMany({
-        where: { tenantId, buildingId: building.id, status: 'pending' },
-        include: { steps: { orderBy: { orderNo: 'asc' } } }, orderBy: { createdAt: 'desc' }, take: 10,
-      }),
-      this.prisma.taskInstance.count({
-        where: { tenantId, buildingId: building.id, status: { in: ['open', 'overdue'] } },
-      }),
-    ]);
+    const [urgentDue, ppmInFlight, incidents, serviceOpen, approvals, openTasks] =
+      await Promise.all([
+        this.prisma.ppmPlanItem.findMany({
+          where: { tenantId, buildingId: building.id, nextDueAt: { lte: in14 } },
+          include: { template: { select: { name: true, executionMode: true } } },
+          orderBy: { nextDueAt: 'asc' },
+          take: 20,
+        }),
+        this.prisma.taskInstance.count({
+          where: {
+            tenantId,
+            buildingId: building.id,
+            lifecycleStage: {
+              in: [
+                'quote_requested',
+                'quote_received',
+                'awaiting_approval',
+                'approved',
+                'ordered',
+                'in_progress',
+              ],
+            },
+          },
+        }),
+        this.prisma.incident.findMany({
+          where: {
+            tenantId,
+            buildingId: building.id,
+            status: { in: ['new', 'triaged', 'dispatched'] },
+          },
+          orderBy: [{ severity: 'asc' }, { reportedAt: 'desc' }],
+          take: 10,
+        }),
+        this.prisma.serviceRequest.findMany({
+          where: { tenantId, buildingId: building.id, status: { in: ['new', 'triaged'] } },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        }),
+        this.prisma.approvalRequest.findMany({
+          where: { tenantId, buildingId: building.id, status: 'pending' },
+          include: { steps: { orderBy: { orderNo: 'asc' } } },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        }),
+        this.prisma.taskInstance.count({
+          where: { tenantId, buildingId: building.id, status: { in: ['open', 'overdue'] } },
+        }),
+      ]);
 
     return {
       building: { id: building.id, slug: building.slug, name: building.name },
       urgentDue: urgentDue.map((p) => ({
-        planItemId: p.id, name: p.template.name, executionMode: p.template.executionMode,
-        nextDueAt: p.nextDueAt, lastPerformedAt: p.lastPerformedAt,
+        planItemId: p.id,
+        name: p.template.name,
+        executionMode: p.template.executionMode,
+        nextDueAt: p.nextDueAt,
+        lastPerformedAt: p.lastPerformedAt,
         overdue: p.nextDueAt.getTime() < now.getTime(),
       })),
       ppmInFlight,
-      incidents: incidents.map((i) => ({ id: i.id, title: i.title, severity: i.severity, status: i.status, reportedAt: i.reportedAt })),
-      serviceRequests: serviceOpen.map((r) => ({ id: r.id, category: r.category, priority: r.priority, status: r.status, createdAt: r.createdAt, description: r.description })),
+      incidents: incidents.map((i) => ({
+        id: i.id,
+        title: i.title,
+        severity: i.severity,
+        status: i.status,
+        reportedAt: i.reportedAt,
+      })),
+      serviceRequests: serviceOpen.map((r) => ({
+        id: r.id,
+        category: r.category,
+        priority: r.priority,
+        status: r.status,
+        createdAt: r.createdAt,
+        description: r.description,
+      })),
       pendingApprovals: approvals.map((a) => ({
-        id: a.id, title: a.title, type: a.type, amount: a.amount,
+        id: a.id,
+        title: a.title,
+        type: a.type,
+        amount: a.amount,
         step: a.steps.findIndex((s) => s.status === 'pending') + 1,
         totalSteps: a.steps.length,
       })),
@@ -66,7 +108,9 @@ export class RoleDashboardsService {
 
   /** Technician — "my queue": next due items where actor is assigned (by user or by role). */
   async technicianQueue(tenantId: string, actorUserId: string, buildingIdOrSlug?: string) {
-    const building = buildingIdOrSlug ? await this.resolveBuilding(tenantId, buildingIdOrSlug) : null;
+    const building = buildingIdOrSlug
+      ? await this.resolveBuilding(tenantId, buildingIdOrSlug)
+      : null;
 
     const myRoles = await this.prisma.buildingRoleAssignment.findMany({
       where: { tenantId, userId: actorUserId, ...(building ? { buildingId: building.id } : {}) },
@@ -79,37 +123,41 @@ export class RoleDashboardsService {
       where: {
         tenantId,
         ...(building ? { buildingId: building.id } : { buildingId: { in: buildingIds } }),
-        OR: [
-          { assignedUserId: actorUserId },
-          { assignedRole: { in: roleKeys } },
-        ],
+        OR: [{ assignedUserId: actorUserId }, { assignedRole: { in: roleKeys } }],
       },
-      include: { template: { select: { name: true, executionMode: true, evidenceDocTypeKey: true } } },
-      orderBy: { nextDueAt: 'asc' }, take: 25,
+      include: {
+        template: { select: { name: true, executionMode: true, evidenceDocTypeKey: true } },
+      },
+      orderBy: { nextDueAt: 'asc' },
+      take: 25,
     });
 
     const activeTasks = await this.prisma.taskInstance.findMany({
       where: {
         tenantId,
         ...(building ? { buildingId: building.id } : { buildingId: { in: buildingIds } }),
-        OR: [
-          { completedByUserId: actorUserId },
-          { performerOrgId: { not: null } },
-        ],
+        OR: [{ completedByUserId: actorUserId }, { performerOrgId: { not: null } }],
         lifecycleStage: { in: ['scheduled', 'ordered', 'in_progress'] },
       },
-      orderBy: { dueAt: 'asc' }, take: 20,
+      orderBy: { dueAt: 'asc' },
+      take: 20,
     });
 
     return {
       actorUserId,
       rolesUsed: roleKeys,
       queue: plans.map((p) => ({
-        planItemId: p.id, name: p.template.name, executionMode: p.template.executionMode,
-        evidenceRequired: !!p.template.evidenceDocTypeKey, nextDueAt: p.nextDueAt,
+        planItemId: p.id,
+        name: p.template.name,
+        executionMode: p.template.executionMode,
+        evidenceRequired: !!p.template.evidenceDocTypeKey,
+        nextDueAt: p.nextDueAt,
       })),
       activeTasks: activeTasks.map((t) => ({
-        id: t.id, title: t.title, lifecycleStage: t.lifecycleStage, dueAt: t.dueAt,
+        id: t.id,
+        title: t.title,
+        lifecycleStage: t.lifecycleStage,
+        dueAt: t.dueAt,
       })),
     };
   }
@@ -150,7 +198,11 @@ export class RoleDashboardsService {
     if (occupantCompanies.length === 0) {
       return {
         actor: { userId: actorUserId, displayName: user.displayName, email: user.emailNormalized },
-        occupancies: [], contracts: [], openRequests: [], upcomingPpm: [], notices: [],
+        occupancies: [],
+        contracts: [],
+        openRequests: [],
+        upcomingPpm: [],
+        notices: [],
         empty: true,
         reason: 'no occupant company linked to this user',
       };
@@ -159,54 +211,79 @@ export class RoleDashboardsService {
     const companyIds = occupantCompanies.map((c) => c.id);
     const buildingIds = [...new Set(occupantCompanies.map((c) => c.buildingId))];
 
-    const [occupancies, contracts, openIncidents, openSRs, upcomingPpm, buildings] = await Promise.all([
-      this.prisma.buildingUnitOccupancy.findMany({
-        where: { tenantId, occupantCompanyId: { in: companyIds }, occupancyStatus: 'active' },
-        include: { unit: { select: { id: true, unitCode: true, unitType: true, areaSqm: true, floorId: true } } },
-      }),
-      this.prisma.buildingContract.findMany({
-        where: { tenantId, occupantCompanyId: { in: companyIds } },
-        orderBy: { startDate: 'desc' }, take: 20,
-      }),
-      this.prisma.incident.findMany({
-        where: {
-          tenantId, buildingId: { in: buildingIds },
-          reportedBy: actorUserId, status: { in: ['new', 'triaged', 'dispatched'] },
-        },
-        orderBy: { reportedAt: 'desc' }, take: 20,
-      }),
-      this.prisma.serviceRequest.findMany({
-        where: {
-          tenantId, buildingId: { in: buildingIds },
-          submittedBy: actorUserId, status: { in: ['new', 'triaged', 'dispatched'] },
-        },
-        orderBy: { createdAt: 'desc' }, take: 20,
-      }),
-      this.prisma.ppmPlanItem.findMany({
-        where: {
-          tenantId, buildingId: { in: buildingIds },
-          nextDueAt: { gte: new Date(), lte: new Date(Date.now() + 30 * 86400000) },
-          scope: { in: ['unit_scoped', 'building_common'] },
-        },
-        include: { template: { select: { name: true, executionMode: true } } },
-        orderBy: { nextDueAt: 'asc' }, take: 20,
-      }),
-      this.prisma.building.findMany({
-        where: { tenantId, id: { in: buildingIds } },
-        select: { id: true, slug: true, name: true },
-      }),
-    ]);
+    const [occupancies, contracts, openIncidents, openSRs, upcomingPpm, buildings] =
+      await Promise.all([
+        this.prisma.buildingUnitOccupancy.findMany({
+          where: { tenantId, occupantCompanyId: { in: companyIds }, occupancyStatus: 'active' },
+          include: {
+            unit: {
+              select: { id: true, unitCode: true, unitType: true, areaSqm: true, floorId: true },
+            },
+          },
+        }),
+        this.prisma.buildingContract.findMany({
+          where: { tenantId, occupantCompanyId: { in: companyIds } },
+          orderBy: { startDate: 'desc' },
+          take: 20,
+        }),
+        this.prisma.incident.findMany({
+          where: {
+            tenantId,
+            buildingId: { in: buildingIds },
+            reportedBy: actorUserId,
+            status: { in: ['new', 'triaged', 'dispatched'] },
+          },
+          orderBy: { reportedAt: 'desc' },
+          take: 20,
+        }),
+        this.prisma.serviceRequest.findMany({
+          where: {
+            tenantId,
+            buildingId: { in: buildingIds },
+            submittedBy: actorUserId,
+            status: { in: ['new', 'triaged', 'dispatched'] },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        }),
+        this.prisma.ppmPlanItem.findMany({
+          where: {
+            tenantId,
+            buildingId: { in: buildingIds },
+            nextDueAt: { gte: new Date(), lte: new Date(Date.now() + 30 * 86400000) },
+            scope: { in: ['unit_scoped', 'building_common'] },
+          },
+          include: { template: { select: { name: true, executionMode: true } } },
+          orderBy: { nextDueAt: 'asc' },
+          take: 20,
+        }),
+        this.prisma.building.findMany({
+          where: { tenantId, id: { in: buildingIds } },
+          select: { id: true, slug: true, name: true },
+        }),
+      ]);
 
     const buildingById = new Map(buildings.map((b) => [b.id, b]));
     const openRequests = [
       ...openIncidents.map((i) => ({
-        kind: 'incident' as const, id: i.id, title: i.title, severity: i.severity,
-        status: i.status, reportedAt: i.reportedAt, buildingId: i.buildingId,
+        kind: 'incident' as const,
+        id: i.id,
+        title: i.title,
+        severity: i.severity,
+        status: i.status,
+        reportedAt: i.reportedAt,
+        buildingId: i.buildingId,
         buildingName: buildingById.get(i.buildingId)?.name ?? null,
       })),
       ...openSRs.map((r) => ({
-        kind: 'service_request' as const, id: r.id, title: r.category, severity: null,
-        priority: r.priority, status: r.status, reportedAt: r.createdAt, buildingId: r.buildingId,
+        kind: 'service_request' as const,
+        id: r.id,
+        title: r.category,
+        severity: null,
+        priority: r.priority,
+        status: r.status,
+        reportedAt: r.createdAt,
+        buildingId: r.buildingId,
         buildingName: buildingById.get(r.buildingId)?.name ?? null,
       })),
     ];
@@ -219,19 +296,30 @@ export class RoleDashboardsService {
         unit: o.unit,
         buildingId: o.buildingId,
         buildingName: buildingById.get(o.buildingId)?.name ?? null,
-        startDate: o.startDate, endDate: o.endDate,
+        startDate: o.startDate,
+        endDate: o.endDate,
       })),
       contracts: contracts.map((c) => ({
-        id: c.id, contractType: c.contractType, contractNumber: c.contractNumber,
-        startDate: c.startDate, endDate: c.endDate, status: c.status,
-        amount: c.amount, currency: c.currency,
-        buildingId: c.buildingId, buildingName: buildingById.get(c.buildingId)?.name ?? null,
+        id: c.id,
+        contractType: c.contractType,
+        contractNumber: c.contractNumber,
+        startDate: c.startDate,
+        endDate: c.endDate,
+        status: c.status,
+        amount: c.amount,
+        currency: c.currency,
+        buildingId: c.buildingId,
+        buildingName: buildingById.get(c.buildingId)?.name ?? null,
       })),
       openRequests,
       upcomingPpm: upcomingPpm.map((p) => ({
-        id: p.id, name: p.template.name, executionMode: p.template.executionMode,
-        nextDueAt: p.nextDueAt, scope: p.scope,
-        buildingId: p.buildingId, buildingName: buildingById.get(p.buildingId)?.name ?? null,
+        id: p.id,
+        name: p.template.name,
+        executionMode: p.template.executionMode,
+        nextDueAt: p.nextDueAt,
+        scope: p.scope,
+        buildingId: p.buildingId,
+        buildingName: buildingById.get(p.buildingId)?.name ?? null,
       })),
       notices: [],
     };
@@ -240,7 +328,8 @@ export class RoleDashboardsService {
   /** FM Director — portfolio view across the active tenant. */
   async fmDirectorPortfolio(tenantId: string) {
     const buildings = await this.prisma.building.findMany({
-      where: { tenantId }, select: { id: true, slug: true, name: true },
+      where: { tenantId },
+      select: { id: true, slug: true, name: true },
     });
     const buildingIds = buildings.map((b) => b.id);
 
@@ -250,11 +339,13 @@ export class RoleDashboardsService {
         select: { id: true, buildingId: true, nextDueAt: true },
       }),
       this.prisma.incident.groupBy({
-        by: ['buildingId', 'status'], _count: { _all: true },
+        by: ['buildingId', 'status'],
+        _count: { _all: true },
         where: { tenantId, buildingId: { in: buildingIds } },
       }),
       this.prisma.approvalRequest.groupBy({
-        by: ['buildingId', 'status'], _count: { _all: true },
+        by: ['buildingId', 'status'],
+        _count: { _all: true },
         where: { tenantId, buildingId: { in: buildingIds } },
       }),
     ]);
@@ -274,15 +365,25 @@ export class RoleDashboardsService {
         ppmPrograms: ppmPlans.length,
         ppmOverdue: [...ppmOverdue.values()].reduce((a, b) => a + b, 0),
         ppmDue30: [...ppmDue30.values()].reduce((a, b) => a + b, 0),
-        incidentsOpen: incidents.filter((i) => ['new', 'triaged', 'dispatched'].includes(i.status)).reduce((a, b) => a + b._count._all, 0),
-        approvalsPending: approvals.filter((a) => a.status === 'pending').reduce((a, b) => a + b._count._all, 0),
+        incidentsOpen: incidents
+          .filter((i) => ['new', 'triaged', 'dispatched'].includes(i.status))
+          .reduce((a, b) => a + b._count._all, 0),
+        approvalsPending: approvals
+          .filter((a) => a.status === 'pending')
+          .reduce((a, b) => a + b._count._all, 0),
       },
       byBuilding: buildings.map((b) => ({
         building: b,
         ppmOverdue: ppmOverdue.get(b.id) || 0,
         ppmDue30: ppmDue30.get(b.id) || 0,
-        incidentsOpen: incidents.filter((x) => x.buildingId === b.id && ['new', 'triaged', 'dispatched'].includes(x.status)).reduce((a, c) => a + c._count._all, 0),
-        approvalsPending: approvals.filter((x) => x.buildingId === b.id && x.status === 'pending').reduce((a, c) => a + c._count._all, 0),
+        incidentsOpen: incidents
+          .filter(
+            (x) => x.buildingId === b.id && ['new', 'triaged', 'dispatched'].includes(x.status),
+          )
+          .reduce((a, c) => a + c._count._all, 0),
+        approvalsPending: approvals
+          .filter((x) => x.buildingId === b.id && x.status === 'pending')
+          .reduce((a, c) => a + c._count._all, 0),
       })),
     };
   }

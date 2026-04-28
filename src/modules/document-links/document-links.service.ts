@@ -32,9 +32,15 @@ export class DocumentLinksService {
     });
   }
 
-  async create(tenantId: string, actorUserId: string, body: {
-    documentId: string; targetType: string; targetId: string;
-  }) {
+  async create(
+    tenantId: string,
+    actorUserId: string,
+    body: {
+      documentId: string;
+      targetType: string;
+      targetId: string;
+    },
+  ) {
     if (!body.documentId || !body.targetType || !body.targetId) {
       throw new BadRequestException('documentId, targetType, targetId required');
     }

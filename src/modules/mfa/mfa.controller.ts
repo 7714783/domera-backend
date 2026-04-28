@@ -1,4 +1,12 @@
-import { BadRequestException, Body, Controller, Get, Headers, Post, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Post,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AuthService } from '../auth/auth.service';
 import { MfaService } from './mfa.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -26,7 +34,10 @@ export class MfaController {
   @Post('enroll/start')
   async enrollStart(@Headers('authorization') ah?: string) {
     const userId = await uid(ah, this.auth);
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true, emailNormalized: true, displayName: true } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, emailNormalized: true, displayName: true },
+    });
     if (!user) throw new BadRequestException('user not found');
     const label = user.email || user.emailNormalized || userId;
     return this.svc.enrollStart(userId, label);

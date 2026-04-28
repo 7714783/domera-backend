@@ -43,7 +43,11 @@ export function newSecret(bytes = 20): string {
   return base32Encode(randomBytes(bytes));
 }
 
-export function totp(secretB32: string, time: number = Math.floor(Date.now() / 1000), opts?: { period?: number; digits?: number; algorithm?: string }) {
+export function totp(
+  secretB32: string,
+  time: number = Math.floor(Date.now() / 1000),
+  opts?: { period?: number; digits?: number; algorithm?: string },
+) {
   const period = opts?.period ?? 30;
   const digits = opts?.digits ?? 6;
   const algorithm = (opts?.algorithm ?? 'sha1').toLowerCase();
@@ -54,7 +58,11 @@ export function totp(secretB32: string, time: number = Math.floor(Date.now() / 1
   const key = base32Decode(secretB32);
   const hmac = createHmac(algorithm, key).update(buf).digest();
   const offset = hmac[hmac.length - 1] & 0x0f;
-  const bin = ((hmac[offset] & 0x7f) << 24) | ((hmac[offset + 1] & 0xff) << 16) | ((hmac[offset + 2] & 0xff) << 8) | (hmac[offset + 3] & 0xff);
+  const bin =
+    ((hmac[offset] & 0x7f) << 24) |
+    ((hmac[offset + 1] & 0xff) << 16) |
+    ((hmac[offset + 2] & 0xff) << 8) |
+    (hmac[offset + 3] & 0xff);
   const code = (bin % 10 ** digits).toString().padStart(digits, '0');
   return code;
 }
@@ -67,7 +75,14 @@ export function verifyTotp(secretB32: string, code: string, window = 1): boolean
   return false;
 }
 
-export function otpauthUrl(params: { secret: string; label: string; issuer: string; digits?: number; period?: number; algorithm?: string }): string {
+export function otpauthUrl(params: {
+  secret: string;
+  label: string;
+  issuer: string;
+  digits?: number;
+  period?: number;
+  algorithm?: string;
+}): string {
   const q = new URLSearchParams({
     secret: params.secret,
     issuer: params.issuer,

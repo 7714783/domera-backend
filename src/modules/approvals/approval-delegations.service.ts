@@ -1,19 +1,28 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class ApprovalDelegationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(tenantId: string, actorUserId: string, body: {
-    delegatorUserId: string;
-    delegateUserId: string;
-    role: string;
-    buildingId?: string | null;
-    startsAt: string;
-    endsAt: string;
-    reason?: string;
-  }) {
+  async create(
+    tenantId: string,
+    actorUserId: string,
+    body: {
+      delegatorUserId: string;
+      delegateUserId: string;
+      role: string;
+      buildingId?: string | null;
+      startsAt: string;
+      endsAt: string;
+      reason?: string;
+    },
+  ) {
     if (!body.delegatorUserId || !body.delegateUserId || !body.role) {
       throw new BadRequestException('delegatorUserId, delegateUserId, role required');
     }
@@ -30,9 +39,16 @@ export class ApprovalDelegationsService {
     const actorIsDelegator = actorUserId === body.delegatorUserId;
     if (!actorIsDelegator) {
       const adm = await this.prisma.membership.findFirst({
-        where: { tenantId, userId: actorUserId, roleKey: { in: ['workspace_owner', 'workspace_admin'] } },
+        where: {
+          tenantId,
+          userId: actorUserId,
+          roleKey: { in: ['workspace_owner', 'workspace_admin'] },
+        },
       });
-      if (!adm) throw new ForbiddenException('only the delegator or a workspace admin can create a delegation');
+      if (!adm)
+        throw new ForbiddenException(
+          'only the delegator or a workspace admin can create a delegation',
+        );
     }
     return this.prisma.approvalDelegation.create({
       data: {
@@ -41,7 +57,8 @@ export class ApprovalDelegationsService {
         delegateUserId: body.delegateUserId,
         role: body.role,
         buildingId: body.buildingId ?? null,
-        startsAt, endsAt,
+        startsAt,
+        endsAt,
         reason: body.reason || null,
         createdByUserId: actorUserId,
       },
@@ -58,7 +75,10 @@ export class ApprovalDelegationsService {
     });
   }
 
-  async list(tenantId: string, params: { delegateUserId?: string; delegatorUserId?: string; activeOnly?: boolean }) {
+  async list(
+    tenantId: string,
+    params: { delegateUserId?: string; delegatorUserId?: string; activeOnly?: boolean },
+  ) {
     const where: any = { tenantId };
     if (params.delegateUserId) where.delegateUserId = params.delegateUserId;
     if (params.delegatorUserId) where.delegatorUserId = params.delegatorUserId;
@@ -79,7 +99,12 @@ export class ApprovalDelegationsService {
    * Returns the active delegation (if any) that lets `candidateUserId` act
    * on behalf of somebody else for `role` in `buildingId`.
    */
-  async activeDelegationFor(tenantId: string, candidateUserId: string, role: string, buildingId?: string | null) {
+  async activeDelegationFor(
+    tenantId: string,
+    candidateUserId: string,
+    role: string,
+    buildingId?: string | null,
+  ) {
     const now = new Date();
     const rows = await this.prisma.approvalDelegation.findMany({
       where: {

@@ -4,7 +4,14 @@ import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
 
 const DSAR_KINDS = ['access', 'delete', 'restrict', 'portability'];
-const LAWFUL_BASIS = ['contract', 'consent', 'legal_obligation', 'legitimate_interest', 'vital_interest', 'public_task'];
+const LAWFUL_BASIS = [
+  'contract',
+  'consent',
+  'legal_obligation',
+  'legitimate_interest',
+  'vital_interest',
+  'public_task',
+];
 
 @Injectable()
 export class PrivacyService {
@@ -17,15 +24,24 @@ export class PrivacyService {
   // ── Personal data inventory + retention matrix ─────────
   async listCategories(tenantId: string) {
     return this.prisma.personalDataCategory.findMany({
-      where: { tenantId }, orderBy: { key: 'asc' },
+      where: { tenantId },
+      orderBy: { key: 'asc' },
     });
   }
 
-  async upsertCategory(tenantId: string, actorUserId: string, body: {
-    key: string; name: string; lawfulBasis: string;
-    retentionDays?: number | null; location: string;
-    processors?: string[]; notes?: string;
-  }) {
+  async upsertCategory(
+    tenantId: string,
+    actorUserId: string,
+    body: {
+      key: string;
+      name: string;
+      lawfulBasis: string;
+      retentionDays?: number | null;
+      location: string;
+      processors?: string[];
+      notes?: string;
+    },
+  ) {
     if (!body.key || !body.name || !body.lawfulBasis || !body.location) {
       throw new BadRequestException('key, name, lawfulBasis, location required');
     }
@@ -35,33 +51,92 @@ export class PrivacyService {
     const row = await this.prisma.personalDataCategory.upsert({
       where: { tenantId_key: { tenantId, key: body.key } },
       create: {
-        tenantId, key: body.key, name: body.name, lawfulBasis: body.lawfulBasis,
-        retentionDays: body.retentionDays ?? null, location: body.location,
-        processors: body.processors || [], notes: body.notes || null,
+        tenantId,
+        key: body.key,
+        name: body.name,
+        lawfulBasis: body.lawfulBasis,
+        retentionDays: body.retentionDays ?? null,
+        location: body.location,
+        processors: body.processors || [],
+        notes: body.notes || null,
       },
       update: {
-        name: body.name, lawfulBasis: body.lawfulBasis,
-        retentionDays: body.retentionDays ?? null, location: body.location,
-        processors: body.processors || [], notes: body.notes || null,
+        name: body.name,
+        lawfulBasis: body.lawfulBasis,
+        retentionDays: body.retentionDays ?? null,
+        location: body.location,
+        processors: body.processors || [],
+        notes: body.notes || null,
       },
     });
     await this.audit.write({
-      tenantId, actor: actorUserId, role: 'dpo',
-      action: 'privacy.category.upserted', entity: row.id, entityType: 'personal_data_category',
-      building: '-', ip: '-', sensitive: true,
+      tenantId,
+      actor: actorUserId,
+      role: 'dpo',
+      action: 'privacy.category.upserted',
+      entity: row.id,
+      entityType: 'personal_data_category',
+      building: '-',
+      ip: '-',
+      sensitive: true,
     });
     return row;
   }
 
   async seedBuiltIns(tenantId: string, actorUserId: string) {
-    const base: Array<Omit<Parameters<PrivacyService['upsertCategory']>[2], 'notes'> & { notes?: string }> = [
-      { key: 'user_identity', name: 'User identity (email, display name)', lawfulBasis: 'contract', retentionDays: null, location: 'users,sessions', processors: [] },
-      { key: 'tenant_rep_contact', name: 'Tenant representative contact', lawfulBasis: 'contract', retentionDays: 2555, location: 'tenant_representatives,building_occupant_companies' },
-      { key: 'lease_contract', name: 'Lease contract data', lawfulBasis: 'legal_obligation', retentionDays: 2555, location: 'building_contracts' },
-      { key: 'service_request_submitter', name: 'Service request submitter contact', lawfulBasis: 'legitimate_interest', retentionDays: 730, location: 'service_requests' },
-      { key: 'incident_reporter', name: 'Incident reporter identity', lawfulBasis: 'legal_obligation', retentionDays: 2555, location: 'incidents' },
-      { key: 'audit_log_actor', name: 'Audit log actor identifiers', lawfulBasis: 'legal_obligation', retentionDays: null, location: 'audit_entries' },
-      { key: 'photo_evidence', name: 'Photos attached to service requests / completions', lawfulBasis: 'legitimate_interest', retentionDays: 1825, location: 'documents,service_requests' },
+    const base: Array<
+      Omit<Parameters<PrivacyService['upsertCategory']>[2], 'notes'> & { notes?: string }
+    > = [
+      {
+        key: 'user_identity',
+        name: 'User identity (email, display name)',
+        lawfulBasis: 'contract',
+        retentionDays: null,
+        location: 'users,sessions',
+        processors: [],
+      },
+      {
+        key: 'tenant_rep_contact',
+        name: 'Tenant representative contact',
+        lawfulBasis: 'contract',
+        retentionDays: 2555,
+        location: 'tenant_representatives,building_occupant_companies',
+      },
+      {
+        key: 'lease_contract',
+        name: 'Lease contract data',
+        lawfulBasis: 'legal_obligation',
+        retentionDays: 2555,
+        location: 'building_contracts',
+      },
+      {
+        key: 'service_request_submitter',
+        name: 'Service request submitter contact',
+        lawfulBasis: 'legitimate_interest',
+        retentionDays: 730,
+        location: 'service_requests',
+      },
+      {
+        key: 'incident_reporter',
+        name: 'Incident reporter identity',
+        lawfulBasis: 'legal_obligation',
+        retentionDays: 2555,
+        location: 'incidents',
+      },
+      {
+        key: 'audit_log_actor',
+        name: 'Audit log actor identifiers',
+        lawfulBasis: 'legal_obligation',
+        retentionDays: null,
+        location: 'audit_entries',
+      },
+      {
+        key: 'photo_evidence',
+        name: 'Photos attached to service requests / completions',
+        lawfulBasis: 'legitimate_interest',
+        retentionDays: 1825,
+        location: 'documents,service_requests',
+      },
     ];
     const results = [] as any[];
     for (const b of base) results.push(await this.upsertCategory(tenantId, actorUserId, b as any));
@@ -70,7 +145,10 @@ export class PrivacyService {
 
   // ── Records of Processing Activity (RoPA) export ───────
   async ropa(tenantId: string) {
-    const cats = await this.prisma.personalDataCategory.findMany({ where: { tenantId }, orderBy: { key: 'asc' } });
+    const cats = await this.prisma.personalDataCategory.findMany({
+      where: { tenantId },
+      orderBy: { key: 'asc' },
+    });
     const [users, reps, occupants] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.tenantRepresentative.count({ where: { tenantId } }),
@@ -79,8 +157,12 @@ export class PrivacyService {
     return {
       controller: { tenantId },
       categories: cats.map((c) => ({
-        key: c.key, name: c.name, lawfulBasis: c.lawfulBasis,
-        retentionDays: c.retentionDays, location: c.location, processors: c.processors,
+        key: c.key,
+        name: c.name,
+        lawfulBasis: c.lawfulBasis,
+        retentionDays: c.retentionDays,
+        location: c.location,
+        processors: c.processors,
       })),
       subjectCounts: { users, tenantRepresentatives: reps, occupantCompanies: occupants },
       lastGeneratedAt: new Date().toISOString(),
@@ -88,9 +170,14 @@ export class PrivacyService {
   }
 
   // ── DSAR ───────────────────────────────────────────────
-  async createDsar(tenantId: string, body: {
-    subjectEmail: string; subjectUserId?: string; kind: string;
-  }) {
+  async createDsar(
+    tenantId: string,
+    body: {
+      subjectEmail: string;
+      subjectUserId?: string;
+      kind: string;
+    },
+  ) {
     if (!body.subjectEmail) throw new BadRequestException('subjectEmail required');
     if (!DSAR_KINDS.includes(body.kind)) {
       throw new BadRequestException(`kind must be one of ${DSAR_KINDS.join(', ')}`);
@@ -109,7 +196,9 @@ export class PrivacyService {
     const where: any = { tenantId };
     if (status) where.status = status;
     return this.prisma.dsarRequest.findMany({
-      where, orderBy: { requestedAt: 'desc' }, take: 100,
+      where,
+      orderBy: { requestedAt: 'desc' },
+      take: 100,
     });
   }
 
@@ -119,15 +208,27 @@ export class PrivacyService {
     if (params.status) where.status = params.status;
     if (params.category) where.category = params.category;
     return this.prisma.subprocessorRegistry.findMany({
-      where, orderBy: { name: 'asc' },
+      where,
+      orderBy: { name: 'asc' },
     });
   }
 
-  async upsertSubprocessor(tenantId: string, actorUserId: string, body: {
-    name: string; legalEntity?: string; countryCode?: string; category: string;
-    websiteUrl?: string; dpoEmail?: string; region?: string;
-    dataCategories?: string[]; notes?: string; status?: string;
-  }) {
+  async upsertSubprocessor(
+    tenantId: string,
+    actorUserId: string,
+    body: {
+      name: string;
+      legalEntity?: string;
+      countryCode?: string;
+      category: string;
+      websiteUrl?: string;
+      dpoEmail?: string;
+      region?: string;
+      dataCategories?: string[];
+      notes?: string;
+      status?: string;
+    },
+  ) {
     if (!body.name || !body.category) throw new BadRequestException('name and category required');
     const allowedStatus = ['active', 'suspended', 'retired'];
     if (body.status && !allowedStatus.includes(body.status)) {
@@ -137,9 +238,13 @@ export class PrivacyService {
       where: { tenantId_name: { tenantId, name: body.name } },
     });
     const data = {
-      tenantId, name: body.name, legalEntity: body.legalEntity || null,
-      countryCode: body.countryCode || null, category: body.category,
-      websiteUrl: body.websiteUrl || null, dpoEmail: body.dpoEmail || null,
+      tenantId,
+      name: body.name,
+      legalEntity: body.legalEntity || null,
+      countryCode: body.countryCode || null,
+      category: body.category,
+      websiteUrl: body.websiteUrl || null,
+      dpoEmail: body.dpoEmail || null,
       region: body.region || null,
       dataCategories: body.dataCategories || [],
       notes: body.notes || null,
@@ -149,10 +254,15 @@ export class PrivacyService {
       ? await this.prisma.subprocessorRegistry.update({ where: { id: existing.id }, data })
       : await this.prisma.subprocessorRegistry.create({ data });
     await this.audit.write({
-      tenantId, actor: actorUserId, role: 'dpo',
+      tenantId,
+      actor: actorUserId,
+      role: 'dpo',
       action: existing ? 'privacy.subprocessor.updated' : 'privacy.subprocessor.added',
-      entity: row.id, entityType: 'subprocessor',
-      building: '-', ip: '-', sensitive: true,
+      entity: row.id,
+      entityType: 'subprocessor',
+      building: '-',
+      ip: '-',
+      sensitive: true,
     });
     return row;
   }
@@ -170,16 +280,46 @@ export class PrivacyService {
     const sp = await this.prisma.subprocessorRegistry.findFirst({ where: { id, tenantId } });
     if (!sp) throw new NotFoundException('subprocessor not found');
     return this.prisma.subprocessorRegistry.update({
-      where: { id }, data: { status: 'retired' },
+      where: { id },
+      data: { status: 'retired' },
     });
   }
 
   async seedSubprocessors(tenantId: string, actorUserId: string) {
     const seeds = [
-      { name: 'PostgreSQL hosting (managed)', legalEntity: 'Tenant choice', category: 'hosting', region: 'EU/IL', dataCategories: ['user_identity', 'tenant_rep_contact', 'lease_contract', 'audit_log_actor'] },
-      { name: 'S3-compatible object storage', legalEntity: 'Tenant choice', category: 'storage', region: 'EU/IL', dataCategories: ['photo_evidence'] },
-      { name: 'Transactional email (SES/SendGrid)', legalEntity: 'Tenant choice', category: 'email', region: 'EU/IL', dataCategories: ['user_identity', 'service_request_submitter'] },
-      { name: 'SMS gateway (Twilio/Pelephone)', legalEntity: 'Tenant choice', category: 'sms', region: 'IL/Global', dataCategories: ['service_request_submitter'] },
+      {
+        name: 'PostgreSQL hosting (managed)',
+        legalEntity: 'Tenant choice',
+        category: 'hosting',
+        region: 'EU/IL',
+        dataCategories: [
+          'user_identity',
+          'tenant_rep_contact',
+          'lease_contract',
+          'audit_log_actor',
+        ],
+      },
+      {
+        name: 'S3-compatible object storage',
+        legalEntity: 'Tenant choice',
+        category: 'storage',
+        region: 'EU/IL',
+        dataCategories: ['photo_evidence'],
+      },
+      {
+        name: 'Transactional email (SES/SendGrid)',
+        legalEntity: 'Tenant choice',
+        category: 'email',
+        region: 'EU/IL',
+        dataCategories: ['user_identity', 'service_request_submitter'],
+      },
+      {
+        name: 'SMS gateway (Twilio/Pelephone)',
+        legalEntity: 'Tenant choice',
+        category: 'sms',
+        region: 'IL/Global',
+        dataCategories: ['service_request_submitter'],
+      },
     ];
     const out = [];
     for (const s of seeds) out.push(await this.upsertSubprocessor(tenantId, actorUserId, s as any));
@@ -187,19 +327,31 @@ export class PrivacyService {
   }
 
   // ── DPA templates ──────────────────────────────────────
-  async listDpaTemplates(tenantId: string, params: { jurisdiction?: string; includeInactive?: boolean } = {}) {
+  async listDpaTemplates(
+    tenantId: string,
+    params: { jurisdiction?: string; includeInactive?: boolean } = {},
+  ) {
     const where: any = { tenantId };
     if (params.jurisdiction) where.jurisdiction = params.jurisdiction;
     if (!params.includeInactive) where.isActive = true;
     return this.prisma.dpaTemplate.findMany({
-      where, orderBy: [{ key: 'asc' }, { jurisdiction: 'asc' }, { version: 'desc' }],
+      where,
+      orderBy: [{ key: 'asc' }, { jurisdiction: 'asc' }, { version: 'desc' }],
     });
   }
 
-  async createDpaTemplate(tenantId: string, actorUserId: string, body: {
-    key: string; name: string; jurisdiction?: string; bodyMarkdown: string;
-    placeholders?: string[]; retentionYears?: number;
-  }) {
+  async createDpaTemplate(
+    tenantId: string,
+    actorUserId: string,
+    body: {
+      key: string;
+      name: string;
+      jurisdiction?: string;
+      bodyMarkdown: string;
+      placeholders?: string[];
+      retentionYears?: number;
+    },
+  ) {
     if (!body.key || !body.name || !body.bodyMarkdown) {
       throw new BadRequestException('key, name, bodyMarkdown required');
     }
@@ -217,7 +369,9 @@ export class PrivacyService {
       }
       const created = await tx.dpaTemplate.create({
         data: {
-          tenantId, key: body.key, name: body.name,
+          tenantId,
+          key: body.key,
+          name: body.name,
           jurisdiction: body.jurisdiction || 'EU',
           version: prev ? prev.version + 1 : 1,
           isActive: true,
@@ -229,10 +383,15 @@ export class PrivacyService {
         },
       });
       await this.audit.write({
-        tenantId, actor: actorUserId, role: 'dpo',
+        tenantId,
+        actor: actorUserId,
+        role: 'dpo',
         action: prev ? 'privacy.dpa.superseded' : 'privacy.dpa.created',
-        entity: created.id, entityType: 'dpa_template',
-        building: '-', ip: '-', sensitive: true,
+        entity: created.id,
+        entityType: 'dpa_template',
+        building: '-',
+        ip: '-',
+        sensitive: true,
       });
       return created;
     });
@@ -251,8 +410,13 @@ export class PrivacyService {
       body = body.split(`{{${k}}}`).join(values[k]);
     }
     return {
-      templateId: tpl.id, key: tpl.key, version: tpl.version, jurisdiction: tpl.jurisdiction,
-      renderedAt: new Date().toISOString(), values, body,
+      templateId: tpl.id,
+      key: tpl.key,
+      version: tpl.version,
+      jurisdiction: tpl.jurisdiction,
+      renderedAt: new Date().toISOString(),
+      values,
+      body,
     };
   }
 
@@ -263,7 +427,14 @@ export class PrivacyService {
         name: 'Standard Controller → Processor DPA (EU GDPR)',
         jurisdiction: 'EU',
         retentionYears: 7,
-        placeholders: ['controllerName', 'processorName', 'effectiveDate', 'subjectMatter', 'durationMonths', 'dpoEmail'],
+        placeholders: [
+          'controllerName',
+          'processorName',
+          'effectiveDate',
+          'subjectMatter',
+          'durationMonths',
+          'dpoEmail',
+        ],
         bodyMarkdown: `# Data Processing Agreement\n\nThis DPA is entered into between **{{controllerName}}** ("Controller") and **{{processorName}}** ("Processor") effective {{effectiveDate}}.\n\n## 1. Subject matter & duration\n{{subjectMatter}} for {{durationMonths}} months.\n\n## 2. Categories of data + subjects\nPer the Controller's Records of Processing (RoPA) made available to the Processor on request.\n\n## 3. Sub-processing\nProcessor must obtain prior written authorization for any sub-processor and update the published list within 30 days.\n\n## 4. Security\nTOM appendix incorporated by reference (encryption at rest + in transit, access logs, MFA for privileged roles, quarterly DR drill).\n\n## 5. Subject rights & breach notice\nProcessor must support DSAR fulfilment within 5 working days and notify the Controller of any incident within 72 hours.\n\n## 6. Data return / deletion\nOn termination, Processor returns or deletes data per Controller's instruction within 30 days.\n\nDPO: {{dpoEmail}}`,
       },
       {
@@ -306,11 +477,24 @@ export class PrivacyService {
           this.prisma.organizationMembership.findMany({ where: { userId: user.id } }),
           this.prisma.buildingRoleAssignment.findMany({ where: { userId: user.id } }),
           this.prisma.tenantRepresentative.findMany({ where: { userId: user.id, tenantId } }),
-          this.prisma.session.findMany({ where: { userId: user.id }, select: { id: true, createdAt: true, lastSeenAt: true, ipAddress: true, userAgent: true, revokedAt: true } }),
+          this.prisma.session.findMany({
+            where: { userId: user.id },
+            select: {
+              id: true,
+              createdAt: true,
+              lastSeenAt: true,
+              ipAddress: true,
+              userAgent: true,
+              revokedAt: true,
+            },
+          }),
         ]);
         summary.identity = {
-          id: user.id, email: user.email, displayName: user.displayName,
-          createdAt: user.createdAt, lastLoginAt: user.lastLoginAt,
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          createdAt: user.createdAt,
+          lastLoginAt: user.lastLoginAt,
         };
         summary.memberships = memberships;
         summary.orgMemberships = orgMemberships;
@@ -350,9 +534,15 @@ export class PrivacyService {
       },
     });
     await this.audit.write({
-      tenantId, actor: actorUserId, role: 'dpo',
-      action: `dsar.${r.kind}.completed`, entity: id, entityType: 'dsar_request',
-      building: '-', ip: '-', sensitive: true,
+      tenantId,
+      actor: actorUserId,
+      role: 'dpo',
+      action: `dsar.${r.kind}.completed`,
+      entity: id,
+      entityType: 'dsar_request',
+      building: '-',
+      ip: '-',
+      sensitive: true,
     });
     return updated;
   }

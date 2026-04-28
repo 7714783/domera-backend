@@ -234,8 +234,10 @@ async function ensureBuiltInTemplate(tenantId, spec) {
     return prisma.documentTemplate.update({
       where: { id: existing.id },
       data: {
-        name: spec.name, description: spec.description,
-        kind: spec.kind, documentTypeKey: spec.documentTypeKey,
+        name: spec.name,
+        description: spec.description,
+        kind: spec.kind,
+        documentTypeKey: spec.documentTypeKey,
         bodyMarkdown: spec.bodyMarkdown,
         requiresPhoto: !!spec.requiresPhoto,
         requiresDigitalSignoff: !!spec.requiresDigitalSignoff,
@@ -283,7 +285,10 @@ async function ingestPrintableFromFile(tenantId, filePath) {
 
   // Slug the key from filename (lowercase, alphanum only).
   const baseName = name.replace(/\.[^/.]+$/, '');
-  const key = `dt_${baseName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')}`;
+  const key = `dt_${baseName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')}`;
 
   // Store the sample file under the same shape documents use.
   const storageKey = `t/${tenantId}/templates/${sha}`;
@@ -373,7 +378,8 @@ async function run() {
         if (!fs.statSync(full).isFile()) continue;
         try {
           const r = await ingestPrintableFromFile(t.id, full);
-          if (r) results.imported += 1; else results.skipped += 1;
+          if (r) results.imported += 1;
+          else results.skipped += 1;
         } catch (e) {
           console.error(`[doc-templates] skip ${f}:`, e?.message || e);
           results.skipped += 1;
@@ -381,12 +387,24 @@ async function run() {
       }
     }
   }
-  console.log(JSON.stringify({
-    ok: true, tenants: tenants.length,
-    ...results,
-    templateDir: TEMPLATE_DIR,
-    note: 'Drop PDF/DOC/XLSX files into DOC template/ and rerun to register as printable templates.',
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        tenants: tenants.length,
+        ...results,
+        templateDir: TEMPLATE_DIR,
+        note: 'Drop PDF/DOC/XLSX files into DOC template/ and rerun to register as printable templates.',
+      },
+      null,
+      2,
+    ),
+  );
 }
 
-run().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());
+run()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(() => prisma.$disconnect());

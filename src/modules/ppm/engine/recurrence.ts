@@ -26,7 +26,7 @@ function parseRule(rule: string): RRule | null {
   try {
     if (rule.includes('DTSTART') || rule.includes('\n')) {
       const obj = rrulestr(rule, { forceset: false });
-      return obj instanceof RRuleSet ? (obj.rrules()[0] || null) : (obj as RRule);
+      return obj instanceof RRuleSet ? obj.rrules()[0] || null : (obj as RRule);
     }
     // canonical short form — provide a default dtstart so library can expand.
     return new RRule({ ...RRule.parseString(rule), dtstart: new Date() });

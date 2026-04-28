@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export interface DomainEvent {
-  type: string;        // e.g. "domera.ppm.task.completed"
-  source: string;      // e.g. "/domera/api/ppm"
-  subject?: string;    // usually the entity id
+  type: string; // e.g. "domera.ppm.task.completed"
+  source: string; // e.g. "/domera/api/ppm"
+  subject?: string; // usually the entity id
   data: any;
   buildingId?: string;
 }
@@ -18,7 +18,11 @@ export interface DomainEvent {
 export class EventsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async emit(tenantId: string, evt: DomainEvent, tx?: { outboxEvent: { create: (args: any) => Promise<any> } }) {
+  async emit(
+    tenantId: string,
+    evt: DomainEvent,
+    tx?: { outboxEvent: { create: (args: any) => Promise<any> } },
+  ) {
     const client: any = tx ?? this.prisma;
     return client.outboxEvent.create({
       data: {

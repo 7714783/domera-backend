@@ -2,8 +2,7 @@
 // Idempotent: skips if a building with the target slug already exists
 // inside the user's first workspace.
 
-import pkg from '@prisma/client';
-const { PrismaClient } = pkg;
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -37,8 +36,12 @@ async function ensureTenantAndOrg(userId) {
   if (!org) {
     org = await prisma.organization.create({
       data: {
-        tenantId, name: 'Menivim New REIT Ltd.', slug: 'menivim-reit',
-        type: 'owner', status: 'active', createdBy: `user:${userId}`,
+        tenantId,
+        name: 'Menivim New REIT Ltd.',
+        slug: 'menivim-reit',
+        type: 'owner',
+        status: 'active',
+        createdBy: `user:${userId}`,
       },
     });
     await prisma.organizationMembership.create({
@@ -56,7 +59,8 @@ async function ensureBuilding(tenantId, organizationId, userId) {
 
   const building = await prisma.building.create({
     data: {
-      tenantId, organizationId,
+      tenantId,
+      organizationId,
       slug: BUILDING_SLUG,
       name: BUILDING_NAME,
       buildingCode: 'MMM',
@@ -74,20 +78,39 @@ async function ensureBuilding(tenantId, organizationId, userId) {
       hasParking: true,
       hasRestaurantsGroundFloor: true,
       hasRooftopMechanical: true,
-      notes: '~25,000 m² gross; ground floor ~1,300–1,500 m² retail/F&B; near Raanana South train station; curtain-wall facade; green building standards; units from ~90 m² fully finished.',
+      notes:
+        '~25,000 m² gross; ground floor ~1,300–1,500 m² retail/F&B; near Raanana South train station; curtain-wall facade; green building standards; units from ~90 m² fully finished.',
       status: 'active',
       createdBy: `user:${userId}`,
     },
   });
 
   await prisma.buildingSettings.create({
-    data: { buildingId: building.id, currency: 'ILS', timezone: 'Asia/Jerusalem', billingCycle: 'monthly', locale: 'he' },
+    data: {
+      buildingId: building.id,
+      currency: 'ILS',
+      timezone: 'Asia/Jerusalem',
+      billingCycle: 'monthly',
+      locale: 'he',
+    },
   });
   await prisma.buildingMandate.create({
-    data: { tenantId, buildingId: building.id, organizationId, mandateType: 'owner', effectiveFrom: new Date() },
+    data: {
+      tenantId,
+      buildingId: building.id,
+      organizationId,
+      mandateType: 'owner',
+      effectiveFrom: new Date(),
+    },
   });
   await prisma.buildingRoleAssignment.create({
-    data: { tenantId, buildingId: building.id, userId, roleKey: 'building_manager', delegatedBy: userId },
+    data: {
+      tenantId,
+      buildingId: building.id,
+      userId,
+      roleKey: 'building_manager',
+      delegatedBy: userId,
+    },
   });
 
   return building;
@@ -114,7 +137,8 @@ async function ensureFloors(tenantId, buildingId) {
   for (let n = -5; n <= 20; n++) {
     await prisma.buildingFloor.create({
       data: {
-        tenantId, buildingId,
+        tenantId,
+        buildingId,
         floorCode: floorCodeFor(n),
         floorNumber: n,
         floorType: floorTypeFor(n),
@@ -136,7 +160,9 @@ async function ensureOfficeUnits(tenantId, buildingId) {
     for (let i = 1; i <= 8; i++) {
       await prisma.buildingUnit.create({
         data: {
-          tenantId, buildingId, floorId: f.id,
+          tenantId,
+          buildingId,
+          floorId: f.id,
           unitCode: `${f.floorCode}-${String(i).padStart(2, '0')}`,
           unitType: 'office',
           isDivisible: true,
@@ -152,9 +178,30 @@ async function ensureTransport(tenantId, buildingId) {
   const existing = await prisma.buildingVerticalTransport.count({ where: { buildingId } });
   if (existing > 0) return;
   const rows = [
-    { code: 'PE-6x', transportType: 'passenger_elevator', servesFromFloor: 0,  servesToFloor: 19, quantity: 6, notes: '6 passenger elevators serving G..19' },
-    { code: 'FE-1',  transportType: 'freight_elevator',   servesFromFloor: -4, servesToFloor: 20, quantity: 1, notes: 'Freight elevator -4..20' },
-    { code: 'PL-2',  transportType: 'parking_lift',       servesFromFloor: -5, servesToFloor: 0,  quantity: 2, notes: 'Two parking lifts G..-5' },
+    {
+      code: 'PE-6x',
+      transportType: 'passenger_elevator',
+      servesFromFloor: 0,
+      servesToFloor: 19,
+      quantity: 6,
+      notes: '6 passenger elevators serving G..19',
+    },
+    {
+      code: 'FE-1',
+      transportType: 'freight_elevator',
+      servesFromFloor: -4,
+      servesToFloor: 20,
+      quantity: 1,
+      notes: 'Freight elevator -4..20',
+    },
+    {
+      code: 'PL-2',
+      transportType: 'parking_lift',
+      servesFromFloor: -5,
+      servesToFloor: 0,
+      quantity: 2,
+      notes: 'Two parking lifts G..-5',
+    },
   ];
   for (const r of rows) {
     await prisma.buildingVerticalTransport.create({ data: { tenantId, buildingId, ...r } });
@@ -171,40 +218,169 @@ async function ensureSystems(tenantId, buildingId) {
 
   const rows = [
     // HVAC — chillers
-    { systemCategory: 'hvac', systemCode: 'CHILLER-01', name: 'Rooftop chiller #1', locationType: 'roof', floorId: rooftop?.id, quantity: 1 },
-    { systemCategory: 'hvac', systemCode: 'CHILLER-02', name: 'Rooftop chiller #2', locationType: 'roof', floorId: rooftop?.id, quantity: 1 },
-    { systemCategory: 'hvac', systemCode: 'CHILLER-03', name: 'Rooftop chiller #3', locationType: 'roof', floorId: rooftop?.id, quantity: 1 },
-    { systemCategory: 'hvac', systemCode: 'CHILLER-04', name: 'Rooftop chiller #4', locationType: 'roof', floorId: rooftop?.id, quantity: 1 },
+    {
+      systemCategory: 'hvac',
+      systemCode: 'CHILLER-01',
+      name: 'Rooftop chiller #1',
+      locationType: 'roof',
+      floorId: rooftop?.id,
+      quantity: 1,
+    },
+    {
+      systemCategory: 'hvac',
+      systemCode: 'CHILLER-02',
+      name: 'Rooftop chiller #2',
+      locationType: 'roof',
+      floorId: rooftop?.id,
+      quantity: 1,
+    },
+    {
+      systemCategory: 'hvac',
+      systemCode: 'CHILLER-03',
+      name: 'Rooftop chiller #3',
+      locationType: 'roof',
+      floorId: rooftop?.id,
+      quantity: 1,
+    },
+    {
+      systemCategory: 'hvac',
+      systemCode: 'CHILLER-04',
+      name: 'Rooftop chiller #4',
+      locationType: 'roof',
+      floorId: rooftop?.id,
+      quantity: 1,
+    },
 
     // Ventilation — various
-    { systemCategory: 'ventilation', systemCode: 'VENT-TOILET-01', name: 'Toilet exhaust fan set', locationType: 'roof', floorId: rooftop?.id, quantity: 3, notes: '3 extraction fans for toilets' },
-    { systemCategory: 'ventilation', systemCode: 'VENT-RESTO-01', name: 'Ground-floor restaurant exhaust (mindafim)', locationType: 'roof', floorId: rooftop?.id, notes: 'Serves ground-floor restaurants' },
-    { systemCategory: 'smoke_extraction', systemCode: 'SMOKE-EXT-01', name: 'Smoke extraction fans', locationType: 'roof', floorId: rooftop?.id, notes: 'Activated on fire alarm' },
-    { systemCategory: 'stair_pressurization', systemCode: 'STAIR-PRESS-01', name: 'Stair pressurization fans', locationType: 'roof', floorId: rooftop?.id, quantity: 2, notes: 'Two fans pressurizing staircases' },
+    {
+      systemCategory: 'ventilation',
+      systemCode: 'VENT-TOILET-01',
+      name: 'Toilet exhaust fan set',
+      locationType: 'roof',
+      floorId: rooftop?.id,
+      quantity: 3,
+      notes: '3 extraction fans for toilets',
+    },
+    {
+      systemCategory: 'ventilation',
+      systemCode: 'VENT-RESTO-01',
+      name: 'Ground-floor restaurant exhaust (mindafim)',
+      locationType: 'roof',
+      floorId: rooftop?.id,
+      notes: 'Serves ground-floor restaurants',
+    },
+    {
+      systemCategory: 'smoke_extraction',
+      systemCode: 'SMOKE-EXT-01',
+      name: 'Smoke extraction fans',
+      locationType: 'roof',
+      floorId: rooftop?.id,
+      notes: 'Activated on fire alarm',
+    },
+    {
+      systemCategory: 'stair_pressurization',
+      systemCode: 'STAIR-PRESS-01',
+      name: 'Stair pressurization fans',
+      locationType: 'roof',
+      floorId: rooftop?.id,
+      quantity: 2,
+      notes: 'Two fans pressurizing staircases',
+    },
 
     // Electrical
-    { systemCategory: 'electrical', systemCode: 'UTILITY-FEED-01', name: 'Utility feed (shnai hevrat hashmal)', locationType: 'electrical_room', notes: 'Main utility feed(s) — detailed count TBD' },
-    { systemCategory: 'electrical', systemCode: 'MAIN-ELEC-ROOM', name: 'Main electrical room', locationType: 'electrical_room' },
-    { systemCategory: 'electrical', systemCode: 'GENERATOR-01', name: 'Emergency generator', locationType: 'electrical_room' },
+    {
+      systemCategory: 'electrical',
+      systemCode: 'UTILITY-FEED-01',
+      name: 'Utility feed (shnai hevrat hashmal)',
+      locationType: 'electrical_room',
+      notes: 'Main utility feed(s) — detailed count TBD',
+    },
+    {
+      systemCategory: 'electrical',
+      systemCode: 'MAIN-ELEC-ROOM',
+      name: 'Main electrical room',
+      locationType: 'electrical_room',
+    },
+    {
+      systemCategory: 'electrical',
+      systemCode: 'GENERATOR-01',
+      name: 'Emergency generator',
+      locationType: 'electrical_room',
+    },
 
     // Water & fire — basement
-    { systemCategory: 'plumbing', systemCode: 'DW-PUMP-01', name: 'Drinking water pump #1', locationType: 'basement', floorId: b5?.id, quantity: 1, notes: 'Pump room on -5' },
-    { systemCategory: 'plumbing', systemCode: 'DW-PUMP-02', name: 'Drinking water pump #2', locationType: 'basement', floorId: b5?.id, quantity: 1, notes: 'Pump room on -5' },
-    { systemCategory: 'fire_safety', systemCode: 'FIRE-PUMP-01', name: 'Fire sprinkler pump', locationType: 'basement', floorId: b5?.id, quantity: 1, notes: 'Pump room on -5' },
+    {
+      systemCategory: 'plumbing',
+      systemCode: 'DW-PUMP-01',
+      name: 'Drinking water pump #1',
+      locationType: 'basement',
+      floorId: b5?.id,
+      quantity: 1,
+      notes: 'Pump room on -5',
+    },
+    {
+      systemCategory: 'plumbing',
+      systemCode: 'DW-PUMP-02',
+      name: 'Drinking water pump #2',
+      locationType: 'basement',
+      floorId: b5?.id,
+      quantity: 1,
+      notes: 'Pump room on -5',
+    },
+    {
+      systemCategory: 'fire_safety',
+      systemCode: 'FIRE-PUMP-01',
+      name: 'Fire sprinkler pump',
+      locationType: 'basement',
+      floorId: b5?.id,
+      quantity: 1,
+      notes: 'Pump room on -5',
+    },
 
     // Amenity / facade / sustainability — from Menivim REIT public site
-    { systemCategory: 'amenity', systemCode: 'LOBBY-MAIN', name: 'Main designed lobby', locationType: 'ground_floor' },
-    { systemCategory: 'amenity', systemCode: 'LOBBY-FLOOR', name: 'Per-floor designed lobby', locationType: 'office_floor' },
-    { systemCategory: 'amenity', systemCode: 'SHOWERS', name: 'Employee shower facilities', locationType: 'basement' },
-    { systemCategory: 'facade', systemCode: 'CURTAIN-WALL', name: 'Floor-to-ceiling glass curtain wall', locationType: 'envelope' },
-    { systemCategory: 'parking', systemCode: 'BIKE-PARK', name: 'Bicycle & motorcycle parking', locationType: 'basement' },
-    { systemCategory: 'sustainability', systemCode: 'GREEN-BLDG', name: 'Green building standards', locationType: 'whole_building' },
+    {
+      systemCategory: 'amenity',
+      systemCode: 'LOBBY-MAIN',
+      name: 'Main designed lobby',
+      locationType: 'ground_floor',
+    },
+    {
+      systemCategory: 'amenity',
+      systemCode: 'LOBBY-FLOOR',
+      name: 'Per-floor designed lobby',
+      locationType: 'office_floor',
+    },
+    {
+      systemCategory: 'amenity',
+      systemCode: 'SHOWERS',
+      name: 'Employee shower facilities',
+      locationType: 'basement',
+    },
+    {
+      systemCategory: 'facade',
+      systemCode: 'CURTAIN-WALL',
+      name: 'Floor-to-ceiling glass curtain wall',
+      locationType: 'envelope',
+    },
+    {
+      systemCategory: 'parking',
+      systemCode: 'BIKE-PARK',
+      name: 'Bicycle & motorcycle parking',
+      locationType: 'basement',
+    },
+    {
+      systemCategory: 'sustainability',
+      systemCode: 'GREEN-BLDG',
+      name: 'Green building standards',
+      locationType: 'whole_building',
+    },
   ];
 
   for (const r of rows) {
     await prisma.buildingSystem.create({
       data: {
-        tenantId, buildingId,
+        tenantId,
+        buildingId,
         ...r,
         floorId: r.floorId || null,
         status: 'active',
@@ -216,7 +392,9 @@ async function ensureSystems(tenantId, buildingId) {
 async function run() {
   const user = await prisma.user.findUnique({ where: { username: OWNER_USERNAME } });
   if (!user) {
-    console.error(`[first-building] user ${OWNER_USERNAME} not found — run reset-and-bootstrap first.`);
+    console.error(
+      `[first-building] user ${OWNER_USERNAME} not found — run reset-and-bootstrap first.`,
+    );
     process.exit(1);
   }
 
@@ -240,5 +418,8 @@ async function run() {
 }
 
 run()
-  .catch((err) => { console.error('[first-building] failed', err); process.exit(1); })
+  .catch((err) => {
+    console.error('[first-building] failed', err);
+    process.exit(1);
+  })
   .finally(() => prisma.$disconnect());

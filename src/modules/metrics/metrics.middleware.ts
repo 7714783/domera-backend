@@ -8,8 +8,15 @@ export class MetricsMiddleware implements NestMiddleware {
 
   use(req: Request, res: Response, next: NextFunction) {
     const start = process.hrtime.bigint();
-    const counter = this.metrics.counter('http_requests_total', 'HTTP requests', ['method', 'status']);
-    const durMs = this.metrics.counter('http_request_duration_ms_total', 'Cumulative request time in ms', ['method']);
+    const counter = this.metrics.counter('http_requests_total', 'HTTP requests', [
+      'method',
+      'status',
+    ]);
+    const durMs = this.metrics.counter(
+      'http_request_duration_ms_total',
+      'Cumulative request time in ms',
+      ['method'],
+    );
     res.on('finish', () => {
       const durNs = Number(process.hrtime.bigint() - start);
       const durationMs = Math.round(durNs / 1_000_000);

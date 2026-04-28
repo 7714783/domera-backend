@@ -9,7 +9,8 @@ export class RoundsService {
     const where: any = { tenantId };
     if (buildingId) where.buildingId = buildingId;
     const rounds = await this.prisma.round.findMany({
-      where, orderBy: { createdAt: 'desc' },
+      where,
+      orderBy: { createdAt: 'desc' },
       include: { waypoints: { orderBy: { orderNo: 'asc' } } },
     });
     return rounds.map((r) => ({
@@ -27,22 +28,38 @@ export class RoundsService {
     return r;
   }
 
-  async create(tenantId: string, actorUserId: string, body: {
-    buildingId: string; name: string; description?: string;
-    recurrenceRule?: string; assignedRole?: string; estimatedMinutes?: number;
-    waypoints?: Array<{
-      label: string; orderNo?: number;
-      locationId?: string; unitId?: string; legacyZoneId?: string;
-      documentTemplateId?: string;
-      requiresPhoto?: boolean; requiresSignature?: boolean;
-      expectedDurationMinutes?: number; notes?: string;
-    }>;
-  }) {
-    if (!body.buildingId || !body.name) throw new BadRequestException('buildingId and name required');
+  async create(
+    tenantId: string,
+    actorUserId: string,
+    body: {
+      buildingId: string;
+      name: string;
+      description?: string;
+      recurrenceRule?: string;
+      assignedRole?: string;
+      estimatedMinutes?: number;
+      waypoints?: Array<{
+        label: string;
+        orderNo?: number;
+        locationId?: string;
+        unitId?: string;
+        legacyZoneId?: string;
+        documentTemplateId?: string;
+        requiresPhoto?: boolean;
+        requiresSignature?: boolean;
+        expectedDurationMinutes?: number;
+        notes?: string;
+      }>;
+    },
+  ) {
+    if (!body.buildingId || !body.name)
+      throw new BadRequestException('buildingId and name required');
     const round = await this.prisma.round.create({
       data: {
-        tenantId, buildingId: body.buildingId,
-        name: body.name, description: body.description || null,
+        tenantId,
+        buildingId: body.buildingId,
+        name: body.name,
+        description: body.description || null,
         recurrenceRule: body.recurrenceRule || null,
         assignedRole: body.assignedRole || null,
         estimatedMinutes: body.estimatedMinutes ?? null,
@@ -54,7 +71,8 @@ export class RoundsService {
       for (const w of body.waypoints) {
         await this.prisma.roundWaypoint.create({
           data: {
-            tenantId, roundId: round.id,
+            tenantId,
+            roundId: round.id,
             orderNo: w.orderNo ?? n++,
             label: w.label,
             locationId: w.locationId || null,
@@ -72,36 +90,57 @@ export class RoundsService {
     return this.get(tenantId, round.id);
   }
 
-  async update(tenantId: string, id: string, body: Partial<{
-    name: string; description: string; recurrenceRule: string | null;
-    assignedRole: string | null; estimatedMinutes: number | null; isActive: boolean;
-  }>) {
+  async update(
+    tenantId: string,
+    id: string,
+    body: Partial<{
+      name: string;
+      description: string;
+      recurrenceRule: string | null;
+      assignedRole: string | null;
+      estimatedMinutes: number | null;
+      isActive: boolean;
+    }>,
+  ) {
     const r = await this.prisma.round.findFirst({ where: { id, tenantId } });
     if (!r) throw new NotFoundException('round not found');
     return this.prisma.round.update({ where: { id }, data: body });
   }
 
-  async addWaypoint(tenantId: string, roundId: string, body: {
-    label: string; orderNo?: number;
-    locationId?: string; unitId?: string; legacyZoneId?: string;
-    documentTemplateId?: string;
-    requiresPhoto?: boolean; requiresSignature?: boolean;
-    expectedDurationMinutes?: number; notes?: string;
-  }) {
+  async addWaypoint(
+    tenantId: string,
+    roundId: string,
+    body: {
+      label: string;
+      orderNo?: number;
+      locationId?: string;
+      unitId?: string;
+      legacyZoneId?: string;
+      documentTemplateId?: string;
+      requiresPhoto?: boolean;
+      requiresSignature?: boolean;
+      expectedDurationMinutes?: number;
+      notes?: string;
+    },
+  ) {
     const r = await this.prisma.round.findFirst({ where: { id: roundId, tenantId } });
     if (!r) throw new NotFoundException('round not found');
     if (!body.label) throw new BadRequestException('label required');
     let orderNo = body.orderNo;
     if (orderNo === undefined || orderNo === null) {
       const last = await this.prisma.roundWaypoint.findFirst({
-        where: { roundId }, orderBy: { orderNo: 'desc' }, select: { orderNo: true },
+        where: { roundId },
+        orderBy: { orderNo: 'desc' },
+        select: { orderNo: true },
       });
       orderNo = (last?.orderNo ?? 0) + 1;
     }
     return this.prisma.roundWaypoint.create({
       data: {
-        tenantId, roundId,
-        orderNo, label: body.label,
+        tenantId,
+        roundId,
+        orderNo,
+        label: body.label,
         locationId: body.locationId || null,
         unitId: body.unitId || null,
         legacyZoneId: body.legacyZoneId || null,
