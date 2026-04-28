@@ -182,8 +182,149 @@ export class SesMailer implements MailerAdapter {
   }
 }
 
+// ──────────────────────────────────────────────────────────────────
+// Resend (https://resend.com) — modern REST email API. Default
+// production provider.
+//
+// Outbound: POST https://api.resend.com/emails with Bearer auth.
+// Inbound + status webhooks are svix-signed; verification uses the
+// svix-id + svix-timestamp + raw body HMAC-SHA256 against
+// RESEND_WEBHOOK_SECRET (whsec_… format).
+//
+// No SDK required — straight `fetch`. We use Node 20+ global fetch
+// (the API target). Falls back gracefully if RESEND_API_KEY is unset
+// (returns ok=false so the worker dead-letters with a clear message).
+// ──────────────────────────────────────────────────────────────────
+export class ResendMailer implements MailerAdapter {
+  readonly providerName = 'resend';
+  private readonly log = new Logger('ResendMailer');
+
+  constructor(
+    private readonly apiKey: string,
+    private readonly webhookSecret: string | undefined,
+  ) {}
+
+  async send(mail: OutgoingMail): Promise<MailSendResult> {
+    if (!this.apiKey) {
+      return { ok: false, error: 'RESEND_API_KEY is not set' };
+    }
+    try {
+      const headersArray = mail.headers
+        ? Object.entries(mail.headers).map(([name, value]) => ({ name, value }))
+        : undefined;
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          from: mail.from,
+          to: mail.to,
+          subject: mail.subject,
+          html: mail.html,
+          text: mail.text,
+          ...(headersArray ? { headers: headersArray } : {}),
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        id?: string;
+        message?: string;
+        name?: string;
+      };
+      if (!res.ok) {
+        return {
+          ok: false,
+          error: `Resend ${res.status} ${json?.name || ''}: ${json?.message || 'unknown'}`,
+        };
+      }
+      return { ok: true, providerMessageId: json.id };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
+  }
+
+  // Resend webhooks are signed via svix. Headers carry:
+  //   svix-id, svix-timestamp, svix-signature (space-separated list of
+  //   `v1,<base64>` entries — any one matching is sufficient).
+  // Signature payload: `${svix-id}.${svix-timestamp}.${rawBody}`.
+  // Compute: base64( HMAC-SHA256( secretBytes, payload ) ).
+  // RESEND_WEBHOOK_SECRET begins with `whsec_` — strip prefix and
+  // base64-decode to get the raw key bytes.
+  verifyInboundSignature(headers: Record<string, string>, rawBody: string): boolean {
+    if (!this.webhookSecret) {
+      this.log.warn(
+        'RESEND_WEBHOOK_SECRET not set — refusing all inbound payloads. Set it via Resend dashboard.',
+      );
+      return false;
+    }
+    const id = lookupHeader(headers, 'svix-id');
+    const ts = lookupHeader(headers, 'svix-timestamp');
+    const sig = lookupHeader(headers, 'svix-signature');
+    if (!id || !ts || !sig) return false;
+
+    // Replay protection — reject timestamps older than 5 minutes (svix
+    // default tolerance). Number(ts) is seconds.
+    const tsNum = Number(ts);
+    if (!Number.isFinite(tsNum)) return false;
+    const drift = Math.abs(Date.now() / 1000 - tsNum);
+    if (drift > 300) return false;
+
+    let secretBytes: Buffer;
+    try {
+      const raw = this.webhookSecret.startsWith('whsec_')
+        ? this.webhookSecret.slice(6)
+        : this.webhookSecret;
+      // svix secrets are base64; on malformed input fall back to raw bytes.
+      secretBytes = Buffer.from(raw, 'base64');
+      if (secretBytes.length === 0) secretBytes = Buffer.from(raw, 'utf8');
+    } catch {
+      return false;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const crypto = require('node:crypto') as typeof import('node:crypto');
+    const payload = `${id}.${ts}.${rawBody}`;
+    const expected = crypto.createHmac('sha256', secretBytes).update(payload).digest('base64');
+
+    // svix-signature header: "v1,<sig> v1,<sig>" — any match wins.
+    const candidates = sig
+      .split(/\s+/)
+      .map((part) => {
+        const [, value] = part.split(',');
+        return value || '';
+      })
+      .filter(Boolean);
+    return candidates.some((c) => safeEq(c, expected));
+  }
+}
+
+// Header lookup is case-insensitive (Express normalises to lower; some
+// providers / proxies don't).
+function lookupHeader(h: Record<string, string>, name: string): string | undefined {
+  const lower = name.toLowerCase();
+  for (const k of Object.keys(h)) {
+    if (k.toLowerCase() === lower) return h[k];
+  }
+  return undefined;
+}
+
+// Constant-time comparison of base64 strings — guards against timing
+// oracles when checking signatures.
+function safeEq(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let acc = 0;
+  for (let i = 0; i < a.length; i++) {
+    acc |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return acc === 0;
+}
+
 export function buildMailerFromEnv(env: NodeJS.ProcessEnv): MailerAdapter {
   const provider = (env.EMAIL_PROVIDER || 'noop').toLowerCase();
+  if (provider === 'resend') {
+    return new ResendMailer(env.RESEND_API_KEY || '', env.RESEND_WEBHOOK_SECRET);
+  }
   if (provider === 'smtp') {
     return new SmtpMailer(
       env.SMTP_HOST || 'localhost',

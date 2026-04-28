@@ -86,16 +86,28 @@ Internal service API: `NotificationsService.dispatchEvent(event, mailer)` is cal
 
 | Var | Purpose | Default |
 |---|---|---|
-| `EMAIL_PROVIDER` | `noop`/`smtp`/`ses` | `noop` |
+| `EMAIL_PROVIDER` | `noop` / **`resend`** (default prod) / `smtp` / `ses` | `noop` |
 | `EMAIL_FROM` | From address | `notifications@domerahub.com` |
+| `RESEND_API_KEY` | Resend API key (`re_…`) — required when provider=resend | — |
+| `RESEND_WEBHOOK_SECRET` | svix-style secret (`whsec_…`) for inbound signature | — |
 | `SMTP_HOST/PORT/USER/PASS/SECURE` | SMTP transport | — |
 | `AWS_REGION/AWS_SES_FROM_ARN` | SES transport | — |
-| `INBOUND_EMAIL_SECRET` | Shared secret for inbound webhook fallback auth | — |
+| `INBOUND_EMAIL_SECRET` | Shared secret fallback for SMTP relay inbound | — |
 | `NOTIFY_POLL_INTERVAL_MS` | Worker tick | `5000` |
 | `NOTIFY_BATCH_SIZE` | Rows per tick | `25` |
 | `NOTIFY_DISABLE` | `1` to disable worker entirely (tests) | unset |
 
-`assertProdEnv()` rejects production boots with `EMAIL_PROVIDER=noop` — emails MUST really go out in prod.
+`assertProdEnv()` rejects production boots with:
+- **HARD**: `EMAIL_PROVIDER=resend` AND `RESEND_API_KEY` unset (every send would fail).
+- **SOFT** (escalatable): `EMAIL_PROVIDER=noop` in prod; `RESEND_WEBHOOK_SECRET` unset (inbound svix verification disabled); `EMAIL_FROM` unset.
+
+### Resend setup
+1. Resend dashboard → API Keys → create with `Full access` for sending. Stamp on Railway/Vercel as `RESEND_API_KEY` (`re_…`).
+2. Resend dashboard → Webhooks → add endpoint `https://<api-host>/v1/mail/inbound/resend` → enable `email.received` (and `email.bounced` / `email.complained` for the suppression flow). Copy the signing secret (`whsec_…`) into `RESEND_WEBHOOK_SECRET`.
+3. Domain → verify SPF/DKIM/DMARC records Resend prints. Set `EMAIL_FROM` to a verified domain address (e.g. `notifications@<your-domain>`).
+4. For inbound replies you want routed to a case → forward `inbound+<workspaceSlug>@<your-domain>` to Resend's inbound parser; the controller resolves tenant by the local-part of the To: address.
+
+Switching providers is one env change — no code edits.
 
 ## 9. Hard rules
 

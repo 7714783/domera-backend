@@ -81,8 +81,36 @@ export function checkProdEnv(env: NodeJS.ProcessEnv = process.env): EnvGuardErro
     errs.push({
       variable: 'EMAIL_PROVIDER',
       severity: 'soft',
-      reason: 'noop in PROD — emails will not actually leave the box; set to "smtp" or "ses"',
+      reason:
+        'noop in PROD — emails will not actually leave the box; set to "resend" (default) or "smtp"/"ses"',
     });
+  }
+  if (provider === 'resend') {
+    // INIT-014 — Resend is the default production provider. API key
+    // mandatory; webhook secret required to verify svix-signed inbound.
+    if (!env.RESEND_API_KEY) {
+      errs.push({
+        variable: 'RESEND_API_KEY',
+        severity: 'hard',
+        reason:
+          'EMAIL_PROVIDER=resend but RESEND_API_KEY is unset — every send will fail',
+      });
+    } else if (!env.RESEND_API_KEY.startsWith('re_')) {
+      errs.push({
+        variable: 'RESEND_API_KEY',
+        severity: 'soft',
+        reason:
+          'does not start with "re_" — Resend keys begin with that prefix, double-check the env',
+      });
+    }
+    if (!env.RESEND_WEBHOOK_SECRET) {
+      errs.push({
+        variable: 'RESEND_WEBHOOK_SECRET',
+        severity: 'soft',
+        reason:
+          'unset — Resend inbound webhooks will be rejected (svix signature cannot be verified). Required if you accept replies/bounces.',
+      });
+    }
   }
   if (provider === 'smtp') {
     if (!env.SMTP_HOST) {
@@ -100,15 +128,16 @@ export function checkProdEnv(env: NodeJS.ProcessEnv = process.env): EnvGuardErro
       reason: 'unset — defaults to notifications@domerahub.com; set explicitly per workspace domain',
     });
   }
-  // Inbound webhook secret is mandatory in prod when SMTP relay is the
-  // chosen ingress (no provider-level signature). Soft because SES uses
-  // SNS-signed messages and doesn't need the shared secret.
-  if (!env.INBOUND_EMAIL_SECRET && provider !== 'ses') {
+  // Inbound webhook shared-secret fallback: only required when the
+  // provider doesn't sign on its own. Resend (svix) and SES (SNS) DO
+  // sign — only the SMTP-relay path needs INBOUND_EMAIL_SECRET.
+  const providerSelfSigns = provider === 'resend' || provider === 'ses';
+  if (!env.INBOUND_EMAIL_SECRET && !providerSelfSigns) {
     errs.push({
       variable: 'INBOUND_EMAIL_SECRET',
       severity: 'soft',
       reason:
-        'unset — without it, /v1/mail/inbound/:provider rejects unsigned payloads (which is correct for SES; required for SMTP relay)',
+        'unset — without it, /v1/mail/inbound/:provider rejects unsigned payloads (correct for Resend/SES; required for SMTP relay)',
     });
   }
 

@@ -78,10 +78,24 @@ Selected at boot via `EMAIL_PROVIDER`:
 | Value | Adapter | Use |
 |---|---|---|
 | `noop` | `NoopMailer` | Dev / CI — logs only, never sends. Default. |
-| `smtp` | `SmtpMailer` | Generic SMTP (postfix relay, Mailgun SMTP, etc.). Requires `SMTP_HOST/PORT/USER/PASS`. |
+| **`resend`** | **`ResendMailer`** | **Production default.** REST API + svix-signed webhooks. Requires `RESEND_API_KEY` (`re_…`) and `RESEND_WEBHOOK_SECRET` (`whsec_…`). Zero SDK — uses Node 20 global fetch. |
+| `smtp` | `SmtpMailer` | Generic SMTP (postfix relay, Mailgun SMTP, etc.). Requires `SMTP_HOST/PORT/USER/PASS`. nodemailer is an optional dep. |
 | `ses` | `SesMailer` | AWS SES. Requires `AWS_REGION` + (optional) `AWS_SES_FROM_ARN`. SDK is an optional dep — if absent, falls back to no-op with a warning. |
 
 Switching providers is a one-line env change. Domain modules never see the provider type.
+
+### Resend specifics
+
+- **Outbound**: `POST https://api.resend.com/emails` with Bearer auth. The Resend message id (`re_…`) is stored in `notification_deliveries.providerMessageId`.
+- **Inbound + status webhooks**: Resend signs every payload via svix. Headers `svix-id`, `svix-timestamp`, `svix-signature` are verified against `RESEND_WEBHOOK_SECRET`:
+  1. `payload = ${svix-id}.${svix-timestamp}.${rawBody}`.
+  2. `expected = base64( HMAC-SHA256( decode_base64(secret), payload ) )`.
+  3. `svix-signature` is a space-separated list of `v1,<base64>` candidates — any constant-time match wins.
+  4. Replays older than 5 minutes are rejected (svix default tolerance).
+- **Raw body capture**: Nest is bootstrapped with `rawBody: true` in `main.ts`, so `req.rawBody` carries the original byte sequence the proxy received. Re-stringifying via `JSON.stringify` would change key order / whitespace and BREAK the signature — the controller passes `req.rawBody.toString('utf8')` to the verifier.
+- **Inbound envelope**: Resend wraps incoming mail as `{ type: 'email.received', data: {...} }`. The controller unwraps the `data` field for normalisation; subject, body, attachments are read from `data.*`.
+- **Tenant routing**: convention `inbound+<workspaceSlug>@<your-domain>` resolves to `tenantId` in `EmailInboundEvent`. Set up Resend's inbound endpoint to forward replies; the local-part decides the workspace.
+- **Bounce/complaint hook**: Resend emits `email.bounced` and `email.complained` events through the same webhook. Phase 2 wires them to `EmailSuppression` writes; today they land as raw `EmailInboundEvent` rows for forensics.
 
 ## 6. Inbound flow
 

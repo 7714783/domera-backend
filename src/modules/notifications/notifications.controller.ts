@@ -261,20 +261,45 @@ export class MailInboundController {
     @Req() req: any,
     @Headers() headers: Record<string, string>,
   ) {
+    // Resend wraps the inbound mail in an "email.received" event:
+    //   { type: 'email.received', data: { from, to, subject, html, text, attachments[] } }
+    // Other providers send the mail at the top level. Detect both
+    // shapes and normalise.
+    const isResendEnvelope =
+      provider === 'resend' && typeof body?.type === 'string' && body?.data;
+    const inner = isResendEnvelope ? body.data : body;
     const parsed: InboundPayload = {
       provider,
-      providerEventId: body?.id || body?.messageId || body?.MessageId,
+      providerEventId: body?.id || inner?.id || inner?.messageId || inner?.MessageId,
       fromAddress:
-        body?.from || body?.From || body?.fromAddress || body?.envelope?.from || 'unknown@unknown',
+        inner?.from ||
+        inner?.From ||
+        inner?.fromAddress ||
+        inner?.envelope?.from ||
+        'unknown@unknown',
       toAddress:
-        body?.to || body?.To || body?.toAddress || body?.envelope?.to?.[0] || 'unknown@unknown',
-      subject: body?.subject || body?.Subject,
-      bodyText: body?.text || body?.Text || body?.bodyText,
-      bodyHtml: body?.html || body?.Html || body?.bodyHtml,
-      attachments: body?.attachments || [],
+        inner?.to ||
+        inner?.To ||
+        inner?.toAddress ||
+        (Array.isArray(inner?.envelope?.to) ? inner.envelope.to[0] : undefined) ||
+        'unknown@unknown',
+      subject: inner?.subject || inner?.Subject,
+      bodyText: inner?.text || inner?.Text || inner?.bodyText,
+      bodyHtml: inner?.html || inner?.Html || inner?.bodyHtml,
+      attachments: inner?.attachments || [],
       raw: body,
     };
-    const rawString = typeof body === 'string' ? body : JSON.stringify(body);
+    // INIT-014 — svix (Resend) signs the EXACT raw body. We MUST pass
+    // the bytes the proxy received, not a re-stringified copy. Nest is
+    // started with `rawBody: true`, so req.rawBody is the original
+    // Buffer; fall back to JSON.stringify only when rawBody is missing
+    // (non-JSON payload, dev curl without Content-Type, etc.).
+    const rawString =
+      req?.rawBody && typeof req.rawBody.toString === 'function'
+        ? req.rawBody.toString('utf8')
+        : typeof body === 'string'
+          ? body
+          : JSON.stringify(body);
     const result = await this.inbound.ingest(provider, headers, rawString, parsed, this.mailer);
     if (!result.signatureValid) {
       // 401 status; payload row stays for forensic value.
