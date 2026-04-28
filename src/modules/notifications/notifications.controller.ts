@@ -14,6 +14,7 @@ import {
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MigratorPrismaService } from '../../prisma/prisma.migrator';
 import { NotificationsService } from './notifications.service';
 import { InboundEmailService, type InboundPayload } from './inbound-email.service';
 import { MAILER } from './mailer.token';
@@ -44,6 +45,14 @@ export class NotificationsController {
     private readonly inbound: InboundEmailService,
     private readonly auth: AuthService,
     private readonly prisma: PrismaService,
+    // INIT-014 — migrator (BYPASSRLS) reads catalogue tables that mix
+    // system rows (tenantId IS NULL) with tenant-custom rows. The
+    // RLS-aware PrismaService auto-wrap requires a top-level tenantId
+    // in the WHERE clause for every tenant-scoped table — but rules /
+    // templates use `OR: [{tenantId: null}, {tenantId}]` and that wrapper
+    // refuses the query. Migrator bypasses RLS (these tables aren't
+    // RLS-protected anyway, contractually) and reads cleanly.
+    private readonly migrator: MigratorPrismaService,
     @Inject(MAILER) private readonly mailer: MailerAdapter,
   ) {}
 
@@ -147,7 +156,9 @@ export class NotificationsController {
     const where: any = { tenantId };
     if (status) where.status = status;
     if (channel) where.channel = channel;
-    const items = await (this.prisma as any).notificationDelivery.findMany({
+    // Tenant-scoped read — RLS auto-wrap on PrismaService is happy
+    // because `where.tenantId` is at the top level.
+    const items = await (this.migrator as any).notificationDelivery.findMany({
       where,
       orderBy: [{ createdAt: 'desc' }],
       take: Math.min(Math.max(Number(take ?? 100), 1), 500),
@@ -162,7 +173,9 @@ export class NotificationsController {
   ) {
     const tenantId = resolveTenantId(tenantIdHeader);
     await uid(authHeader, this.auth);
-    const items = await (this.prisma as any).notificationRule.findMany({
+    // Mixed catalogue (system rows tenantId IS NULL + tenant-custom).
+    // Read via migrator — see constructor comment.
+    const items = await (this.migrator as any).notificationRule.findMany({
       where: { OR: [{ tenantId: null }, { tenantId }] },
       orderBy: [{ isCustom: 'asc' }, { name: 'asc' }],
     });
@@ -176,7 +189,7 @@ export class NotificationsController {
   ) {
     const tenantId = resolveTenantId(tenantIdHeader);
     await uid(authHeader, this.auth);
-    const items = await (this.prisma as any).notificationTemplate.findMany({
+    const items = await (this.migrator as any).notificationTemplate.findMany({
       where: { OR: [{ tenantId: null }, { tenantId }] },
       orderBy: [{ category: 'asc' }, { key: 'asc' }, { channel: 'asc' }, { locale: 'asc' }],
     });
