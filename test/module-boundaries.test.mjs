@@ -31,7 +31,17 @@ const modulesDir = join(here, '..', 'src', 'modules');
 // INIT-013 — `team` and `role-assignments` are @Global() so PPM/Cleaning/
 // Reactive can inject the eligible-assignees resolver without listing
 // the module explicitly.
-const UNIVERSAL = new Set(['audit', 'auth', 'iam', 'events', 'role-assignments', 'team']);
+// INIT-014 — `notifications` is @Global() so domain modules can call
+// the dispatcher without import cycles (kept consistent with audit/events).
+const UNIVERSAL = new Set([
+  'audit',
+  'auth',
+  'iam',
+  'events',
+  'role-assignments',
+  'team',
+  'notifications',
+]);
 
 // Pairs already linked through DI (NestModule → exported service).
 // If module X imports module Y's *.service.ts directly, it should also

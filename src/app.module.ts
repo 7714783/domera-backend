@@ -56,6 +56,8 @@ import { ContractorsWorkspaceModule } from './modules/contractors-workspace/cont
 import { TeamModule } from './modules/team/team.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { RoleAssignmentsModule } from './modules/role-assignments/role-assignments.module';
+// INIT-014 Unified Notifications + Mailer
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -113,6 +115,7 @@ import { RoleAssignmentsModule } from './modules/role-assignments/role-assignmen
     TeamModule,
     RolesModule,
     RoleAssignmentsModule,
+    NotificationsModule,
   ],
 })
 export class AppModule implements NestModule {

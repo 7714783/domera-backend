@@ -138,6 +138,50 @@ const CATALOG = {
     schemaVersion: 1,
     payloadShape: ['floorId', 'tenantId', 'changeType', 'roleKey'],
   },
+
+  // ── INIT-014 Unified Notifications ───────────────────────────────
+  // Domain events the notifications module subscribes to. Each entry
+  // declares the producer (which module emits it) + consumers
+  // (notifications + anyone else listening).
+  'ppm.task.assigned': {
+    producer: 'ppm',
+    consumers: ['notifications'],
+    schemaVersion: 1,
+    payloadShape: ['taskId', 'tenantId', 'buildingId', 'assignedTeamMemberId', 'taskTitle'],
+  },
+  'approval.request.pending': {
+    producer: 'approvals',
+    consumers: ['notifications'],
+    schemaVersion: 1,
+    payloadShape: ['approvalId', 'tenantId', 'subjectType', 'subjectId', 'amount', 'requesterTeamMemberId'],
+  },
+  'document.requested': {
+    producer: 'documents',
+    consumers: ['notifications'],
+    schemaVersion: 1,
+    payloadShape: ['documentRequestId', 'tenantId', 'documentType', 'recipientEmails', 'contextLabel'],
+  },
+  'invoice.awaiting_confirmation': {
+    producer: 'vendor-invoices',
+    consumers: ['notifications'],
+    schemaVersion: 1,
+    payloadShape: ['invoiceId', 'tenantId', 'amount', 'vendorName', 'invoiceNumber'],
+  },
+  // Notifications module's own outbound events — produced after a
+  // delivery succeeds or dead-letters. Currently consumer-less in the
+  // catalog (audit ingests them via audit.write directly).
+  'notification.delivered': {
+    producer: 'notifications',
+    consumers: [],
+    schemaVersion: 1,
+    payloadShape: ['deliveryId', 'tenantId', 'channel', 'recipientAddress'],
+  },
+  'notification.failed': {
+    producer: 'notifications',
+    consumers: [],
+    schemaVersion: 1,
+    payloadShape: ['deliveryId', 'tenantId', 'channel', 'attempts', 'error'],
+  },
 };
 
 // ── Self-validation ───────────────────────────────────────────

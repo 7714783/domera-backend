@@ -100,6 +100,22 @@ const OWNERSHIP = {
   // Role grants — owner: role-assignments. iam.service legacy revoke
   // path remains during migration.
   teamMemberRoleAssignment: ['role-assignments', 'team', 'iam'],
+  // ── INIT-014 Unified Notifications + Mailer ───────────────────────
+  // The notifications module is sole owner of every delivery row + rule
+  // + template + preference + inbound event + suppression. Domain
+  // modules NEVER write here — they publish events; the subscriber
+  // creates deliveries.
+  // Legacy `notifications` (in-app inbox) — owner: notifications.
+  // Transitional: ppm.sla-reminder.worker writes legacy in-app rows
+  // directly until INIT-014 phase 2 routes SLA reminders through the
+  // notifications dispatcher.
+  notification: ['notifications', 'ppm'],
+  notificationRule: 'notifications',
+  notificationTemplate: 'notifications',
+  notificationDelivery: 'notifications',
+  notificationPreference: 'notifications',
+  emailInboundEvent: 'notifications',
+  emailSuppression: 'notifications',
 };
 
 const WRITE_OPS = ['create', 'update', 'upsert', 'delete', 'deleteMany', 'updateMany', 'createMany'];

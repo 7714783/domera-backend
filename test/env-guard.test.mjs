@@ -74,6 +74,13 @@ test('passes when all production env is valid', () => {
     JWT_SECRET: 'a'.repeat(40),
     CORS_ORIGINS: 'https://app.domerahub.com,https://domerahub.com',
     DATABASE_URL: 'postgres://x',
+    // INIT-014 — outbound email + inbound webhook config required so
+    // the env-guard does not emit soft warnings for the noop default
+    // / missing EMAIL_FROM / missing INBOUND_EMAIL_SECRET.
+    EMAIL_PROVIDER: 'smtp',
+    SMTP_HOST: 'smtp.example.com',
+    EMAIL_FROM: 'notifications@example.com',
+    INBOUND_EMAIL_SECRET: 'inbound-webhook-shared-secret',
   });
   assert.equal(errs.length, 0);
 });

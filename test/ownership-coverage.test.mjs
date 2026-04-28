@@ -187,8 +187,8 @@ const EXEMPT = {
   // Identity provider (SSO)
   identityProvider: 'written by sso module',
 
-  // Notifications
-  notification: 'legacy — superseded by push-notifications event flow',
+  // Notifications: legacy `notification` row promoted to OWNERSHIP under
+  // notifications module (INIT-014) — removed from EXEMPT.
   residentRequest: 'legacy — superseded by ServiceRequest',
 
   // Rounds

@@ -73,6 +73,45 @@ export function checkProdEnv(env: NodeJS.ProcessEnv = process.env): EnvGuardErro
     });
   }
 
+  // INIT-014 — outbound email provider must NOT be `noop` in production.
+  // The dispatcher will silently swallow every send otherwise. Soft so
+  // a partial deploy can still boot; ENV_GUARD_STRICT escalates it.
+  const provider = (env.EMAIL_PROVIDER || 'noop').toLowerCase();
+  if (provider === 'noop') {
+    errs.push({
+      variable: 'EMAIL_PROVIDER',
+      severity: 'soft',
+      reason: 'noop in PROD — emails will not actually leave the box; set to "smtp" or "ses"',
+    });
+  }
+  if (provider === 'smtp') {
+    if (!env.SMTP_HOST) {
+      errs.push({
+        variable: 'SMTP_HOST',
+        severity: 'soft',
+        reason: 'EMAIL_PROVIDER=smtp but SMTP_HOST is unset',
+      });
+    }
+  }
+  if (!env.EMAIL_FROM) {
+    errs.push({
+      variable: 'EMAIL_FROM',
+      severity: 'soft',
+      reason: 'unset — defaults to notifications@domerahub.com; set explicitly per workspace domain',
+    });
+  }
+  // Inbound webhook secret is mandatory in prod when SMTP relay is the
+  // chosen ingress (no provider-level signature). Soft because SES uses
+  // SNS-signed messages and doesn't need the shared secret.
+  if (!env.INBOUND_EMAIL_SECRET && provider !== 'ses') {
+    errs.push({
+      variable: 'INBOUND_EMAIL_SECRET',
+      severity: 'soft',
+      reason:
+        'unset — without it, /v1/mail/inbound/:provider rejects unsigned payloads (which is correct for SES; required for SMTP relay)',
+    });
+  }
+
   return errs;
 }
 

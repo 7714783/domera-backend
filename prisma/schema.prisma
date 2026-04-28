@@ -2353,6 +2353,192 @@ model Notification {
 }
 
 // ─────────────────────────────────────────────────────────────
+// INIT-014 — Unified Notifications + Mailer
+//
+// notifications module owns the entire delivery contract: domain
+// modules ONLY publish events; this module subscribes and dispatches
+// to channels (in-app / push / email).
+//
+// Pipeline:
+//   Domain event → Rule match → Recipient resolver → Delivery job →
+//   Provider (mailer / push / inapp) → Delivery status row.
+//
+// Inbound emails (replies from contractors with attachments) come
+// through provider webhooks (`/v1/mail/inbound/:provider`), are signed,
+// virus-scanned, and saved as Document rows linked to the case via
+// the email's `[case:<id>]` tag.
+// ─────────────────────────────────────────────────────────────
+
+// NotificationRule — declarative trigger.
+//   eventType matches the catalog string (e.g. 'task.assigned').
+//   channels[] selects which channels fire ('inapp', 'push', 'email').
+//   templateKey points at NotificationTemplate.key for body rendering.
+//   recipientStrategy = 'assignee' | 'role' | 'manual'; resolver uses it.
+//   roleKey populated when recipientStrategy='role' (any TeamMember
+//     holding that role with intersecting ABAC scope receives the alert).
+//   priority = 'low' | 'normal' | 'high'; high triggers SLA escalation.
+model NotificationRule {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  // System rules (tenantId IS NULL) ship with the platform; tenants may
+  // clone-and-override per-tenant rules. Same isCustom semantics as Role.
+  isCustom            Boolean  @default(false)
+  name                String
+  description         String?
+  eventType           String   // canonical event from catalog
+  channels            String[] @default([]) // 'inapp' | 'push' | 'email'
+  templateKey         String?  // optional — inapp-only rules can skip
+  recipientStrategy   String   @default("assignee")
+  roleKey             String?
+  buildingScope       String[] @default([])
+  priority            String   @default("normal") // low | normal | high
+  // Escalation: if no delivery acknowledged after slaSeconds, escalate to
+  // the role specified in escalateToRoleKey. Used for approvals.
+  slaSeconds          Int?
+  escalateToRoleKey   String?
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([tenantId, eventType, isActive])
+  @@map("notification_rules")
+}
+
+// NotificationTemplate — Handlebars subject + bodyHtml + bodyText.
+// Variables[] is the declared set of placeholders; renderer fails on
+// undeclared vars. Tenant rows override system rows by key.
+model NotificationTemplate {
+  id           String   @id @default(uuid())
+  tenantId     String?
+  isCustom     Boolean  @default(false)
+  key          String
+  channel      String   // 'email' | 'push' | 'inapp'
+  locale       String   @default("en") // multi-locale stored as separate rows
+  subject      String?
+  bodyHtml     String?
+  bodyText     String?
+  variables    String[] @default([])
+  category     String   @default("platform")
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, key, channel, locale])
+  @@index([key, channel, locale])
+  @@map("notification_templates")
+}
+
+// NotificationDelivery — one row per send attempt across channels.
+// status lifecycle: pending → sending → sent → (optionally) bounced/complained
+// or failed (after maxAttempts). Carries snapshot fields so the journal
+// stays meaningful even if the template is later edited.
+model NotificationDelivery {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  ruleId              String?
+  templateKey         String?
+  eventId             String?  // OutboxEvent.id that triggered this delivery
+  eventType           String?
+  channel             String   // 'inapp' | 'push' | 'email'
+  recipientType       String   // 'team_member' | 'user' | 'email' | 'device'
+  recipientId         String?
+  recipientAddress    String?  // email or device push token
+  subjectSnapshot     String?
+  bodySnapshot        String?  // text or html, depending on channel
+  payloadSnapshot     Json?    // template render context
+  priority            String   @default("normal")
+  status              String   @default("pending") // pending|sending|sent|failed|bounced|complained|deferred
+  attempts            Int      @default(0)
+  maxAttempts         Int      @default(5)
+  lastError           String?
+  providerMessageId   String?  // SMTP/SES message id
+  scheduledAt         DateTime @default(now())
+  sentAt              DateTime?
+  acknowledgedAt      DateTime?
+  // dedupKey unique per (rule, recipient, event) — prevents double-firing
+  // when an outbox subscriber retries after partial failure.
+  dedupKey            String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([dedupKey])
+  @@index([tenantId, status, scheduledAt])
+  @@index([tenantId, channel, status])
+  @@index([eventId])
+  @@map("notification_deliveries")
+}
+
+// NotificationPreference — per-recipient opt-out per (templateKey OR
+// category, channel). Resolver consults this BEFORE creating a delivery.
+// teamMemberId required — preferences live on the workspace people
+// catalogue, not on the global User.
+model NotificationPreference {
+  id           String   @id @default(uuid())
+  tenantId     String
+  teamMemberId String
+  scope        String   // 'template' | 'category'
+  scopeKey     String   // template key or category name
+  channel      String   // 'inapp' | 'push' | 'email'
+  muted        Boolean  @default(true)
+  updatedBy    String?
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+
+  @@unique([teamMemberId, scope, scopeKey, channel])
+  @@index([tenantId, teamMemberId])
+  @@map("notification_preferences")
+}
+
+// EmailInboundEvent — raw webhook payload + parsed shape. Stored
+// untouched (with signature verification metadata) so we can replay
+// when an attachment-handler bug is fixed. Document linkage happens
+// at parse time via the [case:<id>] / [approval:<id>] subject tag.
+model EmailInboundEvent {
+  id              String   @id @default(uuid())
+  tenantId        String?  // resolved from From: domain or to-address routing
+  provider        String   // 'ses' | 'mailgun' | 'sendgrid' | 'postfix'
+  providerEventId String?  // for dedup
+  signatureValid  Boolean  @default(false)
+  fromAddress     String
+  toAddress       String
+  subject         String?
+  bodyText        String?
+  bodyHtml        String?
+  rawPayload      Json
+  attachmentCount Int      @default(0)
+  // Linkage: the parser tries to associate the message with a case via
+  // subject tag and writes the resolved ids here. Documents are stored
+  // separately (Document table) — these are pointers.
+  linkedKind      String?  // 'ppm_case' | 'work_order' | 'approval' | 'cleaning_request'
+  linkedId        String?
+  status          String   @default("received") // received|parsed|linked|virus_blocked|orphan|errored
+  error           String?
+  receivedAt      DateTime @default(now())
+
+  @@index([providerEventId])
+  @@index([tenantId, status, receivedAt])
+  @@map("email_inbound_events")
+}
+
+// EmailSuppression — recipients we must NOT send to (hard bounces,
+// complaints, manual unsubscribes). Resolver MUST consult this list
+// before creating an email delivery row. Tenant-scoped because
+// "this customer hates promo mail" is per-workspace.
+model EmailSuppression {
+  id           String   @id @default(uuid())
+  tenantId     String?  // NULL = global (e.g. AWS SES suppression list mirror)
+  emailAddress String
+  reason       String   // 'hard_bounce' | 'complaint' | 'manual_unsubscribe' | 'spam_report'
+  source       String?  // 'ses' | 'manual' | 'webhook'
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@unique([tenantId, emailAddress])
+  @@index([emailAddress])
+  @@map("email_suppressions")
+}
+
+// ─────────────────────────────────────────────────────────────
 // Building Core v1 — first-building-first, multi-building-ready
 // All rows carry tenantId + buildingId. Each concern lives in its
 // own table instead of a giant JSON blob on `buildings`.

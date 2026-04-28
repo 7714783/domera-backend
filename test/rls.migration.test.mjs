@@ -66,7 +66,17 @@ function tenantScopedTables() {
 // application layer (RolesService validates
 // `r.tenantId === actorTenantId && r.isCustom` on every UPDATE/DELETE).
 // See migration 019_team_rls_force.sql for the contractual statement.
-const KNOWN_GAPS = new Set(['lease_allocations', 'roles']);
+//
+// `notification_rules` and `notification_templates` — INIT-014 same
+// pattern: they mix system rows (tenantId IS NULL) with tenant-custom
+// rows. Application-layer guards in NotificationsService enforce
+// per-tenant writes. Migration 020 documents the exemption.
+const KNOWN_GAPS = new Set([
+  'lease_allocations',
+  'roles',
+  'notification_rules',
+  'notification_templates',
+]);
 
 const tables = tenantScopedTables().filter((t) => !KNOWN_GAPS.has(t));
 
