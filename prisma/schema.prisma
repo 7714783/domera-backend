@@ -2379,7 +2379,10 @@ model Notification {
 //   priority = 'low' | 'normal' | 'high'; high triggers SLA escalation.
 model NotificationRule {
   id                  String   @id @default(uuid())
-  tenantId            String
+  // Nullable: system rules ship with tenantId IS NULL and are visible
+  // to every tenant. Custom rules carry the tenant id of the workspace
+  // that created them. Same shape as `roles` / `notification_templates`.
+  tenantId            String?
   // System rules (tenantId IS NULL) ship with the platform; tenants may
   // clone-and-override per-tenant rules. Same isCustom semantics as Role.
   isCustom            Boolean  @default(false)

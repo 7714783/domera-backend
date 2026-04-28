@@ -71,8 +71,9 @@ function tenantScopedTables() {
 // pattern: they mix system rows (tenantId IS NULL) with tenant-custom
 // rows. Application-layer guards in NotificationsService enforce
 // per-tenant writes. Migration 020 documents the exemption.
+// INIT-010 — `lease_allocations` removed 2026-04-28 (migration 021 closed
+// the gap with ENABLE/FORCE/tenant_isolation).
 const KNOWN_GAPS = new Set([
-  'lease_allocations',
   'roles',
   'notification_rules',
   'notification_templates',

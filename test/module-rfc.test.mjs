@@ -30,9 +30,12 @@ const docsDir = join(here, '..', '..', '..', 'docs', 'modules');
 // 2026-04-26 (INIT-010 Phase 1 / Task 4): top-12 RFCs landed —
 // approvals, assets, assignment, audit, building-core, cleaning,
 // contractor-companies, documents, iam, ppm, reactive, tenant-companies.
+// INIT-010 — retro-RFC debt. Each module folder listed here ships
+// without docs/modules/<name>/RFC.md as a transitional waiver.
+// 2026-04-28 reduced 35 → 29 by landing P1 RFCs (auth, buildings, events,
+// tasks, leases, privacy). Roadmap and per-module deadlines in
+// docs/architecture/INIT-010-legacy-violations-2026-04-28.md.
 const RETRO_RFC_PENDING = new Set([
-  'auth',
-  'buildings',
   'calendar-blackouts',
   'compliance',
   'compliance-profiles',
@@ -42,18 +45,15 @@ const RETRO_RFC_PENDING = new Set([
   'document-links',
   'document-templates',
   'emergency-overrides',
-  'events',
   'health',
   'imports',
   'inventory',
-  'leases',
   'metrics',
   'mfa',
   'obligations',
   'occupants',
   'onboarding',
   'organizations',
-  'privacy',
   'projects',
   'public-qr',
   'qr-locations',
@@ -63,7 +63,6 @@ const RETRO_RFC_PENDING = new Set([
   'seed-runtime',
   'sso',
   'takeover',
-  'tasks',
   'tenancy',
   'vendor-invoices',
   'webhooks',
