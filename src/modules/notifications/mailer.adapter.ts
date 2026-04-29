@@ -10,6 +10,7 @@
 //                  falls back to a documented "needs-config" error so
 //                  builds don't break.
 
+import { createHmac } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 
 export interface OutgoingMail {
@@ -282,10 +283,8 @@ export class ResendMailer implements MailerAdapter {
       return false;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const crypto = require('node:crypto') as typeof import('node:crypto');
     const payload = `${id}.${ts}.${rawBody}`;
-    const expected = crypto.createHmac('sha256', secretBytes).update(payload).digest('base64');
+    const expected = createHmac('sha256', secretBytes).update(payload).digest('base64');
 
     // svix-signature header: "v1,<sig> v1,<sig>" — any match wins.
     const candidates = sig

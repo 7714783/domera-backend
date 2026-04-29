@@ -36,10 +36,8 @@ export interface RoleCreate {
   maxDelegatableScope?: 'workspace' | 'organization' | 'building' | 'project' | null;
 }
 
-export interface RoleUpdate
-  extends Partial<Omit<RoleCreate, 'key'>> {
-  // key is immutable after creation — change name/description instead.
-}
+// key is immutable after creation; change name/description instead.
+export type RoleUpdate = Partial<Omit<RoleCreate, 'key'>>;
 
 function slugify(s: string): string {
   return s

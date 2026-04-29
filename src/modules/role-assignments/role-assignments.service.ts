@@ -40,8 +40,7 @@ export interface AssignmentCreate {
   expiresAt?: string | null;
 }
 
-export interface AssignmentUpdate
-  extends Partial<Omit<AssignmentCreate, 'teamMemberId' | 'roleKey'>> {}
+export type AssignmentUpdate = Partial<Omit<AssignmentCreate, 'teamMemberId' | 'roleKey'>>;
 
 export interface FindEligibleArgs {
   // Permission needed to handle this task type, e.g. 'ppm.handle' or
