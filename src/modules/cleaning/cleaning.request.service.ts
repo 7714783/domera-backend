@@ -319,12 +319,13 @@ export class CleaningRequestService {
       contractorId = s.contractorId;
     }
 
+    const newStatus = assignedStaffId ? 'assigned' : req.status === 'new' ? 'new' : req.status;
     const updated = await this.prisma.cleaningRequest.update({
       where: { id },
       data: {
         contractorId: contractorId || null,
         assignedStaffId: assignedStaffId || null,
-        status: assignedStaffId ? 'assigned' : req.status === 'new' ? 'new' : req.status,
+        status: newStatus,
         assignedAt: assignedStaffId ? new Date() : req.assignedAt,
       },
     });
@@ -332,6 +333,19 @@ export class CleaningRequestService {
       contractorId,
       assignedStaffId,
     });
+    if (newStatus !== req.status) {
+      await this.audit.transition({
+        tenantId: actor.tenantId,
+        actor: actor.userId,
+        actorRole: actor.kind,
+        entityType: 'cleaning_request',
+        entityId: id,
+        from: req.status,
+        to: newStatus,
+        buildingId: req.buildingId,
+        metadata: { contractorId, assignedStaffId },
+      });
+    }
     return updated;
   }
 

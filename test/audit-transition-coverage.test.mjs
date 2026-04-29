@@ -35,7 +35,7 @@ const REGULATED = [
   'teamMember',
 ];
 
-const STRICT = false; // flip when registry is clean
+const STRICT = true; // INIT-010 follow-up: registry is clean as of 2026-04-29
 const WINDOW = 20;
 
 // Pinned set of paths we ALREADY know don't audit-stamp. Each entry is
@@ -82,7 +82,9 @@ function findOffenders() {
         const before = lines.slice(Math.max(0, i - WINDOW), i).join('\n');
         const after = lines.slice(i, Math.min(lines.length, i + WINDOW)).join('\n');
         const ctx = `${before}\n${after}`;
-        if (/\baudit\.transition\(/.test(ctx) || /audit\.write\(/.test(ctx)) continue;
+        // Accept any audit-service identifier: `audit`, `auditService`,
+        // `this.audit`, `this.auditService`. Same for write().
+        if (/\baudit\w*\.transition\(/.test(ctx) || /\baudit\w*\.write\(/.test(ctx)) continue;
         const rel = relative(modulesDir, file).replace(/\\/g, '/');
         offenders.push({
           path: `${rel}:${i + 1}`,
