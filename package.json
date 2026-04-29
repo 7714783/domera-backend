@@ -4,8 +4,9 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "nest start --watch",
-    "build": "nest build",
+    "build": "prisma generate && nest build",
     "start": "node dist/main.js",
+    "postinstall": "prisma generate",
     "start:worker": "node prisma/seeds/register-schedulers.mjs",
     "seed:test-building": "node prisma/seeds/seed-test-building.mjs",
     "seed": "pnpm run seed:test-building",
