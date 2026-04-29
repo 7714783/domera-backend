@@ -2,13 +2,16 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { PpmService } from '../ppm/ppm.service';
 import { resolveBuildingId } from '../../common/building.helpers';
 import { OutboxService } from '../events/outbox.service';
+import { OutboxRegistry } from '../events/outbox.registry';
 
 const LIFECYCLE_STATUSES = [
   'planned',
@@ -51,13 +54,57 @@ const SYSTEM_FAMILIES = [
 ];
 
 @Injectable()
-export class AssetsService {
+export class AssetsService implements OnModuleInit {
+  private readonly log = new Logger(AssetsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly ppm: PpmService,
     private readonly outbox: OutboxService,
+    private readonly outboxRegistry: OutboxRegistry,
   ) {}
+
+  // INIT-012 P1 chiller canary — receive ppm.case.closed and write a
+  // maintenance entry into the asset's audit timeline (entityType=asset,
+  // action=asset.serviced). The asset detail page reads audit_entries
+  // scoped to the asset to render its service history. No new schema:
+  // the audit_entries table is the canonical timeline; we just route
+  // ppm completion onto the right entityType. Idempotent under
+  // at-least-once: every replay simply appends another audit row keyed
+  // by the same task — duplicate rows are fine for forensic purposes
+  // and the UI groups by taskInstanceId.
+  onModuleInit() {
+    this.outboxRegistry.register('ppm.case.closed', async (event) => {
+      const taskId = event.subject;
+      const payload = (event.payload || {}) as Record<string, any>;
+      const planItemId: string | null = payload.planItemId ?? null;
+      if (!planItemId) {
+        this.log.debug(`ppm.case.closed task=${taskId} has no planItemId — skipping asset link`);
+        return;
+      }
+      const planItem = await this.prisma.ppmPlanItem.findUnique({
+        where: { id: planItemId },
+        select: { assetId: true, tenantId: true, buildingId: true },
+      });
+      if (!planItem?.assetId) return;
+      await this.audit.write({
+        tenantId: planItem.tenantId,
+        buildingId: planItem.buildingId,
+        actor: payload.completedByUserId || 'system',
+        role: 'system',
+        action: 'asset.serviced',
+        entity: planItem.assetId,
+        entityType: 'asset',
+        building: '',
+        ip: '-',
+        sensitive: false,
+        eventType: 'ppm.case.closed',
+        resourceType: 'asset',
+        resourceId: planItem.assetId,
+      });
+    });
+  }
 
   private resolveBuildingId = (tenantId: string, idOrSlug: string) =>
     resolveBuildingId(this.prisma, tenantId, idOrSlug);

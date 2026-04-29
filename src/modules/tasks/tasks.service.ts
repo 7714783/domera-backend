@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { OutboxService } from '../events/outbox.service';
 
 /**
  * Mobile-facing task lifecycle. Every mutation is a single-column update on
@@ -25,6 +26,7 @@ export class TasksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly outbox: OutboxService,
   ) {}
 
   // INIT-009 — Unified Tasks Inbox.
@@ -376,6 +378,29 @@ export class TasksService {
       resourceType: 'task',
       resourceId: updated.id,
     });
+    // INIT-012 P1 chiller canary — publish ppm.case.closed when a task
+    // (canonical PPM case carrier) completes, so subscribers (assets
+    // module updates the maintenance timeline; notifications dispatches
+    // closeout email; future reactive subscriber spawns invoice) can
+    // react without direct cross-module writes.
+    if (nextStatus === 'completed') {
+      await this.outbox.publish(this.prisma, {
+        type: 'ppm.case.closed',
+        source: 'tasks',
+        subject: updated.id,
+        buildingId: updated.buildingId,
+        payload: {
+          tenantId,
+          taskInstanceId: updated.id,
+          buildingId: updated.buildingId,
+          planItemId: updated.planItemId,
+          assetId: (updated as any).assetId ?? null,
+          completedAt: updated.completedAt,
+          completedByUserId: actorUserId,
+          result: updated.result,
+        },
+      });
+    }
     return updated;
   }
 
