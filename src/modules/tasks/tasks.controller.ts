@@ -131,6 +131,27 @@ export class TasksController {
     return this.tasks.complete(tenantId, id, actor, body);
   }
 
+  // INIT-012 P1 chiller canary — second slice. Inspector marks
+  // check_failed + requests vendor expense. Publishes
+  // ppm.expense.requested; reactive subscriber spawns WorkOrder linked
+  // to this task; approvals subscriber creates the ApprovalRequest.
+  @Post(':id/request-expense')
+  async requestExpense(
+    @Param('id') id: string,
+    @Body() body: {
+      amount: number;
+      currency?: string;
+      reason: string;
+      vendorOrgId?: string | null;
+    },
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    const tenantId = resolveTenantId(tenantIdHeader);
+    const actor = await uid(authHeader, this.auth);
+    return this.tasks.requestExpense(tenantId, id, actor, body);
+  }
+
   // INIT-002 Phase 5 P1 — short on-site notes attached to a task.
   @Get(':id/notes')
   async listNotes(

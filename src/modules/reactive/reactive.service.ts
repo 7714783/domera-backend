@@ -2,13 +2,16 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { requireManager, resolveBuildingId } from '../../common/building.helpers';
 import { AssignmentResolverService } from '../assignment/assignment.resolver';
 import { ActorResolver } from '../../common/authz';
 import { AuditService } from '../audit/audit.service';
+import { OutboxRegistry } from '../events/outbox.registry';
 
 // INIT-007 Phase 4 — narrowing list responses by tenantCompany /
 // createdByScope. Returns extra `where` keys to merge into the Prisma
@@ -21,13 +24,74 @@ type ListNarrow = {
 const COMPANY_SCOPED_PERMS = ['tasks.view_company'];
 
 @Injectable()
-export class ReactiveService {
+export class ReactiveService implements OnModuleInit {
+  private readonly log = new Logger(ReactiveService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly assignmentResolver: AssignmentResolverService,
     private readonly actorResolver: ActorResolver,
     private readonly audit: AuditService,
+    private readonly outboxRegistry: OutboxRegistry,
   ) {}
+
+  // INIT-012 P1 chiller canary — second slice. PPM inspector requested
+  // vendor expense (TaskInstance flagged check_failed with quoteAmount).
+  // We spawn a WorkOrder linked to that TaskInstance so the vendor
+  // dispatch flow can pick it up. Status starts at `pending_approval`
+  // — the approvals subscriber on the same event creates the
+  // ApprovalRequest, and on approval.granted we move WO to dispatched.
+  // Idempotent: dedup on taskInstanceId — if a WO already exists for
+  // this task we skip (replay-safe).
+  onModuleInit() {
+    this.outboxRegistry.register('ppm.expense.requested', async (event) => {
+      const taskId = event.subject;
+      const payload = (event.payload || {}) as Record<string, any>;
+      const tenantId: string | undefined = payload.tenantId;
+      const buildingId: string | undefined = payload.buildingId;
+      if (!tenantId || !buildingId) {
+        this.log.warn(`ppm.expense.requested missing tenantId/buildingId for task ${taskId}`);
+        return;
+      }
+      const existing = await this.prisma.workOrder.findFirst({
+        where: { tenantId, taskInstanceId: taskId },
+        select: { id: true },
+      });
+      if (existing) {
+        this.log.debug(
+          `ppm.expense.requested replay — WO ${existing.id} already exists for task ${taskId}`,
+        );
+        return;
+      }
+      const wo = await this.prisma.workOrder.create({
+        data: {
+          tenantId,
+          buildingId,
+          taskInstanceId: taskId,
+          vendorOrgId: payload.vendorOrgId ?? null,
+          status: 'pending_approval',
+          dueAt: new Date(Date.now() + 14 * 86400000),
+        },
+      });
+      await this.audit.transition({
+        tenantId,
+        actor: 'system',
+        actorRole: 'system',
+        entityType: 'work_order',
+        entityId: wo.id,
+        from: null,
+        to: 'pending_approval',
+        buildingId,
+        metadata: {
+          source: 'ppm.expense.requested',
+          taskInstanceId: taskId,
+          amount: payload.amount,
+          currency: payload.currency,
+          reason: payload.reason,
+        },
+      });
+    });
+  }
 
   // INIT-007 Phase 4 — derive list-narrow flags from the actor.
   // Anonymous (no userId) gets no narrowing — controller-level guards or

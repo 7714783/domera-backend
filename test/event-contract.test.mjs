@@ -71,10 +71,10 @@ const CATALOG = {
     payloadShape: ['caseId', 'tenantId', 'assetId', 'result', 'evidenceDocumentIds'],
   },
   'ppm.expense.requested': {
-    producer: 'ppm',
-    consumers: ['approvals'],
+    producer: 'tasks',
+    consumers: ['approvals', 'reactive'],
     schemaVersion: 1,
-    payloadShape: ['caseId', 'tenantId', 'amount', 'currency', 'reason'],
+    payloadShape: ['caseId', 'tenantId', 'buildingId', 'amount', 'currency', 'reason', 'vendorOrgId'],
   },
   'ppm.case.closed': {
     producer: 'ppm',

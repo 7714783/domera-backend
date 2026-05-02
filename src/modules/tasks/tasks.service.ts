@@ -445,6 +445,82 @@ export class TasksService {
     });
   }
 
+  // INIT-012 P1 chiller canary — second slice. Inspector marked the
+  // task `check_failed` and needs vendor expense. We stamp the quote
+  // fields on the TaskInstance and publish `ppm.expense.requested` so
+  // both the approvals module (decides) and the reactive module
+  // (spawns WorkOrder linked to this task) can react. This is a
+  // separate transition: the task itself stays in `in_progress` until
+  // the vendor returns and the operator runs `complete()` with the
+  // service-report evidence.
+  async requestExpense(
+    tenantId: string,
+    id: string,
+    actorUserId: string,
+    body: {
+      amount: number;
+      currency?: string;
+      reason: string;
+      vendorOrgId?: string | null;
+    },
+  ) {
+    if (!body || typeof body.amount !== 'number' || body.amount <= 0) {
+      throw new BadRequestException('amount required (> 0)');
+    }
+    if (!body.reason || body.reason.trim().length === 0) {
+      throw new BadRequestException('reason required');
+    }
+    const task = await this.prisma.taskInstance.findFirst({
+      where: { id, tenantId },
+      include: { building: { select: { name: true } } },
+    });
+    if (!task) throw new NotFoundException('task not found');
+    if (task.status === 'completed' || task.status === 'cancelled') {
+      throw new ForbiddenException(`cannot request expense on ${task.status} task`);
+    }
+    const currency = body.currency || task.quoteCurrency || 'ILS';
+    const updated = await this.prisma.taskInstance.update({
+      where: { id: task.id },
+      data: {
+        result: 'check_failed',
+        quoteAmount: body.amount,
+        quoteCurrency: currency,
+        quoteReceivedAt: new Date(),
+      },
+    });
+    await this.audit.write({
+      tenantId,
+      buildingId: task.buildingId,
+      actor: actorUserId,
+      role: 'member',
+      action: 'task.expense_requested',
+      entity: task.title,
+      entityType: 'task',
+      building: task.building?.name ?? '',
+      ip: '0.0.0.0',
+      sensitive: true,
+      eventType: 'ppm.expense.requested',
+      resourceType: 'task',
+      resourceId: updated.id,
+    });
+    await this.outbox.publish(this.prisma, {
+      type: 'ppm.expense.requested',
+      source: 'tasks',
+      subject: updated.id,
+      buildingId: updated.buildingId,
+      payload: {
+        tenantId,
+        caseId: updated.id,
+        buildingId: updated.buildingId,
+        amount: body.amount,
+        currency,
+        reason: body.reason,
+        vendorOrgId: body.vendorOrgId ?? null,
+      },
+    });
+    return updated;
+  }
+
   // INIT-002 Phase 5 P1 — short on-site notes attached to a task. The mobile
   // technician posts updates ("part replaced", "customer not home"), the web
   // manager reads them in the task detail. No threading, no mentions.
