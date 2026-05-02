@@ -12,6 +12,7 @@ import { AssignmentResolverService } from '../assignment/assignment.resolver';
 import { ActorResolver } from '../../common/authz';
 import { AuditService } from '../audit/audit.service';
 import { OutboxRegistry } from '../events/outbox.registry';
+import { OutboxService } from '../events/outbox.service';
 
 // INIT-007 Phase 4 — narrowing list responses by tenantCompany /
 // createdByScope. Returns extra `where` keys to merge into the Prisma
@@ -33,6 +34,7 @@ export class ReactiveService implements OnModuleInit {
     private readonly actorResolver: ActorResolver,
     private readonly audit: AuditService,
     private readonly outboxRegistry: OutboxRegistry,
+    private readonly outbox: OutboxService,
   ) {}
 
   // INIT-012 P1 chiller canary — second slice. PPM inspector requested
@@ -748,7 +750,7 @@ export class ReactiveService implements OnModuleInit {
       }
     }
 
-    return this.prisma.completionRecord.create({
+    const created = await this.prisma.completionRecord.create({
       data: {
         tenantId,
         buildingId,
@@ -765,6 +767,34 @@ export class ReactiveService implements OnModuleInit {
         notes: body.notes || null,
       },
     });
+    // INIT-012 P1 chiller canary — fourth slice. Publish completion so
+    // PPM (closes the originating TaskInstance), assets (timeline), and
+    // documents (evidence linkage) can react. Resolve workOrder.task
+    // link here so the payload carries taskInstanceId even when the
+    // caller passed only workOrderId.
+    let resolvedTaskId = created.taskInstanceId;
+    if (!resolvedTaskId && created.workOrderId) {
+      const wo = await this.prisma.workOrder.findFirst({
+        where: { id: created.workOrderId, tenantId },
+        select: { taskInstanceId: true },
+      });
+      resolvedTaskId = wo?.taskInstanceId ?? null;
+    }
+    await this.outbox.publish(this.prisma, {
+      type: 'completion.recorded',
+      source: 'reactive',
+      subject: created.id,
+      buildingId,
+      payload: {
+        tenantId,
+        completionId: created.id,
+        workOrderId: created.workOrderId,
+        taskInstanceId: resolvedTaskId,
+        completedAt: created.completedAt,
+        completedByUserId: actorUserId,
+      },
+    });
+    return created;
   }
 
   // ─── Triage queue (portfolio-wide reception / service desk) ───────────

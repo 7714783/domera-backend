@@ -10,6 +10,8 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { OutboxRegistry } from '../events/outbox.registry';
+import { OutboxService } from '../events/outbox.service';
+import { AuditService } from '../audit/audit.service';
 import { RoleAssignmentsService } from '../role-assignments/role-assignments.service';
 import { requireManager, resolveBuildingId } from '../../common/building.helpers';
 import { approxMonths, nextAfter, addMonthsUtc } from './engine/recurrence';
@@ -89,6 +91,8 @@ export class PpmService implements OnModuleInit {
     private readonly approvals: ApprovalsService,
     private readonly outboxRegistry: OutboxRegistry,
     private readonly assignments: RoleAssignmentsService,
+    private readonly outbox: OutboxService,
+    private readonly audit: AuditService,
   ) {}
 
   // INIT-013 — pick a TeamMember for a freshly scheduled PPM task.
@@ -127,6 +131,72 @@ export class PpmService implements OnModuleInit {
         `received asset.created — assetId=${event.subject} systemFamily=${(event.payload as any).systemFamily ?? '∅'}`,
       );
       // Phase 6 of INIT-010 will plug template-suggest logic here.
+    });
+
+    // INIT-012 P1 chiller canary — fourth slice. Vendor finished work →
+    // reactive recordCompletion published `completion.recorded` → if the
+    // record links to a TaskInstance, close it here. Idempotent: skip
+    // when the task is already completed/cancelled. Re-emits
+    // ppm.case.closed downstream so the existing assets subscriber
+    // (writes asset.serviced audit row) sees the same event regardless
+    // of whether the closure came from inspector POST /complete or
+    // automatic vendor-completion.
+    this.outboxRegistry.register('completion.recorded', async (event) => {
+      const payload = (event.payload || {}) as Record<string, any>;
+      const taskInstanceId: string | undefined = payload.taskInstanceId;
+      const tenantId: string | undefined = payload.tenantId;
+      if (!taskInstanceId || !tenantId) return;
+      const task = await this.prisma.taskInstance.findFirst({
+        where: { id: taskInstanceId, tenantId },
+      });
+      if (!task) return;
+      if (task.status === 'completed' || task.status === 'cancelled') {
+        this.outboxLog.debug(
+          `completion.recorded ${event.subject}: task ${taskInstanceId} already ${task.status} — skip`,
+        );
+        return;
+      }
+      const updated = await this.prisma.taskInstance.update({
+        where: { id: task.id },
+        data: {
+          status: 'completed',
+          lifecycleStage: 'completed',
+          completedAt: new Date(),
+          completedByUserId: payload.completedByUserId || 'system',
+          result: task.result ?? 'passed',
+        },
+      });
+      await this.audit.write({
+        tenantId,
+        buildingId: updated.buildingId,
+        actor: payload.completedByUserId || 'system',
+        role: 'system',
+        action: 'task.auto_completed',
+        entity: updated.title,
+        entityType: 'task',
+        building: '',
+        ip: '-',
+        sensitive: false,
+        eventType: 'completion.recorded',
+        resourceType: 'task',
+        resourceId: updated.id,
+      });
+      await this.outbox.publish(this.prisma, {
+        type: 'ppm.case.closed',
+        source: 'ppm',
+        subject: updated.id,
+        buildingId: updated.buildingId,
+        payload: {
+          tenantId,
+          taskInstanceId: updated.id,
+          buildingId: updated.buildingId,
+          planItemId: updated.planItemId,
+          completedAt: updated.completedAt,
+          completedByUserId: payload.completedByUserId || 'system',
+          result: updated.result,
+          source: 'completion.recorded',
+        },
+      });
     });
   }
 
