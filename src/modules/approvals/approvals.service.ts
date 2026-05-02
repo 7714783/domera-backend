@@ -1,16 +1,60 @@
-﻿import { Injectable } from '@nestjs/common';
+﻿import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ApprovalDelegationsService } from './approval-delegations.service';
 import { ApprovalItem, ApprovalStatus } from './approvals.types';
+import { OutboxService } from '../events/outbox.service';
+import { OutboxRegistry } from '../events/outbox.registry';
 
 @Injectable()
-export class ApprovalsService {
+export class ApprovalsService implements OnModuleInit {
+  private readonly log = new Logger(ApprovalsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly delegations: ApprovalDelegationsService,
+    private readonly outbox: OutboxService,
+    private readonly outboxRegistry: OutboxRegistry,
   ) {}
+
+  // INIT-012 P1 chiller canary — third slice. Approvals subscribes to
+  // ppm.expense.requested and creates an ApprovalRequest of
+  // type='task_expense' with hint='task:<taskInstanceId>' so we can
+  // route back to the originating TaskInstance on approve. Idempotent:
+  // dedup on (tenantId, type, hint) — if a request for the same task
+  // already exists, skip (replay-safe).
+  onModuleInit() {
+    this.outboxRegistry.register('ppm.expense.requested', async (event) => {
+      const taskId = event.subject;
+      const payload = (event.payload || {}) as Record<string, any>;
+      const tenantId: string | undefined = payload.tenantId;
+      const buildingId: string | undefined = payload.buildingId;
+      if (!tenantId || !buildingId) return;
+      const hint = `task:${taskId}`;
+      const existing = await this.prisma.approvalRequest.findFirst({
+        where: { tenantId, type: 'task_expense', hint },
+        select: { id: true },
+      });
+      if (existing) {
+        this.log.debug(`ppm.expense.requested replay — approval ${existing.id} exists for ${hint}`);
+        return;
+      }
+      await this.createRequest({
+        tenantId,
+        buildingId,
+        title: payload.reason
+          ? `Vendor expense: ${String(payload.reason).slice(0, 80)}`
+          : 'Vendor expense',
+        type: 'task_expense',
+        amount: typeof payload.amount === 'number' ? payload.amount : 0,
+        requesterUserId: payload.completedByUserId || 'system',
+        requesterName: 'PPM inspector',
+        hint,
+        steps: [{ orderNo: 1, role: 'manager' }],
+      });
+    });
+  }
 
   private mapType(type: string): 'spend' | 'document' | 'compliance' {
     if (type.includes('spend')) return 'spend';
@@ -175,6 +219,31 @@ export class ApprovalsService {
       ip: '127.0.0.1',
       sensitive: request.type === 'spend_approval',
     });
+
+    // INIT-012 P1 chiller canary — third slice. When the request reaches
+    // a terminal status (approved or rejected), publish so downstream
+    // consumers (reactive flips WorkOrder, ppm closes case, etc.) react
+    // through the outbox rather than direct DI. The hint field carries
+    // the originating subject (e.g. 'task:<id>' for task_expense flow).
+    if (nextStatus === 'approved' || nextStatus === 'rejected') {
+      await this.outbox.publish(this.prisma, {
+        type: nextStatus === 'approved' ? 'approval.granted' : 'approval.rejected',
+        source: 'approvals',
+        subject: fresh.id,
+        buildingId: fresh.buildingId,
+        payload: {
+          tenantId,
+          approvalId: fresh.id,
+          type: fresh.type,
+          hint: fresh.hint,
+          amount: fresh.amount,
+          grantedBy: actorName,
+          subjectType: fresh.type,
+          subjectId: fresh.hint,
+          reason: nextStatus === 'rejected' ? 'rejected by approver' : null,
+        },
+      });
+    }
 
     const finalRequest = await this.prisma.approvalRequest.findUnique({
       where: { id: fresh.id },

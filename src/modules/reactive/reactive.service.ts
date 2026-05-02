@@ -91,6 +91,51 @@ export class ReactiveService implements OnModuleInit {
         },
       });
     });
+
+    // INIT-012 P1 chiller canary — third slice. When the originating
+    // task_expense ApprovalRequest is granted, flip the matching
+    // WorkOrder pending_approval → dispatched. We resolve the link via
+    // the approval's `hint` field (convention: 'task:<taskInstanceId>')
+    // set by the approvals subscriber on ppm.expense.requested. No
+    // direct DI — purely event-driven, idempotent on status mismatch.
+    this.outboxRegistry.register('approval.granted', async (event) => {
+      const payload = (event.payload || {}) as Record<string, any>;
+      if (payload.type !== 'task_expense') return;
+      const hint: string | undefined = payload.hint;
+      if (!hint || !hint.startsWith('task:')) {
+        this.log.debug(`approval.granted ${event.subject}: hint missing/non-task — skip`);
+        return;
+      }
+      const taskId = hint.slice('task:'.length);
+      const tenantId: string | undefined = payload.tenantId;
+      if (!tenantId) return;
+      const wo = await this.prisma.workOrder.findFirst({
+        where: { tenantId, taskInstanceId: taskId, status: 'pending_approval' },
+      });
+      if (!wo) {
+        this.log.debug(`approval.granted ${event.subject}: no pending WO for task ${taskId}`);
+        return;
+      }
+      await this.prisma.workOrder.update({
+        where: { id: wo.id },
+        data: { status: 'dispatched' },
+      });
+      await this.audit.transition({
+        tenantId,
+        actor: payload.grantedBy || 'system',
+        actorRole: 'approver',
+        entityType: 'work_order',
+        entityId: wo.id,
+        from: 'pending_approval',
+        to: 'dispatched',
+        buildingId: wo.buildingId,
+        metadata: {
+          source: 'approval.granted',
+          approvalId: payload.approvalId,
+          taskInstanceId: taskId,
+        },
+      });
+    });
   }
 
   // INIT-007 Phase 4 — derive list-narrow flags from the actor.
