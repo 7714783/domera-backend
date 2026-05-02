@@ -141,6 +141,7 @@ export class AuditService {
       actor?: string;
       action?: string;
       entityType?: string;
+      entityId?: string;
       sensitiveOnly?: boolean;
       from?: string;
       to?: string;
@@ -154,6 +155,16 @@ export class AuditService {
     if (params.actor) where.actor = params.actor;
     if (params.action) where.action = params.action;
     if (params.entityType) where.entityType = params.entityType;
+    // INIT-012 P1 — service-log scoping. The chiller asset detail
+    // page filters on (entityType=asset, entityId=<assetId>) to render
+    // the maintenance timeline. Audit-write populates both `entity`
+    // and `resourceId` with the same value, so we match either column.
+    if (params.entityId) {
+      where.OR = [
+        { entity: params.entityId },
+        { resourceId: params.entityId },
+      ];
+    }
     if (params.sensitiveOnly) where.sensitive = true;
     if (params.from || params.to) {
       where.timestamp = {};
