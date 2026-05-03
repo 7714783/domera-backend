@@ -1023,17 +1023,20 @@ export class BuildingCoreService {
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
     const building = await this.prisma.building.findUnique({ where: { id: buildingId } });
     if (!building) throw new NotFoundException('building not found');
-    const [floors, units, transport, systems, occupants, contracts] = await Promise.all([
-      this.prisma.buildingFloor.count({ where: { buildingId } }),
-      this.prisma.buildingUnit.count({ where: { buildingId } }),
-      this.prisma.buildingVerticalTransport.findMany({ where: { buildingId } }),
-      this.prisma.buildingSystem.findMany({
-        where: { buildingId },
-        select: { systemCategory: true },
-      }),
-      this.prisma.buildingOccupantCompany.count({ where: { buildingId } }),
-      this.prisma.buildingContract.count({ where: { buildingId } }),
-    ]);
+    const [floors, units, transport, systems, occupants, contracts, spaces, elements] =
+      await Promise.all([
+        this.prisma.buildingFloor.count({ where: { buildingId } }),
+        this.prisma.buildingUnit.count({ where: { buildingId } }),
+        this.prisma.buildingVerticalTransport.findMany({ where: { buildingId } }),
+        this.prisma.buildingSystem.findMany({
+          where: { buildingId },
+          select: { systemCategory: true },
+        }),
+        this.prisma.buildingOccupantCompany.count({ where: { buildingId } }),
+        this.prisma.buildingContract.count({ where: { buildingId } }),
+        this.prisma.buildingSpace.count({ where: { tenantId, buildingId } }),
+        this.prisma.buildingElement.count({ where: { tenantId, buildingId } }),
+      ]);
     const systemsByCategory = systems.reduce<Record<string, number>>((acc, s) => {
       acc[s.systemCategory] = (acc[s.systemCategory] || 0) + 1;
       return acc;
@@ -1055,6 +1058,8 @@ export class BuildingCoreService {
         verticalTransport: transport.reduce((a, b) => a + b.quantity, 0),
         occupants,
         contracts,
+        spaces,
+        elements,
       },
       transportByType: transport.reduce<Record<string, number>>((acc, t) => {
         acc[t.transportType] = (acc[t.transportType] || 0) + t.quantity;

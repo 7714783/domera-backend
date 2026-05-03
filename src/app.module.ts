@@ -16,6 +16,7 @@ import { IamModule } from './modules/iam/iam.module';
 import { TakeoverModule } from './modules/takeover/takeover.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { BuildingCoreModule } from './modules/building-core/building-core.module';
+import { BuildingSpacesModule } from './modules/building-spaces/building-spaces.module';
 import { PpmModule } from './modules/ppm/ppm.module';
 import { QrLocationsModule } from './modules/qr-locations/qr-locations.module';
 import { PublicQrModule } from './modules/public-qr/public-qr.module';
@@ -77,6 +78,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     TakeoverModule,
     OnboardingModule,
     BuildingCoreModule,
+    BuildingSpacesModule,
     PpmModule,
     QrLocationsModule,
     PublicQrModule,

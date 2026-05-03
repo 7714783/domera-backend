@@ -30,6 +30,10 @@ const OWNERSHIP = {
   buildingSystem: 'building-core',
   buildingVerticalTransport: 'building-core',
   elevatorProfile: 'building-core',
+  // ── building-spaces (INIT-012 NS-15) — canonical structural detail
+  // outside the unit grid (mechanical rooms / facade / roof / doors).
+  buildingSpace: 'building-spaces',
+  buildingElement: 'building-spaces',
   // BuildingOccupantCompany — occupants creates/updates; tenant-companies
   // sets adminUserId; building-core has a legacy create path
   // (POST /buildings/:id/occupants) inherited from INIT-001 that
