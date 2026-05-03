@@ -268,7 +268,7 @@ export class InventoryService {
       if (cur) cur.onHand += b.qty;
     }
     const report = items.map((it) => {
-      const s = byItem.get(it.id)!;
+      const s = byItem.get(it.id) ?? { onHand: 0, below_min: false, reorder: false };
       return {
         itemId: it.id,
         sku: it.sku,

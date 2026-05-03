@@ -153,7 +153,7 @@ export function assertProdEnv(env: NodeJS.ProcessEnv = process.env): void {
   const soft = errs.filter((e) => e.severity === 'soft' && !strict);
 
   if (soft.length > 0) {
-    // eslint-disable-next-line no-console
+     
     console.warn(
       `\n[env-guard] ${soft.length} soft warning(s) in NODE_ENV=production:\n` +
         soft.map((e) => `  - ${e.variable}: ${e.reason}`).join('\n') +
@@ -162,7 +162,7 @@ export function assertProdEnv(env: NodeJS.ProcessEnv = process.env): void {
   }
 
   if (hard.length > 0) {
-    // eslint-disable-next-line no-console
+     
     console.error(
       `\n[env-guard] Refusing to start — ${hard.length} hard violation(s):\n` +
         hard.map((e) => `  - ${e.variable}: ${e.reason}`).join('\n') +

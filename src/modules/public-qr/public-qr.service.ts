@@ -86,6 +86,7 @@ export class PublicQrService {
     },
   ) {
     if (!body?.category) throw new BadRequestException('category required');
+    const category = body.category;
     const qr = await this.resolveRaw(qrId);
 
     // Run the write under the resolved tenant context so RLS applies.
@@ -103,7 +104,7 @@ export class PublicQrService {
           qrLocationId: qr.qrId,
           unitId: qr.unitId || null,
           floorId: qr.floorId || null,
-          category: body.category!,
+          category,
           priority: body.priority || 'normal',
           status: 'new',
           description: body.description || null,

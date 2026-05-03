@@ -277,8 +277,9 @@ export class AuthService {
       });
       const permsByRole = new Map<string, string[]>();
       for (const r of allPerms) {
-        if (!permsByRole.has(r.roleKey)) permsByRole.set(r.roleKey, []);
-        permsByRole.get(r.roleKey)!.push(r.permission);
+        const list = permsByRole.get(r.roleKey) ?? [];
+        list.push(r.permission);
+        permsByRole.set(r.roleKey, list);
       }
       roleCatalogue = allRoles.map((r) => ({
         key: r.key,

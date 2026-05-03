@@ -70,12 +70,18 @@ export class ConnectorsService {
       approvedAt: i.approvedAt ? i.approvedAt.toISOString() : null,
     }));
 
-    return accountingCsvConnector.encode!({ tenantId }, rows);
+    if (!accountingCsvConnector.encode) {
+      throw new BadRequestException('accounting connector cannot encode');
+    }
+    return accountingCsvConnector.encode({ tenantId }, rows);
   }
 
   async importVendorMaster(tenantId: string, actorUserId: string, raw: string) {
     if (!raw || raw.length < 5) throw new BadRequestException('empty csv');
-    const decoded = await vendorMasterCsvConnector.decode!({ tenantId }, raw);
+    if (!vendorMasterCsvConnector.decode) {
+      throw new BadRequestException('vendor master connector cannot decode');
+    }
+    const decoded = await vendorMasterCsvConnector.decode({ tenantId }, raw);
     const created: string[] = [];
     const updated: string[] = [];
     for (const v of decoded) {
@@ -140,7 +146,10 @@ export class ConnectorsService {
     });
     if (!building) throw new BadRequestException('envelope buildingId not in tenant');
 
-    const decoded: DecodedBridgeRow[] = await conn.decode!(
+    if (!conn.decode) {
+      throw new BadRequestException(`bridge connector ${connectorId} cannot decode`);
+    }
+    const decoded: DecodedBridgeRow[] = await conn.decode(
       { tenantId, buildingId: env.buildingId },
       raw,
     );

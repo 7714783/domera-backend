@@ -45,9 +45,10 @@ export class ContractorsWorkspaceService {
       include: { publicContractor: true },
       orderBy: [{ createdAt: 'desc' }],
     });
-    const filtered = opts.search
+    const search = opts.search?.toLowerCase();
+    const filtered = search
       ? items.filter((it: any) => {
-          const q = opts.search!.toLowerCase();
+          const q = search;
           return (
             (it.localDisplayName || '').toLowerCase().includes(q) ||
             (it.publicContractor?.displayName || '').toLowerCase().includes(q)

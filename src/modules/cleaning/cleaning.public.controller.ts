@@ -4,7 +4,6 @@ import {
   Controller,
   ForbiddenException,
   Get,
-  Headers,
   Param,
   Post,
   Req,

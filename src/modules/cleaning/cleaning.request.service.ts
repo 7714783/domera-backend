@@ -158,13 +158,15 @@ export class CleaningRequestService {
       overrideContractorId: body.contractorId,
       overrideStaffId: body.assignedStaffId,
     });
+    const title = sanitizeText(body.title, 200);
+    if (!title) throw new BadRequestException('title required');
 
     const created = await this.prisma.cleaningRequest.create({
       data: {
         tenantId: actor.tenantId,
         buildingId: body.buildingId,
         zoneId: body.zoneId,
-        title: sanitizeText(body.title, 200)!,
+        title,
         description: sanitizeText(body.description),
         category: body.category,
         priority: body.priority || 'normal',
@@ -211,6 +213,8 @@ export class CleaningRequestService {
       { tenantId: body.tenantId, zone },
       this.migrator,
     );
+    const title = sanitizeText(body.title, 200);
+    if (!title) throw new BadRequestException('title required');
 
     const created = await this.migrator.cleaningRequest.create({
       data: {
@@ -218,7 +222,7 @@ export class CleaningRequestService {
         buildingId: body.buildingId,
         zoneId: body.zoneId,
         qrPointId: body.qrPointId || null,
-        title: sanitizeText(body.title, 200)!,
+        title,
         description: sanitizeText(body.description),
         category: body.category,
         priority: body.priority || 'normal',

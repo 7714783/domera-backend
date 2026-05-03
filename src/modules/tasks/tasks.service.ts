@@ -183,7 +183,7 @@ export class TasksService {
         : Promise.resolve([] as any[]),
     ]);
 
-    function makeUrl(kind: string, buildingId: string, id: string) {
+    function makeUrl(kind: string, buildingId: string) {
       const slug = slugById.get(buildingId) || buildingId;
       switch (kind) {
         case 'ppm':
@@ -222,7 +222,7 @@ export class TasksService {
         buildingId: t.buildingId,
         buildingSlug: slugById.get(t.buildingId) || null,
         buildingName: nameById.get(t.buildingId) || null,
-        sourceUrl: makeUrl('ppm', t.buildingId, t.id),
+        sourceUrl: makeUrl('ppm', t.buildingId),
       });
     }
     for (const c of cleaningRows) {
@@ -236,7 +236,7 @@ export class TasksService {
         buildingId: c.buildingId,
         buildingSlug: slugById.get(c.buildingId) || null,
         buildingName: nameById.get(c.buildingId) || null,
-        sourceUrl: makeUrl('cleaning', c.buildingId, c.id),
+        sourceUrl: makeUrl('cleaning', c.buildingId),
       });
     }
     for (const i of incidentRows) {
@@ -250,7 +250,7 @@ export class TasksService {
         buildingId: i.buildingId,
         buildingSlug: slugById.get(i.buildingId) || null,
         buildingName: nameById.get(i.buildingId) || null,
-        sourceUrl: makeUrl('incident', i.buildingId, i.id),
+        sourceUrl: makeUrl('incident', i.buildingId),
       });
     }
     for (const r of srRows) {
@@ -264,7 +264,7 @@ export class TasksService {
         buildingId: r.buildingId,
         buildingSlug: slugById.get(r.buildingId) || null,
         buildingName: nameById.get(r.buildingId) || null,
-        sourceUrl: makeUrl('service_request', r.buildingId, r.id),
+        sourceUrl: makeUrl('service_request', r.buildingId),
       });
     }
 

@@ -54,7 +54,7 @@ export class NotificationsService {
   ) {}
 
   // Called by the outbox subscriber when a domain event fires. Idempotent.
-  async dispatchEvent(event: OutboxEventEnvelope, mailer: MailerAdapter): Promise<void> {
+  async dispatchEvent(event: OutboxEventEnvelope, _mailer: MailerAdapter): Promise<void> {
     // Match every active rule for this event type. System rules
     // (tenantId IS NULL) and tenant-custom rules can both match; if both
     // exist we run both — admins use isActive=false to silence one.

@@ -139,7 +139,7 @@ export class TenantMiddleware implements NestMiddleware {
     // <uuid>" $API/v1/buildings/<slug>/units` returned 152 unit rows on
     // PROD with no auth. The fix is uniform: bypass paths declare their
     // own no-auth contract; everything else REQUIRES a valid session.
-    if (!payload?.sub) {
+    if (!token || !payload?.sub) {
       throw new UnauthorizedException('Authentication required for tenant-scoped routes');
     }
 
@@ -152,7 +152,7 @@ export class TenantMiddleware implements NestMiddleware {
     // until the JWT TTL elapses. We mirror AuthService.verifySession
     // here (cannot inject the service — circular import path) and cache
     // the result for SESSION_CACHE_TTL_MS to bound DB load.
-    const tokenHash = sha256(token!);
+    const tokenHash = sha256(token);
     let sessionCheck = getSessionCache(tokenHash);
     if (!sessionCheck) {
       const row = await this.prisma.session.findUnique({ where: { tokenHash } });

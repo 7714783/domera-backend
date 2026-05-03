@@ -185,7 +185,9 @@ export class TakeoverService {
     });
     const applicableDocKeys = [
       ...new Set(
-        templates.filter((t) => t.buildingLinks.length > 0).map((t) => t.requiredDocumentTypeKey!),
+        templates
+          .filter((t) => t.buildingLinks.length > 0 && t.requiredDocumentTypeKey)
+          .map((t) => t.requiredDocumentTypeKey as string),
       ),
     ];
     let presentDocKeys = 0;
@@ -194,7 +196,7 @@ export class TakeoverService {
         where: { tenantId, buildingId: c.buildingId, documentTypeKey: { in: applicableDocKeys } },
         select: { documentTypeKey: true },
       });
-      const present = new Set(docs.map((d) => d.documentTypeKey!));
+      const present = new Set(docs.map((d) => d.documentTypeKey).filter(Boolean) as string[]);
       presentDocKeys = applicableDocKeys.filter((k) => present.has(k)).length;
     }
     const mandatoryDocsPct =

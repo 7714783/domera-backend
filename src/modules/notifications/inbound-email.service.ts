@@ -16,8 +16,6 @@
 import {
   Injectable,
   Logger,
-  BadRequestException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MigratorPrismaService } from '../../prisma/prisma.migrator';

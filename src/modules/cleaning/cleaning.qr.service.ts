@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -298,9 +297,10 @@ export class CleaningQrService {
       zoneId = resolved.zoneId;
       locationId = locationId || resolved.locationId;
     }
+    if (!zoneId) throw new BadRequestException('zoneId or sourceKey required');
 
     const zone = await this.prisma.cleaningZone.findFirst({
-      where: { id: zoneId!, tenantId, buildingId: body.buildingId },
+      where: { id: zoneId, tenantId, buildingId: body.buildingId },
     });
     if (!zone) throw new NotFoundException('zone not found in this building');
 

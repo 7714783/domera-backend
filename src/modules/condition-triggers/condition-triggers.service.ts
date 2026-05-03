@@ -107,7 +107,7 @@ export class ConditionTriggersService {
     for (const t of triggers) {
       const met = thresholdMet(t.operator, body.value, t.threshold, t.lastReadingValue);
       if (!met) {
-        const ev = await this.prisma.conditionEvent.create({
+        await this.prisma.conditionEvent.create({
           data: {
             tenantId,
             buildingId: sensor.buildingId,
