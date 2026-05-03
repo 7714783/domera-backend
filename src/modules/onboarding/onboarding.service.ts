@@ -223,6 +223,10 @@ export class OnboardingService {
           organizationId: body.organizationId || null,
           slug,
           name: body.name,
+          // INIT-012 NS-2 — same draft-default as buildings.service.create.
+          // Caller flips draft → active via POST /v1/buildings/:slug/publish
+          // once basic structure (floors / units / systems) is filled.
+          lifecycleStatus: 'draft',
           addressLine1: body.addressLine1,
           street: body.street || null,
           buildingNumber: body.buildingNumber || null,
