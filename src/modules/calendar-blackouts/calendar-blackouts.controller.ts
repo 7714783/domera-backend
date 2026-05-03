@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post, Query } from '@nestjs/common';
-import { resolveTenantId } from '../../common/tenant.utils';
+import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
+import { Tenant } from '../../common/tenant.decorator';
 import { CalendarBlackoutsService } from './calendar-blackouts.service';
 
 @Controller('calendar-blackouts')
@@ -7,22 +7,22 @@ export class CalendarBlackoutsController {
   constructor(private readonly svc: CalendarBlackoutsService) {}
 
   @Get()
-  list(@Query('buildingId') buildingId?: string, @Headers('x-tenant-id') th?: string) {
-    return this.svc.list(resolveTenantId(th), buildingId);
+  list(@Query('buildingId') buildingId?: string, @Tenant() tenantId?: string) {
+    return this.svc.list(tenantId!, buildingId);
   }
 
   @Post()
-  create(@Body() body: any, @Headers('x-tenant-id') th?: string) {
-    return this.svc.create(resolveTenantId(th), body);
+  create(@Body() body: any, @Tenant() tenantId?: string) {
+    return this.svc.create(tenantId!, body);
   }
 
   @Post('seed-israel-defaults')
-  seedIL(@Body() body: { buildingId?: string } | undefined, @Headers('x-tenant-id') th?: string) {
-    return this.svc.seedIsraelDefaults(resolveTenantId(th), body?.buildingId);
+  seedIL(@Body() body: { buildingId?: string } | undefined, @Tenant() tenantId?: string) {
+    return this.svc.seedIsraelDefaults(tenantId!, body?.buildingId);
   }
 
   @Delete(':id')
-  del(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
-    return this.svc.delete(resolveTenantId(th), id);
+  del(@Param('id') id: string, @Tenant() tenantId?: string) {
+    return this.svc.delete(tenantId!, id);
   }
 }

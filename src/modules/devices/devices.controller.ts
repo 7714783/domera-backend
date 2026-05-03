@@ -8,7 +8,7 @@ import {
   Post,
   UnauthorizedException,
 } from '@nestjs/common';
-import { resolveTenantId } from '../../common/tenant.utils';
+import { Tenant } from '../../common/tenant.decorator';
 import { AuthService } from '../auth/auth.service';
 import { DevicesService, RegisterDeviceBody } from './devices.service';
 
@@ -30,10 +30,9 @@ export class DevicesController {
   @Post()
   async register(
     @Body() body: RegisterDeviceBody,
-    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Tenant() tenantId: string,
     @Headers('authorization') authHeader?: string,
   ) {
-    const tenantId = resolveTenantId(tenantIdHeader);
     const userId = await uid(authHeader, this.auth);
     return this.devices.register(tenantId, userId, body);
   }
@@ -41,10 +40,9 @@ export class DevicesController {
   /** List the caller's registered devices (for a session-management screen). */
   @Get()
   async list(
-    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Tenant() tenantId: string,
     @Headers('authorization') authHeader?: string,
   ) {
-    const tenantId = resolveTenantId(tenantIdHeader);
     const userId = await uid(authHeader, this.auth);
     const items = await this.devices.list(tenantId, userId);
     return { total: items.length, items };
@@ -54,10 +52,9 @@ export class DevicesController {
   @Delete(':id')
   async unregister(
     @Param('id') id: string,
-    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Tenant() tenantId: string,
     @Headers('authorization') authHeader?: string,
   ) {
-    const tenantId = resolveTenantId(tenantIdHeader);
     const userId = await uid(authHeader, this.auth);
     return this.devices.unregister(tenantId, userId, id);
   }
