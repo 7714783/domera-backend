@@ -6,12 +6,49 @@ import {
 } from '@nestjs/common';
 import { NextFunction, Request, Response } from 'express';
 import * as jwt from 'jsonwebtoken';
+import { createHash } from 'node:crypto';
 // Use the BYPASSRLS client — this check runs BEFORE TenantContext is set,
 // so the RLS-wrapped PrismaService would filter all rows out.
 import { MigratorPrismaService } from '../prisma/prisma.migrator';
 import { TenantContext } from './tenant-context';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-domera-secret-change-me';
+
+// Mirror of AuthService.sha256 — kept inline to avoid a circular DI
+// (AuthModule imports PrismaModule; this middleware bootstraps before
+// AuthModule is fully constructed).
+function sha256(s: string): string {
+  return createHash('sha256').update(s).digest('hex');
+}
+
+// Session-state cache. Hardening 2026-04-30: every non-bypass route
+// must validate the bearer against a live, non-revoked Session row.
+// Without this, a JWT whose backing session was revoked (logout, admin
+// deactivation, password rotation) stayed valid for tenant-scoped
+// routes until natural expiry — read-only routes leaked tenant data.
+// Cache is keyed by token-hash, TTL 30s. A revoked session takes
+// effect within that window across the cluster without an explicit
+// invalidation bus.
+const SESSION_CACHE_TTL_MS = 30_000;
+const SESSION_CACHE_MAX = 4000;
+type SessionCacheValue = { valid: boolean; userId: string | null; expiresAt: number };
+const sessionCache = new Map<string, SessionCacheValue>();
+function getSessionCache(tokenHash: string): SessionCacheValue | null {
+  const hit = sessionCache.get(tokenHash);
+  if (!hit) return null;
+  if (hit.expiresAt < Date.now()) {
+    sessionCache.delete(tokenHash);
+    return null;
+  }
+  return hit;
+}
+function putSessionCache(tokenHash: string, value: Omit<SessionCacheValue, 'expiresAt'>) {
+  if (sessionCache.size >= SESSION_CACHE_MAX) {
+    const first = sessionCache.keys().next().value;
+    if (first) sessionCache.delete(first);
+  }
+  sessionCache.set(tokenHash, { ...value, expiresAt: Date.now() + SESSION_CACHE_TTL_MS });
+}
 
 const BYPASS_PATHS = [
   '/v1/health',
@@ -104,6 +141,31 @@ export class TenantMiddleware implements NestMiddleware {
     // own no-auth contract; everything else REQUIRES a valid session.
     if (!payload?.sub) {
       throw new UnauthorizedException('Authentication required for tenant-scoped routes');
+    }
+
+    // Hardening 2026-04-30 — JWT signature alone is not enough. The
+    // session row in Postgres carries the live revocation/expiry state:
+    // logout, admin deactivation, and password rotation revoke sessions
+    // server-side, but the JWT itself stays cryptographically valid
+    // until natural expiry. Without this check, a stolen / leaked /
+    // post-logout JWT continues to work for every tenant-scoped read
+    // until the JWT TTL elapses. We mirror AuthService.verifySession
+    // here (cannot inject the service — circular import path) and cache
+    // the result for SESSION_CACHE_TTL_MS to bound DB load.
+    const tokenHash = sha256(token!);
+    let sessionCheck = getSessionCache(tokenHash);
+    if (!sessionCheck) {
+      const row = await this.prisma.session.findUnique({ where: { tokenHash } });
+      const valid =
+        !!row &&
+        row.revokedAt === null &&
+        row.expiresAt.getTime() >= Date.now() &&
+        row.userId === payload.sub;
+      sessionCheck = { valid, userId: row?.userId ?? null, expiresAt: 0 };
+      putSessionCache(tokenHash, { valid: sessionCheck.valid, userId: sessionCheck.userId });
+    }
+    if (!sessionCheck.valid) {
+      throw new UnauthorizedException('session revoked or expired');
     }
 
     // Resolve effective tenantId.
