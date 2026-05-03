@@ -198,7 +198,8 @@ export class RolesService {
       if (body.scope !== undefined) data.scope = body.scope;
       if (body.categories !== undefined) data.categories = body.categories;
       if (body.iconKey !== undefined) data.iconKey = body.iconKey;
-      if (body.maxDelegatableScope !== undefined) data.maxDelegatableScope = body.maxDelegatableScope;
+      if (body.maxDelegatableScope !== undefined)
+        data.maxDelegatableScope = body.maxDelegatableScope;
 
       const updated = await tx.role.update({ where: { key }, data });
 
@@ -225,12 +226,14 @@ export class RolesService {
         eventType: 'role.updated',
         resourceType: 'role',
         resourceId: updated.id,
-        metadata: { fields: Object.keys(data), permissionsReplaced: body.permissions !== undefined },
+        metadata: {
+          fields: Object.keys(data),
+          permissionsReplaced: body.permissions !== undefined,
+        },
       });
 
-      const permissions = body.permissions !== undefined
-        ? body.permissions
-        : r.permissions.map((p) => p.permission);
+      const permissions =
+        body.permissions !== undefined ? body.permissions : r.permissions.map((p) => p.permission);
       return {
         id: updated.id,
         key: updated.key,

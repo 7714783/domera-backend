@@ -76,7 +76,9 @@ export class QrLocationsService {
         // BuildingLocation row (non-leasable common spaces). Stored in spaceId
         // since QrLocation has no dedicated locationId column.
         if (!body.spaceId)
-          throw new BadRequestException('spaceId (BuildingLocation id) required for targetType=location');
+          throw new BadRequestException(
+            'spaceId (BuildingLocation id) required for targetType=location',
+          );
         const l = await this.prisma.buildingLocation.findFirst({
           where: { id: body.spaceId, buildingId },
         });

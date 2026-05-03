@@ -12,17 +12,17 @@
 // New categories MUST be added here AND in the role-builder UI mapping.
 
 export const MODULE_CATEGORIES = [
-  'finance',       // budgets, invoices, financial approvals, capex
-  'tech_support',  // ppm, assets, systems, incidents, tasks
-  'legal',         // documents, retention, legal_hold, gdpr, dsar
-  'cleaning',      // cleaning, rounds, waypoints
-  'security',      // security, public_qr (intake), security incidents
-  'compliance',    // compliance profiles, certifications, audit, ropa
-  'operations',    // buildings, floors, units, locations, transport
-  'people',        // team, roles, role_assignments, iam, auth
-  'enterprise',    // projects, leases, takeover, vendor_invoice, contractors
-  'mobile',        // mobile lifecycle, devices
-  'platform',      // events, health, metrics, webhooks, scim, sso, mfa, seed-runtime
+  'finance', // budgets, invoices, financial approvals, capex
+  'tech_support', // ppm, assets, systems, incidents, tasks
+  'legal', // documents, retention, legal_hold, gdpr, dsar
+  'cleaning', // cleaning, rounds, waypoints
+  'security', // security, public_qr (intake), security incidents
+  'compliance', // compliance profiles, certifications, audit, ropa
+  'operations', // buildings, floors, units, locations, transport
+  'people', // team, roles, role_assignments, iam, auth
+  'enterprise', // projects, leases, takeover, vendor_invoice, contractors
+  'mobile', // mobile lifecycle, devices
+  'platform', // events, health, metrics, webhooks, scim, sso, mfa, seed-runtime
 ] as const;
 
 export type ModuleCategory = (typeof MODULE_CATEGORIES)[number];

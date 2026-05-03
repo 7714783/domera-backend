@@ -13,10 +13,7 @@
 // signatureValid=false; the controller returns 401. We keep the row so
 // ops can investigate spoofing attempts via the journal.
 
-import {
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MigratorPrismaService } from '../../prisma/prisma.migrator';
 import type { MailerAdapter } from './mailer.adapter';
@@ -65,8 +62,7 @@ export class InboundEmailService {
     // INBOUND_EMAIL_SECRET).
     let signatureValid = mailer.verifyInboundSignature(headers, rawBody);
     if (!signatureValid && process.env.INBOUND_EMAIL_SECRET) {
-      signatureValid =
-        headers['x-domera-inbound-key'] === process.env.INBOUND_EMAIL_SECRET;
+      signatureValid = headers['x-domera-inbound-key'] === process.env.INBOUND_EMAIL_SECRET;
     }
 
     // Dedup by providerEventId — provider may retry the webhook on 5xx.

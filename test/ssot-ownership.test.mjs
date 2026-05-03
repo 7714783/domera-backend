@@ -124,7 +124,15 @@ const OWNERSHIP = {
   emailSuppression: 'notifications',
 };
 
-const WRITE_OPS = ['create', 'update', 'upsert', 'delete', 'deleteMany', 'updateMany', 'createMany'];
+const WRITE_OPS = [
+  'create',
+  'update',
+  'upsert',
+  'delete',
+  'deleteMany',
+  'updateMany',
+  'createMany',
+];
 
 function walk(dir) {
   const out = [];

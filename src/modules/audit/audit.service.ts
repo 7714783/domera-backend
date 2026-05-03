@@ -160,10 +160,7 @@ export class AuditService {
     // the maintenance timeline. Audit-write populates both `entity`
     // and `resourceId` with the same value, so we match either column.
     if (params.entityId) {
-      where.OR = [
-        { entity: params.entityId },
-        { resourceId: params.entityId },
-      ];
+      where.OR = [{ entity: params.entityId }, { resourceId: params.entityId }];
     }
     if (params.sensitiveOnly) where.sensitive = true;
     if (params.from || params.to) {

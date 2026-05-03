@@ -266,7 +266,9 @@ export class AuthService {
       (m) => m.roleKey === 'workspace_owner' && m.status === 'active',
     );
     const adminViewAsAllowed = !!user.isSuperAdmin || isWorkspaceOwner;
-    let roleCatalogue: Array<{ key: string; name: string; scope: string; permissions: string[] }> | undefined;
+    let roleCatalogue:
+      | Array<{ key: string; name: string; scope: string; permissions: string[] }>
+      | undefined;
     if (adminViewAsAllowed) {
       const allRoles = await this.prisma.role.findMany({
         select: { key: true, name: true, scope: true },

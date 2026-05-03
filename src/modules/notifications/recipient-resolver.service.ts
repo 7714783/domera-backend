@@ -118,10 +118,7 @@ export class RecipientResolverService {
     return [];
   }
 
-  private async byTeamMemberIds(
-    tenantId: string,
-    ids: string[],
-  ): Promise<ResolvedRecipient[]> {
+  private async byTeamMemberIds(tenantId: string, ids: string[]): Promise<ResolvedRecipient[]> {
     if (!ids.length) return [];
     const rows = await (this.prisma as any).teamMember.findMany({
       where: { tenantId, id: { in: ids }, isActive: true },

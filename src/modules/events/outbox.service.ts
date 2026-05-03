@@ -38,9 +38,7 @@ export class OutboxService {
   // transaction aborts.
   async publish(tx: AnyTx, spec: OutboxEventSpec) {
     if (!spec.payload?.tenantId) {
-      throw new Error(
-        `OutboxService.publish: payload.tenantId is required for type=${spec.type}`,
-      );
+      throw new Error(`OutboxService.publish: payload.tenantId is required for type=${spec.type}`);
     }
     return (tx as any).outboxEvent.create({
       data: {

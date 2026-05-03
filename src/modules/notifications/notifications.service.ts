@@ -86,7 +86,12 @@ export class NotificationsService {
     event: OutboxEventEnvelope,
     rule: any,
     channel: string,
-    recipient: { teamMemberId: string; email: string | null; displayName: string; userId: string | null },
+    recipient: {
+      teamMemberId: string;
+      email: string | null;
+      displayName: string;
+      userId: string | null;
+    },
   ): Promise<void> {
     const dedupKey = `${event.id}:${recipient.teamMemberId || recipient.email || 'anon'}:${channel}`;
 

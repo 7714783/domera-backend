@@ -71,9 +71,7 @@ export class ActorResolver {
     // most users only have one grant; multi-grant merging is deferred.
     const scope: Scope = {
       tenantId,
-      buildingIds: buildingId
-        ? [buildingId]
-        : buildingGrants.map((g) => g.buildingId),
+      buildingIds: buildingId ? [buildingId] : buildingGrants.map((g) => g.buildingId),
       floorIds: mergeStringArrays(buildingGrants.map((g) => g.floorIds)),
       zoneIds: mergeStringArrays(buildingGrants.map((g) => g.zoneIds)),
       systemIds: mergeStringArrays(buildingGrants.map((g) => g.systemIds)),

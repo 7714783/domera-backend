@@ -82,9 +82,7 @@ test('approval emails always go via secure-link (no approve-by-reply)', () => {
   // Contract: an approval rule must NOT be configured to use a template
   // that contains a "Reply with X" instruction. We grep the seeded
   // templates for the forbidden phrase.
-  const tplBlock = sql.match(
-    /INSERT INTO "notification_templates"[\s\S]*?ON CONFLICT/m,
-  );
+  const tplBlock = sql.match(/INSERT INTO "notification_templates"[\s\S]*?ON CONFLICT/m);
   if (!tplBlock) {
     // If no templates seeded, skip — covered by other tests.
     return;

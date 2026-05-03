@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Headers,
-  Post,
-  Query,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Query, UnauthorizedException } from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { InventoryService } from './inventory.service';

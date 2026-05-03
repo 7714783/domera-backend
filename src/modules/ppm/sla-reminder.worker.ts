@@ -89,10 +89,7 @@ export async function scanAndSendReminders(
   return { scanned: plans.length, emitted };
 }
 
-export function createSlaReminderInfra(
-  prisma: PrismaClient,
-  notifications: NotificationsService,
-) {
+export function createSlaReminderInfra(prisma: PrismaClient, notifications: NotificationsService) {
   const connection = { url: process.env.REDIS_URL || 'redis://localhost:6379' };
   const logger = new Logger('PpmSlaReminder');
   const queue = new Queue(QUEUE_NAME, { connection });
@@ -103,11 +100,9 @@ export function createSlaReminderInfra(
     .then(() => logger.log('scheduler upserted: daily-sla-scan'))
     .catch((err) => logger.error('scheduler upsert failed', err as any));
 
-  const worker = new Worker(
-    QUEUE_NAME,
-    async () => scanAndSendReminders(prisma, notifications),
-    { connection },
-  );
+  const worker = new Worker(QUEUE_NAME, async () => scanAndSendReminders(prisma, notifications), {
+    connection,
+  });
   worker.on('completed', (job) =>
     logger.log(`completed ${job.id} → ${JSON.stringify(job.returnvalue)}`),
   );

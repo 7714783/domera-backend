@@ -32,7 +32,7 @@ const PINNED = {
   // scripts/write-retro-rfcs.mjs). Pin is now 0; any new module
   // shipped without an RFC fails the gate immediately.
   rfcRetroPending: 0,
-  rlsKnownGaps: 3,            // 4 → 3 (lease_allocations closed)
+  rlsKnownGaps: 3, // 4 → 3 (lease_allocations closed)
   // Dual-writer baseline at INIT-010 audit start: each documented in §3
   // of docs/architecture/INIT-010-legacy-violations-2026-04-28.md.
   // INIT-010 Follow-up B (2026-04-28): notification collapsed (10 → 9)
@@ -81,17 +81,9 @@ function countDualWriterOwnership(filePath) {
   return dual;
 }
 
-const rfcCount = countSetEntries(
-  join(here, 'module-rfc.test.mjs'),
-  'RETRO_RFC_PENDING',
-);
-const rlsCount = countSetEntries(
-  join(here, 'rls.migration.test.mjs'),
-  'KNOWN_GAPS',
-);
-const ownCount = countDualWriterOwnership(
-  join(here, 'ssot-ownership.test.mjs'),
-);
+const rfcCount = countSetEntries(join(here, 'module-rfc.test.mjs'), 'RETRO_RFC_PENDING');
+const rlsCount = countSetEntries(join(here, 'rls.migration.test.mjs'), 'KNOWN_GAPS');
+const ownCount = countDualWriterOwnership(join(here, 'ssot-ownership.test.mjs'));
 
 test('RETRO_RFC_PENDING count is at or below the pinned baseline', () => {
   assert.notEqual(rfcCount, null, 'parser drift: cannot find RETRO_RFC_PENDING');

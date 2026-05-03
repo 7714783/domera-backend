@@ -109,6 +109,7 @@ console.log(`   tenant B: ${B.tenantId.slice(0, 8)} (${B.slug})`);
 // PPM, approvals, audit, cleaning, devices, tasks, reactive — the common
 // surface a foothold would attempt to exfiltrate.
 const ENDPOINTS = [
+  // Building-scoped reads
   ['GET', '/v1/buildings'],
   ['GET', `/v1/buildings/${B.slug}/floors`],
   ['GET', `/v1/buildings/${B.slug}/units`],
@@ -124,13 +125,43 @@ const ENDPOINTS = [
   ['GET', `/v1/buildings/${B.slug}/qr-locations`],
   ['GET', `/v1/buildings/${B.slug}/incidents`],
   ['GET', `/v1/buildings/${B.slug}/service-requests`],
+  ['GET', `/v1/buildings/${B.slug}/cleaning`],
+  ['GET', `/v1/buildings/${B.slug}/documents`],
+
+  // Workspace-wide reads (cross-cut domain modules)
   ['GET', '/v1/audit'],
   ['GET', '/v1/devices'],
   ['GET', '/v1/tasks'],
+  ['GET', '/v1/tasks/inbox?kind=all'],
   ['GET', '/v1/cleaning/requests?buildingId=' + B.buildingId],
   ['GET', '/v1/cleaning/zones?buildingId=' + B.buildingId],
   ['GET', '/v1/approvals'],
   ['GET', '/v1/triage'],
+  ['GET', '/v1/projects'],
+  ['GET', '/v1/vendor-invoices'],
+  ['GET', '/v1/inventory'],
+  ['GET', '/v1/calendar-blackouts'],
+  ['GET', '/v1/condition-triggers'],
+  ['GET', '/v1/document-links'],
+  ['GET', '/v1/document-templates'],
+  ['GET', '/v1/emergency-overrides'],
+  ['GET', '/v1/obligations'],
+  ['GET', '/v1/occupants'],
+  ['GET', '/v1/organizations'],
+  ['GET', '/v1/connectors'],
+  ['GET', '/v1/webhooks'],
+  ['GET', '/v1/qr-locations'],
+  ['GET', '/v1/rounds'],
+
+  // INIT-013/014 admin surfaces
+  ['GET', '/v1/team'],
+  ['GET', '/v1/roles'],
+  ['GET', '/v1/role-assignments'],
+  ['GET', '/v1/workspace-contractors'],
+  ['GET', '/v1/notifications'],
+  ['GET', '/v1/notifications/deliveries'],
+  ['GET', '/v1/notifications/rules'],
+  ['GET', '/v1/notifications/templates'],
 ];
 
 for (const [method, path] of ENDPOINTS) {

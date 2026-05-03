@@ -5,22 +5,11 @@
 // building_manager / chief_engineer / workspace_owner can manage who's
 // responsible for which floor + when each staffer is off.
 
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { requireManager, resolveBuildingId } from '../../common/building.helpers';
 
-const VALID_AVAILABILITY_STATUSES = [
-  'available',
-  'off',
-  'leave',
-  'sick',
-  'absent',
-  'unavailable',
-];
+const VALID_AVAILABILITY_STATUSES = ['available', 'off', 'leave', 'sick', 'absent', 'unavailable'];
 
 @Injectable()
 export class AssignmentService {

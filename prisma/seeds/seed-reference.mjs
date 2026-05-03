@@ -270,11 +270,11 @@ const PERMISSIONS = {
 delete PERMISSIONS.finance_controller_export; // remove the marker key
 PERMISSIONS.finance_controller = [
   ...PERMISSIONS.finance_controller,
-  'report.export',          // GDPR-gated separate from reports.view
+  'report.export', // GDPR-gated separate from reports.view
 ];
 PERMISSIONS.building_manager = [
   ...PERMISSIONS.building_manager,
-  'report.export',          // manager sees building-wide exports
+  'report.export', // manager sees building-wide exports
   'security.incident.manage', // building manager owns security events in their building
 ];
 PERMISSIONS.fire_safety_officer = [
@@ -283,11 +283,11 @@ PERMISSIONS.fire_safety_officer = [
 ];
 PERMISSIONS.org_admin = [
   ...PERMISSIONS.org_admin,
-  'tasks.view_company',     // org admin sees org-wide cross-building task state
+  'tasks.view_company', // org admin sees org-wide cross-building task state
 ];
 PERMISSIONS.workspace_admin = [
   ...PERMISSIONS.workspace_admin,
-  'tasks.view_company',     // workspace-wide visibility
+  'tasks.view_company', // workspace-wide visibility
   'report.export',
 ];
 
@@ -295,18 +295,18 @@ PERMISSIONS.workspace_admin = [
 // Scope narrowing (tenantCompanyId, createdByScope) lives on the
 // BuildingRoleAssignment row, not in the permission list.
 PERMISSIONS.reception = [
-  'building.read',          // sees public building info
-  'tasks.view_created',     // sees only tickets they created
+  'building.read', // sees public building info
+  'tasks.view_created', // sees only tickets they created
 ];
 PERMISSIONS.tenant_company_admin = [
   'building.read',
-  'tasks.view_company',     // sees all tickets of their occupant company
-  'document.read',          // sees tenant-company documents (gated by scope)
+  'tasks.view_company', // sees all tickets of their occupant company
+  'document.read', // sees tenant-company documents (gated by scope)
 ];
 PERMISSIONS.tenant_employee = [
   'building.read',
-  'tasks.view_created',     // only self-submitted tickets
-  'tasks.cancel_own',       // can cancel own tickets before assignment
+  'tasks.view_created', // only self-submitted tickets
+  'tasks.cancel_own', // can cancel own tickets before assignment
 ];
 
 // INIT-007 Phase 5 — CLEANING_MANAGER + SECURITY permissions.
@@ -315,20 +315,20 @@ PERMISSIONS.tenant_employee = [
 // reports. NOT a workspace admin — cannot manage roles or budgets.
 PERMISSIONS.cleaning_manager = [
   'building.read',
-  'tasks.view_all',         // sees all cleaning tasks in scope
-  'task.assign',            // assigns cleaners to zones/floors
+  'tasks.view_all', // sees all cleaning tasks in scope
+  'task.assign', // assigns cleaners to zones/floors
   'task.read_assigned',
-  'task.complete_review',   // signs off completions
+  'task.complete_review', // signs off completions
   'document.upload_evidence',
-  'report.export',          // cleaning quality reports
+  'report.export', // cleaning quality reports
 ];
 // SECURITY handles incidents, access control, patrol logs. Scope-narrowable
 // via teamId (security team) or floorIds (parking-only guards, etc).
 PERMISSIONS.security = [
   'building.read',
   'security.incident.manage',
-  'tasks.create',           // can open incidents/SR
-  'tasks.view_assigned',    // sees own patrol/incident tasks
+  'tasks.create', // can open incidents/SR
+  'tasks.view_assigned', // sees own patrol/incident tasks
   'document.upload_evidence',
 ];
 
@@ -337,8 +337,8 @@ PERMISSIONS.security = [
 // BuildingRoleAssignment.contractorCompanyId on every grant.
 PERMISSIONS.contractor_manager = [
   'building.read',
-  'tasks.view_company',     // sees all tasks of their contractor company
-  'task.assign',            // assigns own staff to tasks
+  'tasks.view_company', // sees all tasks of their contractor company
+  'task.assign', // assigns own staff to tasks
   'workorder.read_assigned',
   'document.upload_evidence',
 ];

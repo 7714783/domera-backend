@@ -50,8 +50,7 @@ test('middleware looks up the Session row by tokenHash', () => {
   // session.findUnique with a tokenHash where-clause. Either the call
   // site uses { tokenHash } shorthand or { tokenHash: <var> }; both
   // satisfy.
-  const re =
-    /prisma\.session\.findUnique\s*\(\s*\{\s*where\s*:\s*\{\s*tokenHash\s*[:}]/;
+  const re = /prisma\.session\.findUnique\s*\(\s*\{\s*where\s*:\s*\{\s*tokenHash\s*[:}]/;
   assert.match(
     src,
     re,

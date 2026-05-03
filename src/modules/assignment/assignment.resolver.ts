@@ -58,7 +58,11 @@ export async function resolveAssignment(
 
       const anyOnFloor = floorRows.find((r) => !unavailable.has(r.userId));
       if (anyOnFloor) {
-        return mk(anyOnFloor.userId, 'floor.any', 'floor assignment (non-primary or only candidate)');
+        return mk(
+          anyOnFloor.userId,
+          'floor.any',
+          'floor assignment (non-primary or only candidate)',
+        );
       }
     }
   }

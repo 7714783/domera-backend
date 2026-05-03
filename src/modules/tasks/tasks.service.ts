@@ -121,9 +121,7 @@ export class TasksService {
               status: { in: ['new', 'assigned', 'in_progress'] },
               OR: [
                 { assignedUserId: actorUserId },
-                ...(cleaningStaffIds.length
-                  ? [{ assignedStaffId: { in: cleaningStaffIds } }]
-                  : []),
+                ...(cleaningStaffIds.length ? [{ assignedStaffId: { in: cleaningStaffIds } }] : []),
               ],
             },
             orderBy: [{ priority: 'desc' }, { requestedAt: 'asc' }],
@@ -524,12 +522,7 @@ export class TasksService {
   // INIT-002 Phase 5 P1 — short on-site notes attached to a task. The mobile
   // technician posts updates ("part replaced", "customer not home"), the web
   // manager reads them in the task detail. No threading, no mentions.
-  async addNote(
-    tenantId: string,
-    taskId: string,
-    actorUserId: string,
-    body: { body?: string },
-  ) {
+  async addNote(tenantId: string, taskId: string, actorUserId: string, body: { body?: string }) {
     const text = body?.body?.trim();
     if (!text) throw new BadRequestException('body required');
     if (text.length > 4000) throw new BadRequestException('body must be <= 4000 chars');

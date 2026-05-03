@@ -14,9 +14,15 @@ const RULES = [
   // finance
   [/^(approvals|vendor-invoices|imports|leases|takeover)$/, 'finance'],
   // tech_support
-  [/^(ppm|assets|building-core|condition-triggers|inventory|reactive|tasks|connectors)$/, 'tech_support'],
+  [
+    /^(ppm|assets|building-core|condition-triggers|inventory|reactive|tasks|connectors)$/,
+    'tech_support',
+  ],
   // legal
-  [/^(documents|document-links|document-templates|privacy|emergency-overrides|obligations)$/, 'legal'],
+  [
+    /^(documents|document-links|document-templates|privacy|emergency-overrides|obligations)$/,
+    'legal',
+  ],
   // cleaning
   [/^(cleaning|rounds)$/, 'cleaning'],
   // security
@@ -24,7 +30,10 @@ const RULES = [
   // compliance
   [/^(compliance|compliance-profiles|audit)$/, 'compliance'],
   // operations
-  [/^(buildings|tenancy|tenant-companies|projects|onboarding|occupants|calendar-blackouts)$/, 'operations'],
+  [
+    /^(buildings|tenancy|tenant-companies|projects|onboarding|occupants|calendar-blackouts)$/,
+    'operations',
+  ],
   // people
   [/^(auth|iam|role-dashboards|organizations|contractor-companies|sso|scim|mfa)$/, 'people'],
   // enterprise (catch-all for vendor-related)

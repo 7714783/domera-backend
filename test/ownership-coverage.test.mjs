@@ -143,7 +143,8 @@ const EXEMPT = {
 
   // QR / public submission
   qrLocation: 'written by qr-locations module',
-  buildingLocation: 'written by building-core module — canonical non-leasable spaces (lobby/restroom/mechanical)',
+  buildingLocation:
+    'written by building-core module — canonical non-leasable spaces (lobby/restroom/mechanical)',
   occupantCompanySettings: 'written by occupants module — per-company billing/tax settings',
 
   // Approvals family

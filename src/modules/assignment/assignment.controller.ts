@@ -47,12 +47,7 @@ export class AssignmentController {
     @Headers('x-tenant-id') th?: string,
     @Headers('authorization') ah?: string,
   ) {
-    return this.svc.createFloorAssignment(
-      resolveTenantId(th),
-      await uid(ah, this.auth),
-      id,
-      body,
-    );
+    return this.svc.createFloorAssignment(resolveTenantId(th), await uid(ah, this.auth), id, body);
   }
 
   @Delete('floor-assignments/:id')

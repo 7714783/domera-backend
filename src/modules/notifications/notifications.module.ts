@@ -1,9 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
-import {
-  NotificationsController,
-  MailInboundController,
-} from './notifications.controller';
+import { NotificationsController, MailInboundController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 import { InboundEmailService } from './inbound-email.service';
 import { RecipientResolverService } from './recipient-resolver.service';

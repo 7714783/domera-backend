@@ -148,7 +148,10 @@ await test('create floor + location, GET returns the location', async () => {
 await test('refresh: second GET returns same data (row persisted)', async () => {
   const r = await call(`/v1/buildings/${A.slug}/locations`, { headers: headersA });
   assert.equal(r.status, 200);
-  assert.ok(r.body.find((x) => x.id === createdLocationId), 'location still present');
+  assert.ok(
+    r.body.find((x) => x.id === createdLocationId),
+    'location still present',
+  );
 });
 
 await test('cross-tenant authenticated → strict 404 (B token + B tenantId hits A slug)', async () => {

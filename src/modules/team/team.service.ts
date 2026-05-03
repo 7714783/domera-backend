@@ -36,8 +36,9 @@ export interface TeamMemberCreate {
   startDate?: string;
 }
 
-export interface TeamMemberUpdate
-  extends Partial<Omit<TeamMemberCreate, 'kind' | 'userId' | 'workspaceContractorId'>> {
+export interface TeamMemberUpdate extends Partial<
+  Omit<TeamMemberCreate, 'kind' | 'userId' | 'workspaceContractorId'>
+> {
   isActive?: boolean;
   endDate?: string | null;
 }
@@ -68,11 +69,17 @@ export class TeamService {
     const items = await (this.prisma as any).teamMember.findMany({
       where,
       include: {
-        user: { select: { id: true, displayName: true, username: true, email: true, lastLoginAt: true } },
-        workspaceContractor: {
-          include: { publicContractor: { select: { id: true, displayName: true, publicPhone: true } } },
+        user: {
+          select: { id: true, displayName: true, username: true, email: true, lastLoginAt: true },
         },
-        roleAssignments: { include: { role: { select: { key: true, name: true, scope: true, categories: true } } } },
+        workspaceContractor: {
+          include: {
+            publicContractor: { select: { id: true, displayName: true, publicPhone: true } },
+          },
+        },
+        roleAssignments: {
+          include: { role: { select: { key: true, name: true, scope: true, categories: true } } },
+        },
       },
       orderBy: [{ isActive: 'desc' }, { displayName: 'asc' }],
     });
@@ -106,7 +113,8 @@ export class TeamService {
       const dup = await (this.prisma as any).teamMember.findFirst({
         where: { tenantId, userId: body.userId },
       });
-      if (dup) throw new ConflictException('user already linked to a team member in this workspace');
+      if (dup)
+        throw new ConflictException('user already linked to a team member in this workspace');
     }
 
     const created = await (this.prisma as any).teamMember.create({
@@ -158,7 +166,8 @@ export class TeamService {
     if (body.title !== undefined) data.title = body.title;
     if (body.department !== undefined) data.department = body.department;
     if (body.photoUrl !== undefined) data.photoUrl = body.photoUrl;
-    if (body.startDate !== undefined) data.startDate = body.startDate ? new Date(body.startDate) : null;
+    if (body.startDate !== undefined)
+      data.startDate = body.startDate ? new Date(body.startDate) : null;
     if (body.endDate !== undefined) data.endDate = body.endDate ? new Date(body.endDate) : null;
     if (body.isActive !== undefined) data.isActive = body.isActive;
 

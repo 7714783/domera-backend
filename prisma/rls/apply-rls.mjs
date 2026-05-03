@@ -48,12 +48,17 @@ function loadFile(name) {
     path.resolve(process.cwd(), 'apps/api/prisma/rls', name),
   ];
   for (const c of candidates) if (fs.existsSync(c)) return fs.readFileSync(c, 'utf8');
-  throw new Error(`apply-rls: file not found in any candidate dir: ${name} — tried ${candidates.join(', ')}`);
+  throw new Error(
+    `apply-rls: file not found in any candidate dir: ${name} — tried ${candidates.join(', ')}`,
+  );
 }
 
 async function applyOn(client, name) {
   const raw = loadFile(name);
-  const sql = raw.split('\n').filter((l) => !/^\s*--/.test(l)).join('\n');
+  const sql = raw
+    .split('\n')
+    .filter((l) => !/^\s*--/.test(l))
+    .join('\n');
   const stmts = splitSql(sql);
   for (const stmt of stmts) {
     await client.$executeRawUnsafe(stmt);
@@ -62,15 +67,16 @@ async function applyOn(client, name) {
 }
 
 async function run() {
-  const files = (process.argv.slice(2).length
-    ? process.argv.slice(2)
-    : ['001_enable_rls.sql']
-  );
+  const files = process.argv.slice(2).length ? process.argv.slice(2) : ['001_enable_rls.sql'];
 
-  const needsSuperuser = files.some((f) => f.includes('002_split_roles') || f.includes('003_force_rls'));
+  const needsSuperuser = files.some(
+    (f) => f.includes('002_split_roles') || f.includes('003_force_rls'),
+  );
   const url = needsSuperuser
-    ? (process.env.DATABASE_URL_SUPER || process.env.DATABASE_URL_MIGRATOR || process.env.DATABASE_URL)
-    : (process.env.DATABASE_URL_MIGRATOR || process.env.DATABASE_URL);
+    ? process.env.DATABASE_URL_SUPER ||
+      process.env.DATABASE_URL_MIGRATOR ||
+      process.env.DATABASE_URL
+    : process.env.DATABASE_URL_MIGRATOR || process.env.DATABASE_URL;
 
   const client = new PrismaClient({ datasources: { db: { url } } });
   try {

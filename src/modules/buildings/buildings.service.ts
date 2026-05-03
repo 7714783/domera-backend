@@ -369,9 +369,7 @@ export class BuildingsService {
     const from = (existing as any).lifecycleStatus || 'active';
     const allowed = this.LIFECYCLE_TRANSITIONS[from] || [];
     if (!allowed.includes(to)) {
-      throw new BadRequestException(
-        `cannot transition building lifecycle ${from} → ${to}`,
-      );
+      throw new BadRequestException(`cannot transition building lifecycle ${from} → ${to}`);
     }
 
     const data: Record<string, any> = { lifecycleStatus: to };
@@ -478,9 +476,7 @@ export class BuildingsService {
       select: { id: true },
     });
     if (!ownerMembership) {
-      throw new ForbiddenException(
-        'building deletion requires the workspace_owner role',
-      );
+      throw new ForbiddenException('building deletion requires the workspace_owner role');
     }
 
     const building = await this.prisma.building.findUnique({
@@ -557,7 +553,8 @@ export class BuildingsService {
       resourceId: building.id,
       metadata: {
         deletedSummary,
-        retainedAt: 'tenant: User, ContractorCompany, AssetType, PpmTemplate (catalogue), DocumentTemplate, audit_entries',
+        retainedAt:
+          'tenant: User, ContractorCompany, AssetType, PpmTemplate (catalogue), DocumentTemplate, audit_entries',
         confirmTextMatched: true,
       },
     });

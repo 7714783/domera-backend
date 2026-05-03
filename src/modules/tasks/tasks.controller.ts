@@ -138,7 +138,8 @@ export class TasksController {
   @Post(':id/request-expense')
   async requestExpense(
     @Param('id') id: string,
-    @Body() body: {
+    @Body()
+    body: {
       amount: number;
       currency?: string;
       reason: string;

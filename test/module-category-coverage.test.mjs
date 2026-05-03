@@ -43,34 +43,22 @@ function readMeta(dir) {
 }
 
 test('every module folder declares MODULE_CATEGORY in module.meta.ts', () => {
-  const folders = fs
-    .readdirSync(ROOT)
-    .filter((f) => fs.statSync(path.join(ROOT, f)).isDirectory());
+  const folders = fs.readdirSync(ROOT).filter((f) => fs.statSync(path.join(ROOT, f)).isDirectory());
   const missing = [];
   for (const f of folders) {
     if (!readMeta(f)) missing.push(f);
   }
-  assert.deepEqual(
-    missing,
-    [],
-    `module.meta.ts missing or malformed for: ${missing.join(', ')}`,
-  );
+  assert.deepEqual(missing, [], `module.meta.ts missing or malformed for: ${missing.join(', ')}`);
 });
 
 test('every declared MODULE_CATEGORY is canonical', () => {
-  const folders = fs
-    .readdirSync(ROOT)
-    .filter((f) => fs.statSync(path.join(ROOT, f)).isDirectory());
+  const folders = fs.readdirSync(ROOT).filter((f) => fs.statSync(path.join(ROOT, f)).isDirectory());
   const offenders = [];
   for (const f of folders) {
     const cat = readMeta(f);
     if (cat && !CANONICAL.has(cat)) offenders.push(`${f}=${cat}`);
   }
-  assert.deepEqual(
-    offenders,
-    [],
-    `non-canonical categories: ${offenders.join(', ')}`,
-  );
+  assert.deepEqual(offenders, [], `non-canonical categories: ${offenders.join(', ')}`);
 });
 
 test('canonical categories file mirrors the test-side list', () => {

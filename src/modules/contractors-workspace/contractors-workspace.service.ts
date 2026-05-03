@@ -24,8 +24,9 @@ export interface WorkspaceContractorCreate {
   startedAt?: string;
 }
 
-export interface WorkspaceContractorUpdate
-  extends Partial<Omit<WorkspaceContractorCreate, 'publicContractorId'>> {
+export interface WorkspaceContractorUpdate extends Partial<
+  Omit<WorkspaceContractorCreate, 'publicContractorId'>
+> {
   status?: 'active' | 'paused' | 'terminated';
   endedAt?: string | null;
 }
@@ -124,7 +125,8 @@ export class ContractorsWorkspaceService {
     if (body.privateNotes !== undefined) data.privateNotes = body.privateNotes;
     if (body.preferredRate !== undefined) data.preferredRate = body.preferredRate;
     if (body.status !== undefined) data.status = body.status;
-    if (body.startedAt !== undefined) data.startedAt = body.startedAt ? new Date(body.startedAt) : null;
+    if (body.startedAt !== undefined)
+      data.startedAt = body.startedAt ? new Date(body.startedAt) : null;
     if (body.endedAt !== undefined) data.endedAt = body.endedAt ? new Date(body.endedAt) : null;
 
     const updated = await (this.prisma as any).workspaceContractor.update({

@@ -78,7 +78,8 @@ export class TenantCompaniesService {
     body: { userId: string | null },
   ) {
     if (!actorUserId) throw new UnauthorizedException();
-    if (body.userId === undefined) throw new BadRequestException('userId required (null to unlink)');
+    if (body.userId === undefined)
+      throw new BadRequestException('userId required (null to unlink)');
 
     const company = await this.prisma.buildingOccupantCompany.findFirst({
       where: { id: occupantCompanyId, tenantId },

@@ -11,7 +11,10 @@ import {
 } from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
-import { ContractorsPublicService, type PublicContractorCreate } from './contractors-public.service';
+import {
+  ContractorsPublicService,
+  type PublicContractorCreate,
+} from './contractors-public.service';
 
 async function uid(auth: string | undefined, s: AuthService): Promise<string> {
   if (!auth || !auth.startsWith('Bearer ')) throw new UnauthorizedException('no token');

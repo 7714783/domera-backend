@@ -94,10 +94,7 @@ function escape(s: string): string {
     '"': '&quot;',
     "'": '&#39;',
   };
-  return String(s ?? '').replace(
-    /[&<>"']/g,
-    (c) => entities[c] ?? c,
-  );
+  return String(s ?? '').replace(/[&<>"']/g, (c) => entities[c] ?? c);
 }
 
 function renderPrintSheet(

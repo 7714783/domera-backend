@@ -31,29 +31,21 @@
 // Done a controller at a time, NOT in one massive sed — small per-file
 // PRs keep the diff reviewable and CI catches regressions early.
 
-import {
-  BadRequestException,
-  createParamDecorator,
-  ExecutionContext,
-} from '@nestjs/common';
+import { BadRequestException, createParamDecorator, ExecutionContext } from '@nestjs/common';
 import type { Request } from 'express';
 import { TenantContext } from './tenant-context';
 
-export const Tenant = createParamDecorator(
-  (_data: unknown, ctx: ExecutionContext): string => {
-    // Prefer TenantContext (the source of truth populated by
-    // TenantMiddleware before any controller runs).
-    const fromAls = TenantContext.getTenantId();
-    if (fromAls) return fromAls;
+export const Tenant = createParamDecorator((_data: unknown, ctx: ExecutionContext): string => {
+  // Prefer TenantContext (the source of truth populated by
+  // TenantMiddleware before any controller runs).
+  const fromAls = TenantContext.getTenantId();
+  if (fromAls) return fromAls;
 
-    // Fallback: read the header the middleware also writes onto
-    // req.headers. Belt-and-braces — legacy code paths.
-    const req = ctx.switchToHttp().getRequest<Request>();
-    const fromHeader = req?.header?.('x-tenant-id');
-    if (fromHeader) return fromHeader;
+  // Fallback: read the header the middleware also writes onto
+  // req.headers. Belt-and-braces — legacy code paths.
+  const req = ctx.switchToHttp().getRequest<Request>();
+  const fromHeader = req?.header?.('x-tenant-id');
+  if (fromHeader) return fromHeader;
 
-    throw new BadRequestException(
-      'X-Tenant-Id is required (no active tenant membership resolved)',
-    );
-  },
-);
+  throw new BadRequestException('X-Tenant-Id is required (no active tenant membership resolved)');
+});

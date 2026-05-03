@@ -62,7 +62,8 @@ export class TeamController {
       floorId,
       zoneId,
       systemId,
-      strategy: (strategy as 'first' | 'least_loaded' | 'round_robin' | undefined) ?? 'least_loaded',
+      strategy:
+        (strategy as 'first' | 'least_loaded' | 'round_robin' | undefined) ?? 'least_loaded',
     });
     return { total: items.length, items };
   }

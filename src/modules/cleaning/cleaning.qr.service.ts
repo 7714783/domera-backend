@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const QRCode: any = require('qrcode');

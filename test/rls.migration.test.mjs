@@ -73,11 +73,7 @@ function tenantScopedTables() {
 // per-tenant writes. Migration 020 documents the exemption.
 // INIT-010 — `lease_allocations` removed 2026-04-28 (migration 021 closed
 // the gap with ENABLE/FORCE/tenant_isolation).
-const KNOWN_GAPS = new Set([
-  'roles',
-  'notification_rules',
-  'notification_templates',
-]);
+const KNOWN_GAPS = new Set(['roles', 'notification_rules', 'notification_templates']);
 
 const tables = tenantScopedTables().filter((t) => !KNOWN_GAPS.has(t));
 

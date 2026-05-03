@@ -12,20 +12,13 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const sqlPath = resolve(
-  here,
-  '..',
-  'prisma',
-  'migrations-sql',
-  '020_notifications_unified.sql',
-);
+const sqlPath = resolve(here, '..', 'prisma', 'migrations-sql', '020_notifications_unified.sql');
 const sql = readFileSync(sqlPath, 'utf8');
 
 // ── Parse seeded templates ──────────────────────────────────────────
 function parseTemplates() {
   const out = [];
-  const re =
-    /INSERT INTO "notification_templates"[\s\S]*?VALUES([\s\S]*?)ON CONFLICT/m;
+  const re = /INSERT INTO "notification_templates"[\s\S]*?VALUES([\s\S]*?)ON CONFLICT/m;
   const m = sql.match(re);
   if (!m) return out;
   const body = m[1];
@@ -49,8 +42,7 @@ function parseTemplates() {
 
 function parseRules() {
   const out = [];
-  const re =
-    /INSERT INTO "notification_rules"[\s\S]*?VALUES([\s\S]*?)ON CONFLICT/m;
+  const re = /INSERT INTO "notification_rules"[\s\S]*?VALUES([\s\S]*?)ON CONFLICT/m;
   const m = sql.match(re);
   if (!m) return out;
   const body = m[1];

@@ -16,15 +16,7 @@
 //   - wiring tasks.view_company filter on ServiceRequest list endpoints
 // Those are separate, smaller commits.
 
-import {
-  Body,
-  Controller,
-  Get,
-  Headers,
-  Param,
-  Post,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, UnauthorizedException } from '@nestjs/common';
 import { resolveTenantId } from '../../common/tenant.utils';
 import { AuthService } from '../auth/auth.service';
 import { PrismaService } from '../../prisma/prisma.service';

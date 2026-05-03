@@ -39,10 +39,7 @@ export class DevicesController {
 
   /** List the caller's registered devices (for a session-management screen). */
   @Get()
-  async list(
-    @Tenant() tenantId: string,
-    @Headers('authorization') authHeader?: string,
-  ) {
+  async list(@Tenant() tenantId: string, @Headers('authorization') authHeader?: string) {
     const userId = await uid(authHeader, this.auth);
     const items = await this.devices.list(tenantId, userId);
     return { total: items.length, items };

@@ -7,22 +7,22 @@ export class CalendarBlackoutsController {
   constructor(private readonly svc: CalendarBlackoutsService) {}
 
   @Get()
-  list(@Query('buildingId') buildingId?: string, @Tenant() tenantId?: string) {
-    return this.svc.list(tenantId!, buildingId);
+  list(@Tenant() tenantId: string, @Query('buildingId') buildingId?: string) {
+    return this.svc.list(tenantId, buildingId);
   }
 
   @Post()
-  create(@Body() body: any, @Tenant() tenantId?: string) {
-    return this.svc.create(tenantId!, body);
+  create(@Tenant() tenantId: string, @Body() body: any) {
+    return this.svc.create(tenantId, body);
   }
 
   @Post('seed-israel-defaults')
-  seedIL(@Body() body: { buildingId?: string } | undefined, @Tenant() tenantId?: string) {
-    return this.svc.seedIsraelDefaults(tenantId!, body?.buildingId);
+  seedIL(@Tenant() tenantId: string, @Body() body?: { buildingId?: string }) {
+    return this.svc.seedIsraelDefaults(tenantId, body?.buildingId);
   }
 
   @Delete(':id')
-  del(@Param('id') id: string, @Tenant() tenantId?: string) {
-    return this.svc.delete(tenantId!, id);
+  del(@Tenant() tenantId: string, @Param('id') id: string) {
+    return this.svc.delete(tenantId, id);
   }
 }

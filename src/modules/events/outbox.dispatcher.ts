@@ -128,9 +128,7 @@ export class OutboxDispatcher implements OnModuleInit, OnModuleDestroy {
           payload: row.data ?? {},
         });
       } catch (e: any) {
-        this.log.warn(
-          `handler failed for ${row.type} (event ${row.id}): ${e?.message ?? e}`,
-        );
+        this.log.warn(`handler failed for ${row.type} (event ${row.id}): ${e?.message ?? e}`);
         allOk = false;
       }
     }

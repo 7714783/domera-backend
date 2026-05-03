@@ -119,14 +119,7 @@ const REGISTRY = {
 
   // Cleaning short workflow (contract § 2)
   cleaning_request: {
-    STATES: new Set([
-      'new',
-      'assigned',
-      'in_progress',
-      'done',
-      'rejected',
-      'cancelled',
-    ]),
+    STATES: new Set(['new', 'assigned', 'in_progress', 'done', 'rejected', 'cancelled']),
     TRANSITIONS: {
       new: { assigned: 'staff picked', cancelled: 'duplicate / void', rejected: 'out of scope' },
       assigned: {
@@ -170,7 +163,11 @@ const REGISTRY = {
   quote: {
     STATES: new Set(['received', 'approved', 'rejected', 'superseded']),
     TRANSITIONS: {
-      received: { approved: 'finance approves', rejected: 'finance rejects', superseded: 'newer quote replaces' },
+      received: {
+        approved: 'finance approves',
+        rejected: 'finance rejects',
+        superseded: 'newer quote replaces',
+      },
       approved: { superseded: 'revised quote replaces' },
     },
   },

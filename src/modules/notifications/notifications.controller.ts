@@ -278,8 +278,7 @@ export class MailInboundController {
     //   { type: 'email.received', data: { from, to, subject, html, text, attachments[] } }
     // Other providers send the mail at the top level. Detect both
     // shapes and normalise.
-    const isResendEnvelope =
-      provider === 'resend' && typeof body?.type === 'string' && body?.data;
+    const isResendEnvelope = provider === 'resend' && typeof body?.type === 'string' && body?.data;
     const inner = isResendEnvelope ? body.data : body;
     const parsed: InboundPayload = {
       provider,

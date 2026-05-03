@@ -55,7 +55,8 @@ export function checkProdEnv(env: NodeJS.ProcessEnv = process.env): EnvGuardErro
     errs.push({
       variable: 'CORS_ORIGINS',
       severity: 'soft',
-      reason: 'unset — defaults to wildcard; list explicit origins comma-separated for tightened CORS',
+      reason:
+        'unset — defaults to wildcard; list explicit origins comma-separated for tightened CORS',
     });
   } else if (env.CORS_ORIGINS.trim() === '*' || env.CORS_ORIGINS.trim().toLowerCase() === 'true') {
     errs.push({
@@ -92,8 +93,7 @@ export function checkProdEnv(env: NodeJS.ProcessEnv = process.env): EnvGuardErro
       errs.push({
         variable: 'RESEND_API_KEY',
         severity: 'hard',
-        reason:
-          'EMAIL_PROVIDER=resend but RESEND_API_KEY is unset — every send will fail',
+        reason: 'EMAIL_PROVIDER=resend but RESEND_API_KEY is unset — every send will fail',
       });
     } else if (!env.RESEND_API_KEY.startsWith('re_')) {
       errs.push({
@@ -125,7 +125,8 @@ export function checkProdEnv(env: NodeJS.ProcessEnv = process.env): EnvGuardErro
     errs.push({
       variable: 'EMAIL_FROM',
       severity: 'soft',
-      reason: 'unset — defaults to notifications@domerahub.com; set explicitly per workspace domain',
+      reason:
+        'unset — defaults to notifications@domerahub.com; set explicitly per workspace domain',
     });
   }
   // Inbound webhook shared-secret fallback: only required when the
@@ -153,7 +154,6 @@ export function assertProdEnv(env: NodeJS.ProcessEnv = process.env): void {
   const soft = errs.filter((e) => e.severity === 'soft' && !strict);
 
   if (soft.length > 0) {
-     
     console.warn(
       `\n[env-guard] ${soft.length} soft warning(s) in NODE_ENV=production:\n` +
         soft.map((e) => `  - ${e.variable}: ${e.reason}`).join('\n') +
@@ -162,7 +162,6 @@ export function assertProdEnv(env: NodeJS.ProcessEnv = process.env): void {
   }
 
   if (hard.length > 0) {
-     
     console.error(
       `\n[env-guard] Refusing to start — ${hard.length} hard violation(s):\n` +
         hard.map((e) => `  - ${e.variable}: ${e.reason}`).join('\n') +

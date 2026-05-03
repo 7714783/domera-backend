@@ -74,7 +74,15 @@ const CATALOG = {
     producer: 'tasks',
     consumers: ['approvals', 'reactive'],
     schemaVersion: 1,
-    payloadShape: ['caseId', 'tenantId', 'buildingId', 'amount', 'currency', 'reason', 'vendorOrgId'],
+    payloadShape: [
+      'caseId',
+      'tenantId',
+      'buildingId',
+      'amount',
+      'currency',
+      'reason',
+      'vendorOrgId',
+    ],
   },
   'ppm.case.closed': {
     producer: 'ppm',
@@ -114,7 +122,14 @@ const CATALOG = {
     producer: 'vendor-invoices',
     consumers: ['ppm'],
     schemaVersion: 1,
-    payloadShape: ['invoiceId', 'tenantId', 'amount', 'currency', 'taskInstanceId', 'approvedByUserId'],
+    payloadShape: [
+      'invoiceId',
+      'tenantId',
+      'amount',
+      'currency',
+      'taskInstanceId',
+      'approvedByUserId',
+    ],
   },
 
   // cleaning
@@ -153,13 +168,26 @@ const CATALOG = {
     producer: 'approvals',
     consumers: ['notifications'],
     schemaVersion: 1,
-    payloadShape: ['approvalId', 'tenantId', 'subjectType', 'subjectId', 'amount', 'requesterTeamMemberId'],
+    payloadShape: [
+      'approvalId',
+      'tenantId',
+      'subjectType',
+      'subjectId',
+      'amount',
+      'requesterTeamMemberId',
+    ],
   },
   'document.requested': {
     producer: 'documents',
     consumers: ['notifications'],
     schemaVersion: 1,
-    payloadShape: ['documentRequestId', 'tenantId', 'documentType', 'recipientEmails', 'contextLabel'],
+    payloadShape: [
+      'documentRequestId',
+      'tenantId',
+      'documentType',
+      'recipientEmails',
+      'contextLabel',
+    ],
   },
   'invoice.awaiting_confirmation': {
     producer: 'vendor-invoices',
@@ -198,10 +226,7 @@ test('every consumer is an existing module folder', () => {
   for (const [type, def] of Object.entries(CATALOG)) {
     for (const c of def.consumers) {
       const path = join(modulesDir, c);
-      assert.ok(
-        existsSync(path),
-        `${type}: consumer ${c} does not exist as module folder`,
-      );
+      assert.ok(existsSync(path), `${type}: consumer ${c} does not exist as module folder`);
     }
   }
 });

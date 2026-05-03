@@ -5,7 +5,12 @@
 // No Prisma, no Nest — the policy engine is intentionally dependency-free.
 
 import { strict as assert } from 'node:assert';
-import { authorize, requirePermission, requireScope, scopeWhere } from '../dist/common/authz/policy.js';
+import {
+  authorize,
+  requirePermission,
+  requireScope,
+  scopeWhere,
+} from '../dist/common/authz/policy.js';
 import { AuthorizationError } from '../dist/common/authz/types.js';
 
 let pass = 0;
@@ -90,9 +95,7 @@ test('super admin bypasses permission check', () => {
 // -------------------------------------------------- scope checks
 test('cross-tenant access blocked', () => {
   const a = makeActor();
-  expectThrow('CROSS_TENANT_ACCESS', () =>
-    requireScope(a, makeResource({ tenantId: 't-beta' })),
-  );
+  expectThrow('CROSS_TENANT_ACCESS', () => requireScope(a, makeResource({ tenantId: 't-beta' })));
 });
 
 test('same tenant building access passes', () => {
@@ -117,9 +120,7 @@ test('floorIds narrows within building', () => {
     scope: { ...makeActor().scope, floorIds: ['f-4', 'f-5'] },
   });
   requireScope(a, makeResource({ floorId: 'f-4' }));
-  expectThrow('FLOOR_SCOPE_VIOLATION', () =>
-    requireScope(a, makeResource({ floorId: 'f-6' })),
-  );
+  expectThrow('FLOOR_SCOPE_VIOLATION', () => requireScope(a, makeResource({ floorId: 'f-6' })));
 });
 
 test('null floorId on resource is skipped (dimension absent)', () => {
@@ -149,9 +150,7 @@ test('tenantCompany scope blocks other company', () => {
 
 test('team scope blocks other team', () => {
   const a = makeActor({ scope: { ...makeActor().scope, teamId: 'tech-hvac' } });
-  expectThrow('TEAM_SCOPE_VIOLATION', () =>
-    requireScope(a, makeResource({ teamId: 'tech-elec' })),
-  );
+  expectThrow('TEAM_SCOPE_VIOLATION', () => requireScope(a, makeResource({ teamId: 'tech-elec' })));
 });
 
 test('createdByScope blocks foreign createdByUserId', () => {
@@ -170,9 +169,7 @@ test('createdByScope allows own createdByUserId', () => {
 test('authorize requires both permission + scope', () => {
   const a = makeActor();
   authorize(a, 'tasks.view_assigned', makeResource());
-  expectThrow('MISSING_PERMISSION', () =>
-    authorize(a, 'tasks.assign', makeResource()),
-  );
+  expectThrow('MISSING_PERMISSION', () => authorize(a, 'tasks.assign', makeResource()));
   expectThrow('CROSS_TENANT_ACCESS', () =>
     authorize(a, 'tasks.view_assigned', makeResource({ tenantId: 't-beta' })),
   );
