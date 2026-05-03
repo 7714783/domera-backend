@@ -5,12 +5,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OutboxService } from '../events/outbox.service';
 
 const TOLERANCE_PCT = 0.02;
 
 @Injectable()
 export class VendorInvoicesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly outbox: OutboxService,
+  ) {}
 
   async create(
     tenantId: string,
@@ -136,10 +140,52 @@ export class VendorInvoicesService {
     if (invoice.matchedByUserId === actorUserId) {
       throw new ForbiddenException('SoD: matcher and approver must differ');
     }
-    return this.prisma.vendorInvoice.update({
+    const updated = await this.prisma.vendorInvoice.update({
       where: { id },
       data: { approvalStatus: 'approved', approvedByUserId: actorUserId, approvedAt: new Date() },
     });
+    // INIT-012 P1 chiller canary — fifth (final) slice. Approving a
+    // vendor invoice closes the financial leg of the chiller flow.
+    // Resolve the upstream taskInstanceId by walking
+    // invoice → purchaseOrder → workOrder. PPM subscribes and stamps
+    // a financial-close audit row on the task; assets timeline
+    // already shows the asset.serviced row from ppm.case.closed —
+    // together they form the complete maintenance + finance trail.
+    let taskInstanceId: string | null = null;
+    let workOrderId: string | null = null;
+    if (updated.purchaseOrderId) {
+      const po = await this.prisma.purchaseOrder.findFirst({
+        where: { id: updated.purchaseOrderId, tenantId },
+        select: { workOrderId: true },
+      });
+      workOrderId = po?.workOrderId ?? null;
+      if (workOrderId) {
+        const wo = await this.prisma.workOrder.findFirst({
+          where: { id: workOrderId, tenantId },
+          select: { taskInstanceId: true },
+        });
+        taskInstanceId = wo?.taskInstanceId ?? null;
+      }
+    }
+    await this.outbox.publish(this.prisma, {
+      type: 'invoice.paid',
+      source: 'vendor-invoices',
+      subject: updated.id,
+      buildingId: updated.buildingId,
+      payload: {
+        tenantId,
+        invoiceId: updated.id,
+        purchaseOrderId: updated.purchaseOrderId,
+        workOrderId,
+        taskInstanceId,
+        amount: updated.amount,
+        currency: updated.currency,
+        vendorOrgId: updated.vendorOrgId,
+        approvedByUserId: actorUserId,
+        approvedAt: updated.approvedAt,
+      },
+    });
+    return updated;
   }
 
   async list(tenantId: string, buildingId?: string, matchStatus?: string) {

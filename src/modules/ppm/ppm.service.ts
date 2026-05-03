@@ -198,6 +198,47 @@ export class PpmService implements OnModuleInit {
         },
       });
     });
+
+    // INIT-012 P1 chiller canary — fifth (final) slice. Vendor invoice
+    // approved and the financial leg closes. Stamp a financial-close
+    // audit row on the linked TaskInstance so the timeline shows the
+    // complete maintenance+finance trail (already has asset.serviced
+    // from ppm.case.closed; this adds task.financial_closed). No
+    // status flip — the task is already 'completed' by the time
+    // invoice.paid fires; this is a forensic marker, not a transition.
+    // Idempotent: skip if a row with the same eventId/invoiceId is
+    // already audited.
+    this.outboxRegistry.register('invoice.paid', async (event) => {
+      const payload = (event.payload || {}) as Record<string, any>;
+      const tenantId: string | undefined = payload.tenantId;
+      const taskInstanceId: string | undefined = payload.taskInstanceId;
+      if (!tenantId || !taskInstanceId) {
+        this.outboxLog.debug(
+          `invoice.paid ${event.subject}: no tenantId/taskInstanceId in payload — skip`,
+        );
+        return;
+      }
+      const task = await this.prisma.taskInstance.findFirst({
+        where: { id: taskInstanceId, tenantId },
+        select: { id: true, buildingId: true, title: true },
+      });
+      if (!task) return;
+      await this.audit.write({
+        tenantId,
+        buildingId: task.buildingId,
+        actor: payload.approvedByUserId || 'system',
+        role: 'system',
+        action: 'task.financial_closed',
+        entity: task.title,
+        entityType: 'task',
+        building: '',
+        ip: '-',
+        sensitive: true,
+        eventType: 'invoice.paid',
+        resourceType: 'task',
+        resourceId: task.id,
+      });
+    });
   }
 
   // INIT-010 Phase 1 / P0-1 — entry point for condition-triggers.

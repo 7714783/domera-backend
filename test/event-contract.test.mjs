@@ -111,10 +111,10 @@ const CATALOG = {
     payloadShape: ['completionId', 'tenantId', 'workOrderId', 'completedAt'],
   },
   'invoice.paid': {
-    producer: 'reactive',
+    producer: 'vendor-invoices',
     consumers: ['ppm'],
     schemaVersion: 1,
-    payloadShape: ['invoiceId', 'tenantId', 'amount', 'paidAt'],
+    payloadShape: ['invoiceId', 'tenantId', 'amount', 'currency', 'taskInstanceId', 'approvedByUserId'],
   },
 
   // cleaning
