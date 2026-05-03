@@ -140,6 +140,13 @@ export class BuildingsService {
         organizationId: body.organizationId || null,
         slug,
         name: body.name,
+        // INIT-012 NS-2 — every new building lands in `draft` lifecycle.
+        // Manager hits POST /v1/buildings/:slug/publish once the basic
+        // structure (floors / units / systems) is filled to flip
+        // `draft → active`. Schema default is 'active' for backwards
+        // compatibility with seed data + legacy creates; this explicit
+        // override makes the canonical path go through publishBuilding().
+        lifecycleStatus: 'draft',
         addressLine1: body.addressLine1,
         city: body.city,
         countryCode: body.countryCode,
