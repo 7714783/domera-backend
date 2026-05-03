@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { TenantContext } from '../common/tenant-context';
+import { PrismaQueryStats, recordQueryTiming } from './prisma-query-stats';
 
 export type TenantScopedTx = Omit<
   PrismaClient,
@@ -33,28 +34,48 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       name: 'tenant-rls-wrap',
       query: {
         $allOperations: async ({ args, query, operation, model }) => {
+          // PERF-001 Stage 1 — record duration regardless of whether
+          // the query goes through the RLS transaction or the no-tenant
+          // pass-through. Wraps the awaited promise so failures still
+          // count toward total query time.
+          const startNs = process.hrtime.bigint();
+          const observe = () => {
+            const ms = Number(process.hrtime.bigint() - startNs) / 1_000_000;
+            recordQueryTiming(model || '_raw', operation, ms);
+          };
+
           const tenantId = TenantContext.getTenantId();
-          if (!tenantId) return query(args);
+          if (!tenantId) {
+            try {
+              return await query(args);
+            } finally {
+              observe();
+            }
+          }
           if (!isSafeTenantId(tenantId)) throw new Error(`unsafe tenantId: ${tenantId}`);
 
           const self = this as unknown as PrismaClient;
-          return self.$transaction(async (tx) => {
-            await tx.$executeRawUnsafe(
-              `select set_config('app.current_tenant_id', '${tenantId}', true)`,
-            );
-            if (model) {
-              const delegateKey = model.charAt(0).toLowerCase() + model.slice(1);
-              return (tx as any)[delegateKey][operation](args);
-            }
-            if (operation === '$queryRaw' || operation === '$executeRaw') {
-              return (tx as any)[operation](...(Array.isArray(args) ? args : [args]));
-            }
-            if (operation === '$queryRawUnsafe' || operation === '$executeRawUnsafe') {
-              const arr = Array.isArray(args) ? args : [args];
-              return (tx as any)[operation](...arr);
-            }
-            return query(args);
-          });
+          try {
+            return await self.$transaction(async (tx) => {
+              await tx.$executeRawUnsafe(
+                `select set_config('app.current_tenant_id', '${tenantId}', true)`,
+              );
+              if (model) {
+                const delegateKey = model.charAt(0).toLowerCase() + model.slice(1);
+                return (tx as any)[delegateKey][operation](args);
+              }
+              if (operation === '$queryRaw' || operation === '$executeRaw') {
+                return (tx as any)[operation](...(Array.isArray(args) ? args : [args]));
+              }
+              if (operation === '$queryRawUnsafe' || operation === '$executeRawUnsafe') {
+                const arr = Array.isArray(args) ? args : [args];
+                return (tx as any)[operation](...arr);
+              }
+              return query(args);
+            });
+          } finally {
+            observe();
+          }
         },
       },
     });
@@ -94,4 +115,4 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 }
 
-export { Prisma };
+export { Prisma, PrismaQueryStats };
