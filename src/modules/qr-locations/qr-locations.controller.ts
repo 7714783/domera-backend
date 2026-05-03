@@ -1,17 +1,6 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Headers,
-  Param,
-  Post,
-  Query,
-  Req,
-  Res,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { resolveTenantId } from '../../common/tenant.utils';
+import { Tenant } from '../../common/tenant.decorator';
 import { PublicQrService } from '../public-qr/public-qr.service';
 import { QrLocationsService } from './qr-locations.service';
 
@@ -27,10 +16,9 @@ export class QrLocationsController {
     @Param('id') id: string,
     @Req() req: Request,
     @Res() res: Response,
-    @Headers('x-tenant-id') th?: string,
+    @Tenant() tenantId: string,
     @Query('base') base?: string,
   ) {
-    const tenantId = resolveTenantId(th);
     const { items } = await this.qr.list(tenantId, id);
     const proto = (req.headers['x-forwarded-proto'] as string) || 'http';
     const host =
@@ -58,31 +46,23 @@ export class QrLocationsController {
   }
 
   @Get('buildings/:id/qr-locations')
-  list(@Param('id') id: string, @Headers('x-tenant-id') th?: string) {
-    return this.qr.list(resolveTenantId(th), id);
+  list(@Param('id') id: string, @Tenant() tenantId: string) {
+    return this.qr.list(tenantId, id);
   }
 
   @Post('buildings/:id/qr-locations')
-  create(@Param('id') id: string, @Body() body: any, @Headers('x-tenant-id') th?: string) {
-    return this.qr.create(resolveTenantId(th), id, body);
+  create(@Param('id') id: string, @Body() body: any, @Tenant() tenantId: string) {
+    return this.qr.create(tenantId, id, body);
   }
 
   @Get('buildings/:id/qr-locations/:code')
-  resolve(
-    @Param('id') id: string,
-    @Param('code') code: string,
-    @Headers('x-tenant-id') th?: string,
-  ) {
-    return this.qr.resolveScan(resolveTenantId(th), id, code);
+  resolve(@Param('id') id: string, @Param('code') code: string, @Tenant() tenantId: string) {
+    return this.qr.resolveScan(tenantId, id, code);
   }
 
   @Delete('buildings/:id/qr-locations/:code')
-  remove(
-    @Param('id') id: string,
-    @Param('code') code: string,
-    @Headers('x-tenant-id') th?: string,
-  ) {
-    return this.qr.delete(resolveTenantId(th), id, code);
+  remove(@Param('id') id: string, @Param('code') code: string, @Tenant() tenantId: string) {
+    return this.qr.delete(tenantId, id, code);
   }
 }
 

@@ -141,6 +141,14 @@ const EXEMPT = {
   // sparePart removed in INIT-010 Follow-up F (model dropped, table
   // dropped via migration 022 — superseded by AssetSparePart).
 
+  // INIT-012 NS-14 — schema-only landing for canonical structural
+  // detail. Module + endpoints land in a follow-up; until then, no
+  // writers exist and the EXEMPT classification is honest.
+  buildingSpace:
+    'INIT-012 NS-14 — schema-only landing (building-spaces module pending). No writers yet.',
+  buildingElement:
+    'INIT-012 NS-14 — schema-only landing (building-spaces module pending). No writers yet.',
+
   // QR / public submission
   qrLocation: 'written by qr-locations module',
   buildingLocation:

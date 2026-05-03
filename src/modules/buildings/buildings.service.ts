@@ -19,6 +19,10 @@ export interface BuildingListItem {
   address: string;
   organization: string;
   status: string;
+  /** INIT-012 NS-11 — draft / active / archived. */
+  lifecycleStatus: string;
+  publishedAt: Date | null;
+  archivedAt: Date | null;
   floorsCount: number | null;
   unitsCount: number | null;
   compliance: number;
@@ -64,6 +68,9 @@ export class BuildingsService {
       address: `${b.addressLine1}, ${b.city}`,
       organization: b.organization?.name || 'Unassigned',
       status: b.status,
+      lifecycleStatus: (b as any).lifecycleStatus ?? 'active',
+      publishedAt: (b as any).publishedAt ?? null,
+      archivedAt: (b as any).archivedAt ?? null,
       floorsCount: b.floorsCount,
       unitsCount: b.unitsCount,
       compliance: b.compliance,

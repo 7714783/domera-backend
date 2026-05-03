@@ -3397,3 +3397,56 @@ model Device {
   @@index([userId])
   @@map("devices")
 }
+
+// INIT-012 NS-14 — Canonical structural details that live OUTSIDE the
+// unit grid. BuildingSpace = enclosed serviceable areas (mechanical
+// rooms, restrooms, lobbies, storage rooms) — bookable / inspectable /
+// QR-taggable. BuildingElement = structural details that cannot be
+// "occupied" but require maintenance + compliance attention (roof
+// surfaces, basement walls, façade panels, doors, gardens). Both are
+// tenant-scoped + building-scoped + RLS-protected.
+//
+// Module: building-spaces (RFC at docs/modules/building-spaces/RFC.md).
+// Schema-only landing — endpoints + UI come in follow-up PRs.
+model BuildingSpace {
+  id          String   @id @default(uuid())
+  tenantId    String
+  buildingId  String
+  code        String
+  name        String
+  spaceType   String // mechanical_room | restroom | lobby | storage | utility | parking_zone | other
+  floorId     String?
+  areaSqm     Float?
+  isShared    Boolean  @default(true)
+  isBookable  Boolean  @default(false)
+  qrLocationId String?
+  notes       String?
+  createdBy   String?  @default("system")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, buildingId, code])
+  @@index([tenantId, buildingId, spaceType])
+  @@map("building_spaces")
+}
+
+model BuildingElement {
+  id          String   @id @default(uuid())
+  tenantId    String
+  buildingId  String
+  code        String
+  name        String
+  elementType String // roof | basement | facade | door | window | garden | parking_lot | other
+  material    String?
+  installedAt DateTime?
+  warrantyEnd DateTime?
+  conditionState String?  @default("good") // good | fair | poor | critical
+  notes       String?
+  createdBy   String?  @default("system")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, buildingId, code])
+  @@index([tenantId, buildingId, elementType])
+  @@map("building_elements")
+}

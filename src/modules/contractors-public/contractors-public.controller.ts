@@ -9,7 +9,7 @@ import {
   Query,
   UnauthorizedException,
 } from '@nestjs/common';
-import { resolveTenantId } from '../../common/tenant.utils';
+import { Tenant } from '../../common/tenant.decorator';
 import { AuthService } from '../auth/auth.service';
 import {
   ContractorsPublicService,
@@ -51,11 +51,10 @@ export class ContractorsPublicController {
 
   @Post()
   async create(
+    @Tenant() tenantId: string,
     @Body() body: PublicContractorCreate,
-    @Headers('x-tenant-id') tenantIdHeader?: string,
     @Headers('authorization') authHeader?: string,
   ) {
-    const tenantId = resolveTenantId(tenantIdHeader);
     await uid(authHeader, this.auth);
     return this.svc.create(tenantId, body);
   }
