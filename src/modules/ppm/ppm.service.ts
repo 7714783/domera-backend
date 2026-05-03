@@ -127,10 +127,113 @@ export class PpmService implements OnModuleInit {
     // (currently the wizard does that on-demand). Idempotent — safe
     // under at-least-once delivery.
     this.outboxRegistry.register('asset.created', async (event) => {
+      const payload = (event.payload || {}) as Record<string, any>;
+      const assetId = event.subject;
+      const tenantId: string | undefined = payload.tenantId;
+      const buildingId: string | undefined = payload.buildingId;
+      const systemFamily: string | undefined = payload.systemFamily;
       this.outboxLog.log(
-        `received asset.created — assetId=${event.subject} systemFamily=${(event.payload as any).systemFamily ?? '∅'}`,
+        `received asset.created — assetId=${assetId} systemFamily=${systemFamily ?? '∅'}`,
       );
-      // Phase 6 of INIT-010 will plug template-suggest logic here.
+      if (!tenantId || !buildingId || !systemFamily) {
+        // Asset created without a systemFamily — common for free-form
+        // gear that doesn't map to a canonical PPM template (yet). Skip
+        // suggestion silently; operator can attach a plan item by hand.
+        return;
+      }
+
+      // INIT-012 NS-16 — auto-suggest plan items from existing recipe.
+      // Strategy: find another PpmPlanItem in this tenant whose template
+      // declares a matching domain (case-insensitive contains). Clone the
+      // (templateId, obligationTemplateId) pair onto a new plan item
+      // scoped to the new asset; baselineStatus='pending' so the operator
+      // confirms it on /ppm/setup before it goes into the scheduler.
+      // Idempotent: dedup on (assetId, templateId) — replays no-op.
+      try {
+        const seeds = await this.prisma.ppmPlanItem.findMany({
+          where: {
+            tenantId,
+            template: {
+              tenantId,
+              domain: { contains: systemFamily, mode: 'insensitive' },
+            },
+          },
+          include: {
+            template: {
+              select: {
+                id: true,
+                domain: true,
+                assignedRole: true,
+                executionMode: true,
+                frequencyMonths: true,
+              },
+            },
+          },
+          take: 50,
+          orderBy: { createdAt: 'desc' },
+        });
+
+        // Pick at most one seed per (templateId, obligationTemplateId)
+        // pair — usually a tenant has 0..3 templates per system family.
+        const seen = new Set<string>();
+        const recipes = seeds.filter((s) => {
+          const key = `${s.templateId}::${s.obligationTemplateId}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        if (recipes.length === 0) {
+          this.outboxLog.debug(
+            `asset.created ${assetId}: no PPM template with domain matching ${systemFamily} — no suggestion`,
+          );
+          return;
+        }
+
+        let suggested = 0;
+        for (const seed of recipes) {
+          const existing = await this.prisma.ppmPlanItem.findFirst({
+            where: { tenantId, assetId, templateId: seed.templateId },
+            select: { id: true },
+          });
+          if (existing) continue;
+          const months = Math.max(1, seed.template.frequencyMonths ?? 3);
+          const nextDueAt = new Date(Date.now() + months * 30 * 86400000);
+          const created = await this.prisma.ppmPlanItem.create({
+            data: {
+              tenantId,
+              buildingId,
+              templateId: seed.templateId,
+              obligationTemplateId: seed.obligationTemplateId,
+              assignedRole: seed.assignedRole || 'maintenance_coordinator',
+              recurrenceRule: seed.recurrenceRule,
+              nextDueAt,
+              scope: seed.scope || 'building_common',
+              executionMode: seed.template.executionMode || 'in_house',
+              performerOrgId: seed.performerOrgId || null,
+              contractId: seed.contractId || null,
+              assetId,
+              baselineStatus: 'pending',
+              createdBy: 'asset.created:auto-suggest',
+            },
+          });
+          suggested++;
+          this.outboxLog.log(
+            `asset.created ${assetId}: suggested PpmPlanItem ${created.id} from template ${seed.templateId} (domain=${seed.template.domain ?? '∅'})`,
+          );
+        }
+        if (suggested > 0) {
+          this.outboxLog.log(
+            `asset.created ${assetId}: ${suggested} plan-item(s) suggested (status=pending; operator confirms on /ppm/setup)`,
+          );
+        }
+      } catch (err) {
+        // Don't crash the outbox dispatcher — log and let the next replay
+        // try again. Asset creation must NOT block on PPM suggestions.
+        this.outboxLog.warn(
+          `asset.created ${assetId}: auto-suggest failed — ${(err as Error).message}`,
+        );
+      }
     });
 
     // INIT-012 P1 chiller canary — fourth slice. Vendor finished work →
