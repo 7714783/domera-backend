@@ -75,6 +75,37 @@ export class BuildingsService {
     return `${prefix}-${randomBytes(3).toString('hex')}`;
   }
 
+  // 2026-05-04 — pack extended MVP attributes into the existing
+  // `attributes` JSON bag. Only includes keys the caller actually
+  // supplied so we don't pollute the JSON with `null`s. Returns
+  // `Prisma.DbNull`-equivalent (undefined) when nothing supplied so
+  // the column stays NULL on insert.
+  private buildExtendedAttributes(body: {
+    postalCode?: string;
+    region?: string;
+    yearRenovated?: number;
+    constructionType?: string;
+    condition?: string;
+    grossFloorArea?: number;
+    hasFireSprinklers?: boolean;
+    imageUrl?: string;
+    ownerContact?: { name?: string; phone?: string; email?: string };
+    managementCompany?: { name?: string; phone?: string; email?: string };
+  }): Record<string, any> | undefined {
+    const out: Record<string, any> = {};
+    if (body.postalCode !== undefined) out.postalCode = body.postalCode;
+    if (body.region !== undefined) out.region = body.region;
+    if (body.yearRenovated !== undefined) out.yearRenovated = body.yearRenovated;
+    if (body.constructionType !== undefined) out.constructionType = body.constructionType;
+    if (body.condition !== undefined) out.condition = body.condition;
+    if (body.grossFloorArea !== undefined) out.grossFloorArea = body.grossFloorArea;
+    if (body.hasFireSprinklers !== undefined) out.hasFireSprinklers = body.hasFireSprinklers;
+    if (body.imageUrl !== undefined) out.imageUrl = body.imageUrl;
+    if (body.ownerContact !== undefined) out.ownerContact = body.ownerContact;
+    if (body.managementCompany !== undefined) out.managementCompany = body.managementCompany;
+    return Object.keys(out).length === 0 ? undefined : out;
+  }
+
   private requireManager = (tenantId: string, actorUserId: string) =>
     requireManager(this.prisma, tenantId, actorUserId);
 
@@ -152,6 +183,27 @@ export class BuildingsService {
       hasParking?: boolean;
       hasRestaurantsGroundFloor?: boolean;
       hasRooftopMechanical?: boolean;
+      // Split-address columns that already exist on the model.
+      street?: string;
+      buildingNumber?: string;
+      lat?: number;
+      lng?: number;
+      annualKwh?: number;
+      // 2026-05-04 — extended MVP attributes. These do NOT have their
+      // own columns yet; we stash them in the existing `attributes`
+      // JSON bag so the form can capture them with zero schema
+      // migration. If any field stabilises into "every building has
+      // a value" — promote it to a column in a follow-up migration.
+      postalCode?: string;
+      region?: string;
+      yearRenovated?: number;
+      constructionType?: 'concrete' | 'steel' | 'brick' | 'mixed' | 'other' | string;
+      condition?: 'excellent' | 'good' | 'fair' | 'poor' | string;
+      grossFloorArea?: number;
+      hasFireSprinklers?: boolean;
+      imageUrl?: string;
+      ownerContact?: { name?: string; phone?: string; email?: string };
+      managementCompany?: { name?: string; phone?: string; email?: string };
       notes?: string;
       status?: string;
     },
@@ -209,8 +261,18 @@ export class BuildingsService {
         hasParking: body.hasParking ?? null,
         hasRestaurantsGroundFloor: body.hasRestaurantsGroundFloor ?? null,
         hasRooftopMechanical: body.hasRooftopMechanical ?? null,
+        street: body.street || null,
+        buildingNumber: body.buildingNumber || null,
+        lat: body.lat ?? null,
+        lng: body.lng ?? null,
+        annualKwh: body.annualKwh ?? null,
         notes: body.notes || null,
         status: body.status || 'active',
+        // Extended MVP attributes — JSON bag, no new column. Only
+        // include keys that the caller actually supplied so we don't
+        // pollute the JSON with `null` placeholders. The bag is
+        // tenant-scoped via Building.tenantId + RLS.
+        attributes: this.buildExtendedAttributes(body),
         createdBy: `user:${actorUserId}`,
       },
     });
@@ -339,6 +401,31 @@ export class BuildingsService {
     ];
     const data: Record<string, any> = {};
     for (const k of allowed) if (k in patch) data[k] = patch[k];
+
+    // Extended MVP attributes (postalCode / region / yearRenovated /
+    // constructionType / condition / grossFloorArea / hasFireSprinklers /
+    // imageUrl / ownerContact / managementCompany) live in the
+    // `attributes` JSON bag. Patch merges with the existing bag so a
+    // partial PATCH doesn't wipe unrelated keys.
+    const extendedKeys = [
+      'postalCode',
+      'region',
+      'yearRenovated',
+      'constructionType',
+      'condition',
+      'grossFloorArea',
+      'hasFireSprinklers',
+      'imageUrl',
+      'ownerContact',
+      'managementCompany',
+    ];
+    const supplied = extendedKeys.some((k) => k in patch);
+    if (supplied) {
+      const current = (existing.attributes as Record<string, any> | null) || {};
+      const next = { ...current };
+      for (const k of extendedKeys) if (k in patch) next[k] = patch[k];
+      data.attributes = next;
+    }
 
     const updated = await this.prisma.building.update({ where: { id: existing.id }, data });
 
