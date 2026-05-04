@@ -3450,3 +3450,27 @@ model BuildingElement {
   @@index([tenantId, buildingId, elementType])
   @@map("building_elements")
 }
+
+// GROWTH-001 NS-19 — invite flow. Manager creates an invite; invitee
+// gets a single-use 72h token (sha256-hashed at rest); accept consumes
+// the row and creates a Membership. Tenant-scoped + RLS-enforced.
+//
+// Module: invites. RFC at docs/modules/invites/RFC.md.
+model Invite {
+  id                  String    @id @default(uuid())
+  tenantId            String
+  email               String
+  roleKey             String
+  buildingIds         String[]  @default([])
+  tokenHash           String    @unique
+  invitedBy           String
+  status              String    @default("pending") // pending|accepted|expired|revoked
+  expiresAt           DateTime
+  acceptedAt          DateTime?
+  acceptedByUserId    String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([tenantId, status, createdAt(sort: Desc)])
+  @@map("invites")
+}

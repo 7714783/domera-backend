@@ -1021,22 +1021,41 @@ export class BuildingCoreService {
 
   async summary(tenantId: string, buildingIdOrSlug: string) {
     const buildingId = await this.resolveBuildingId(tenantId, buildingIdOrSlug);
-    const building = await this.prisma.building.findUnique({ where: { id: buildingId } });
+    // PERF-001 Stage 2 — 9 reads in 1 RLS transaction (was 9 separate
+    // set_config transactions). Building Passport reads this on every
+    // page-load so the gain compounds with traffic.
+    const { building, floors, units, transport, systems, occupants, contracts, spaces, elements } =
+      await this.prisma.withTenant(
+        tenantId,
+        async (tx) => {
+          const building = await tx.building.findUnique({ where: { id: buildingId } });
+          if (!building) throw new NotFoundException('building not found');
+          const floors = await tx.buildingFloor.count({ where: { buildingId } });
+          const units = await tx.buildingUnit.count({ where: { buildingId } });
+          const transport = await tx.buildingVerticalTransport.findMany({ where: { buildingId } });
+          const systems = await tx.buildingSystem.findMany({
+            where: { buildingId },
+            select: { systemCategory: true },
+          });
+          const occupants = await tx.buildingOccupantCompany.count({ where: { buildingId } });
+          const contracts = await tx.buildingContract.count({ where: { buildingId } });
+          const spaces = await tx.buildingSpace.count({ where: { tenantId, buildingId } });
+          const elements = await tx.buildingElement.count({ where: { tenantId, buildingId } });
+          return {
+            building,
+            floors,
+            units,
+            transport,
+            systems,
+            occupants,
+            contracts,
+            spaces,
+            elements,
+          };
+        },
+        'building-core.summary',
+      );
     if (!building) throw new NotFoundException('building not found');
-    const [floors, units, transport, systems, occupants, contracts, spaces, elements] =
-      await Promise.all([
-        this.prisma.buildingFloor.count({ where: { buildingId } }),
-        this.prisma.buildingUnit.count({ where: { buildingId } }),
-        this.prisma.buildingVerticalTransport.findMany({ where: { buildingId } }),
-        this.prisma.buildingSystem.findMany({
-          where: { buildingId },
-          select: { systemCategory: true },
-        }),
-        this.prisma.buildingOccupantCompany.count({ where: { buildingId } }),
-        this.prisma.buildingContract.count({ where: { buildingId } }),
-        this.prisma.buildingSpace.count({ where: { tenantId, buildingId } }),
-        this.prisma.buildingElement.count({ where: { tenantId, buildingId } }),
-      ]);
     const systemsByCategory = systems.reduce<Record<string, number>>((acc, s) => {
       acc[s.systemCategory] = (acc[s.systemCategory] || 0) + 1;
       return acc;

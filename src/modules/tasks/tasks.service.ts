@@ -54,132 +54,175 @@ export class TasksService {
   async inbox(
     tenantId: string,
     actorUserId: string,
-    opts: { kind?: 'ppm' | 'cleaning' | 'incident' | 'service_request' | 'all' } = {},
+    opts: {
+      kind?: 'ppm' | 'cleaning' | 'incident' | 'service_request' | 'all';
+      buildingId?: string;
+      take?: number;
+      cursor?: string;
+    } = {},
   ) {
     const wantPpm = !opts.kind || opts.kind === 'all' || opts.kind === 'ppm';
     const wantCleaning = !opts.kind || opts.kind === 'all' || opts.kind === 'cleaning';
     const wantIncident = !opts.kind || opts.kind === 'all' || opts.kind === 'incident';
     const wantSr = !opts.kind || opts.kind === 'all' || opts.kind === 'service_request';
 
-    // Resolve building slugs once — we need them for sourceUrl.
-    const buildings = await this.prisma.building.findMany({
-      where: { tenantId },
-      select: { id: true, slug: true, name: true },
-    });
+    // PERF-001 Stage 2 — single RLS transaction for the whole batch.
+    // Pre-refactor this method opened 7 separate transactions
+    // (one per prisma call), each with its own set_config(). Now: 1.
+    // Cursor pagination is per-leg — each kind keeps its own
+    // chronological order; the merged feed is sorted in memory.
+    const PER_LEG_TAKE = Math.min(Math.max(opts.take ?? 50, 1), 200);
+    const buildingFilter = opts.buildingId ? { buildingId: opts.buildingId } : {};
+
+    // Cursor format: "<kind>:<isoTimestamp>" — one per leg can be passed
+    // through as a comma-joined string. v1 keeps it simple: the cursor
+    // is just an absolute "items older than this" cutoff applied to
+    // every leg's primary timestamp (dueAt for ppm/cleaning, reportedAt
+    // for incidents, createdAt for SRs).
+    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
+    const cursorClause = cursorDate && !isNaN(cursorDate.getTime()) ? cursorDate : null;
+
+    const { buildings, ppmRows, cleaningRows, incidentRows, srRows } = await this.prisma.withTenant(
+      tenantId,
+      async (tx) => {
+        // Resolve building slugs + role grants in parallel-on-pipeline
+        // (Prisma serialises within an interactive transaction, but the
+        // round-trip cost is paid once because they share the same
+        // connection + set_config).
+        const buildings = await tx.building.findMany({
+          where: { tenantId, ...(opts.buildingId ? { id: opts.buildingId } : {}) },
+          select: { id: true, slug: true, name: true },
+        });
+        const grants = await tx.buildingRoleAssignment.findMany({
+          where: {
+            tenantId,
+            userId: actorUserId,
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+          },
+          select: { buildingId: true },
+        });
+        const userBuildings = [...new Set(grants.map((g) => g.buildingId))];
+        const userBuildingFilter = opts.buildingId
+          ? userBuildings.includes(opts.buildingId)
+            ? [opts.buildingId]
+            : []
+          : userBuildings;
+
+        const cleaningStaffIds = wantCleaning
+          ? (
+              await tx.cleaningStaff.findMany({
+                where: { tenantId, userId: actorUserId },
+                select: { id: true },
+              })
+            ).map((s) => s.id)
+          : [];
+
+        const ppmRows =
+          wantPpm && userBuildingFilter.length > 0
+            ? await tx.taskInstance.findMany({
+                where: {
+                  tenantId,
+                  buildingId: { in: userBuildingFilter },
+                  status: { in: ['open', 'in_progress', 'paused'] },
+                  ...(cursorClause ? { dueAt: { lt: cursorClause } } : {}),
+                },
+                orderBy: [{ dueAt: 'asc' }],
+                take: PER_LEG_TAKE,
+                select: {
+                  id: true,
+                  tenantId: true,
+                  buildingId: true,
+                  title: true,
+                  status: true,
+                  lifecycleStage: true,
+                  dueAt: true,
+                },
+              })
+            : ([] as any[]);
+
+        const cleaningRows = wantCleaning
+          ? await tx.cleaningRequest.findMany({
+              where: {
+                tenantId,
+                status: { in: ['new', 'assigned', 'in_progress'] },
+                OR: [
+                  { assignedUserId: actorUserId },
+                  ...(cleaningStaffIds.length
+                    ? [{ assignedStaffId: { in: cleaningStaffIds } }]
+                    : []),
+                ],
+                ...buildingFilter,
+                ...(cursorClause ? { requestedAt: { lt: cursorClause } } : {}),
+              },
+              orderBy: [{ priority: 'desc' }, { requestedAt: 'asc' }],
+              take: PER_LEG_TAKE,
+              select: {
+                id: true,
+                tenantId: true,
+                buildingId: true,
+                title: true,
+                status: true,
+                priority: true,
+                category: true,
+                dueAt: true,
+                requestedAt: true,
+              },
+            })
+          : ([] as any[]);
+
+        const incidentRows = wantIncident
+          ? await tx.incident.findMany({
+              where: {
+                tenantId,
+                assignedUserId: actorUserId,
+                status: { in: ['new', 'triaged', 'dispatched'] },
+                ...buildingFilter,
+                ...(cursorClause ? { reportedAt: { lt: cursorClause } } : {}),
+              },
+              orderBy: [{ severity: 'asc' }, { reportedAt: 'asc' }],
+              take: PER_LEG_TAKE,
+              select: {
+                id: true,
+                tenantId: true,
+                buildingId: true,
+                title: true,
+                status: true,
+                severity: true,
+                reportedAt: true,
+              },
+            })
+          : ([] as any[]);
+
+        const srRows = wantSr
+          ? await tx.serviceRequest.findMany({
+              where: {
+                tenantId,
+                assignedUserId: actorUserId,
+                status: { in: ['new', 'triaged', 'dispatched'] },
+                ...buildingFilter,
+                ...(cursorClause ? { createdAt: { lt: cursorClause } } : {}),
+              },
+              orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
+              take: PER_LEG_TAKE,
+              select: {
+                id: true,
+                tenantId: true,
+                buildingId: true,
+                category: true,
+                status: true,
+                priority: true,
+                createdAt: true,
+              },
+            })
+          : ([] as any[]);
+
+        return { buildings, ppmRows, cleaningRows, incidentRows, srRows };
+      },
+      'tasks.inbox',
+    );
+
     const slugById = new Map(buildings.map((b) => [b.id, b.slug]));
     const nameById = new Map(buildings.map((b) => [b.id, b.name]));
-
-    // Buildings where the user holds any role — bound the PPM scan to those.
-    const grants = await this.prisma.buildingRoleAssignment.findMany({
-      where: {
-        tenantId,
-        userId: actorUserId,
-        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-      },
-      select: { buildingId: true },
-    });
-    const userBuildings = [...new Set(grants.map((g) => g.buildingId))];
-
-    // For cleaning we need to resolve CleaningStaff rows that map to this
-    // user (via the optional CleaningStaff.userId bridge). assignedStaffId
-    // on the request points at the CleaningStaff row, not the User — so
-    // we pre-resolve the staffIds and then OR them into the query.
-    const cleaningStaffIds = wantCleaning
-      ? (
-          await this.prisma.cleaningStaff.findMany({
-            where: { tenantId, userId: actorUserId },
-            select: { id: true },
-          })
-        ).map((s) => s.id)
-      : [];
-
-    const [ppmRows, cleaningRows, incidentRows, srRows] = await Promise.all([
-      wantPpm && userBuildings.length > 0
-        ? this.prisma.taskInstance.findMany({
-            where: {
-              tenantId,
-              buildingId: { in: userBuildings },
-              status: { in: ['open', 'in_progress', 'paused'] },
-            },
-            orderBy: [{ dueAt: 'asc' }],
-            take: 100,
-            select: {
-              id: true,
-              tenantId: true,
-              buildingId: true,
-              title: true,
-              status: true,
-              lifecycleStage: true,
-              dueAt: true,
-            },
-          })
-        : Promise.resolve([] as any[]),
-      wantCleaning
-        ? this.prisma.cleaningRequest.findMany({
-            where: {
-              tenantId,
-              status: { in: ['new', 'assigned', 'in_progress'] },
-              OR: [
-                { assignedUserId: actorUserId },
-                ...(cleaningStaffIds.length ? [{ assignedStaffId: { in: cleaningStaffIds } }] : []),
-              ],
-            },
-            orderBy: [{ priority: 'desc' }, { requestedAt: 'asc' }],
-            take: 100,
-            select: {
-              id: true,
-              tenantId: true,
-              buildingId: true,
-              title: true,
-              status: true,
-              priority: true,
-              category: true,
-              dueAt: true,
-              requestedAt: true,
-            },
-          })
-        : Promise.resolve([] as any[]),
-      wantIncident
-        ? this.prisma.incident.findMany({
-            where: {
-              tenantId,
-              assignedUserId: actorUserId,
-              status: { in: ['new', 'triaged', 'dispatched'] },
-            },
-            orderBy: [{ severity: 'asc' }, { reportedAt: 'asc' }],
-            take: 100,
-            select: {
-              id: true,
-              tenantId: true,
-              buildingId: true,
-              title: true,
-              status: true,
-              severity: true,
-              reportedAt: true,
-            },
-          })
-        : Promise.resolve([] as any[]),
-      wantSr
-        ? this.prisma.serviceRequest.findMany({
-            where: {
-              tenantId,
-              assignedUserId: actorUserId,
-              status: { in: ['new', 'triaged', 'dispatched'] },
-            },
-            orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
-            take: 100,
-            select: {
-              id: true,
-              tenantId: true,
-              buildingId: true,
-              category: true,
-              status: true,
-              priority: true,
-              createdAt: true,
-            },
-          })
-        : Promise.resolve([] as any[]),
-    ]);
 
     function makeUrl(kind: string, buildingId: string) {
       const slug = slugById.get(buildingId) || buildingId;

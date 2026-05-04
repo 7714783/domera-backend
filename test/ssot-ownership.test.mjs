@@ -34,6 +34,10 @@ const OWNERSHIP = {
   // outside the unit grid (mechanical rooms / facade / roof / doors).
   buildingSpace: 'building-spaces',
   buildingElement: 'building-spaces',
+  // ── invites (GROWTH-001 NS-19) — invite-flow entity. Single live
+  // writer is the invites module; iam.bootstrap-from-invite (when it
+  // lands) reads but does not write.
+  invite: 'invites',
   // BuildingOccupantCompany — occupants creates/updates; tenant-companies
   // sets adminUserId; building-core has a legacy create path
   // (POST /buildings/:id/occupants) inherited from INIT-001 that

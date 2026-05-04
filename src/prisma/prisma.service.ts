@@ -106,12 +106,37 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     await this.$disconnect();
   }
 
-  async withTenant<T>(tenantId: string, fn: (tx: TenantScopedTx) => Promise<T>): Promise<T> {
+  // PERF-001 Stage 2 — batched tenant-scoped reads.
+  //
+  // Collapses N RLS transactions (each with its own set_config) into 1.
+  // Use this on hot endpoints whose handler issues ≥3 prisma reads in
+  // the same request — task inbox, role dashboards, building summary,
+  // compliance dashboard. The closure receives the raw transactional
+  // client, NOT the auto-wrapped extension, so it bypasses the
+  // per-call $allOperations hook (no inner timing emission).
+  //
+  // To keep PERF-001 observability honest the whole withTenant block
+  // emits ONE prisma_query_duration_ms_total observation under the
+  // synthetic model name "_withTenant" — so /metrics still shows the
+  // DB cost of these batched endpoints, just at a coarser grain. Tag
+  // (the second arg) names the call site for that observation.
+  async withTenant<T>(
+    tenantId: string,
+    fn: (tx: TenantScopedTx) => Promise<T>,
+    tag = 'unknown',
+  ): Promise<T> {
     if (!tenantId) throw new Error('withTenant: tenantId is required');
-    return this.$transaction(async (tx) => {
-      await tx.$executeRaw`select set_config('app.current_tenant_id', ${tenantId}, true)`;
-      return fn(tx as unknown as TenantScopedTx);
-    });
+    if (!isSafeTenantId(tenantId)) throw new Error(`unsafe tenantId: ${tenantId}`);
+    const startNs = process.hrtime.bigint();
+    try {
+      return await this.$transaction(async (tx) => {
+        await tx.$executeRaw`select set_config('app.current_tenant_id', ${tenantId}, true)`;
+        return fn(tx as unknown as TenantScopedTx);
+      });
+    } finally {
+      const ms = Number(process.hrtime.bigint() - startNs) / 1_000_000;
+      recordQueryTiming('_withTenant', tag, ms);
+    }
   }
 }
 

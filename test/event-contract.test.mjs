@@ -210,6 +210,20 @@ const CATALOG = {
     schemaVersion: 1,
     payloadShape: ['deliveryId', 'tenantId', 'channel', 'attempts', 'error'],
   },
+
+  // GROWTH-001 NS-19 — invite flow.
+  'invite.created': {
+    producer: 'invites',
+    consumers: ['notifications'],
+    schemaVersion: 1,
+    payloadShape: ['inviteId', 'tenantId', 'email', 'roleKey', 'token', 'expiresAt'],
+  },
+  'invite.accepted': {
+    producer: 'invites',
+    consumers: ['iam'],
+    schemaVersion: 1,
+    payloadShape: ['inviteId', 'tenantId', 'email', 'roleKey', 'buildingIds'],
+  },
 };
 
 // ── Self-validation ───────────────────────────────────────────

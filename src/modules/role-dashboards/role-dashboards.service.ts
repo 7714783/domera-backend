@@ -19,54 +19,63 @@ export class RoleDashboardsService {
     const now = new Date();
     const in14 = new Date(now.getTime() + 14 * 86400000);
 
-    const [urgentDue, ppmInFlight, incidents, serviceOpen, approvals, openTasks] =
-      await Promise.all([
-        this.prisma.ppmPlanItem.findMany({
-          where: { tenantId, buildingId: building.id, nextDueAt: { lte: in14 } },
-          include: { template: { select: { name: true, executionMode: true } } },
-          orderBy: { nextDueAt: 'asc' },
-          take: 20,
-        }),
-        this.prisma.taskInstance.count({
-          where: {
-            tenantId,
-            buildingId: building.id,
-            lifecycleStage: {
-              in: [
-                'quote_requested',
-                'quote_received',
-                'awaiting_approval',
-                'approved',
-                'ordered',
-                'in_progress',
-              ],
+    // PERF-001 Stage 2 — 6 reads in one RLS transaction (was 6 separate
+    // set_config transactions; the Promise.all only paralleled in
+    // application code, every leg still hit the DB on its own
+    // connection-with-set_config).
+    const { urgentDue, ppmInFlight, incidents, serviceOpen, approvals, openTasks } =
+      await this.prisma.withTenant(
+        tenantId,
+        async (tx) => {
+          const urgentDue = await tx.ppmPlanItem.findMany({
+            where: { tenantId, buildingId: building.id, nextDueAt: { lte: in14 } },
+            include: { template: { select: { name: true, executionMode: true } } },
+            orderBy: { nextDueAt: 'asc' },
+            take: 20,
+          });
+          const ppmInFlight = await tx.taskInstance.count({
+            where: {
+              tenantId,
+              buildingId: building.id,
+              lifecycleStage: {
+                in: [
+                  'quote_requested',
+                  'quote_received',
+                  'awaiting_approval',
+                  'approved',
+                  'ordered',
+                  'in_progress',
+                ],
+              },
             },
-          },
-        }),
-        this.prisma.incident.findMany({
-          where: {
-            tenantId,
-            buildingId: building.id,
-            status: { in: ['new', 'triaged', 'dispatched'] },
-          },
-          orderBy: [{ severity: 'asc' }, { reportedAt: 'desc' }],
-          take: 10,
-        }),
-        this.prisma.serviceRequest.findMany({
-          where: { tenantId, buildingId: building.id, status: { in: ['new', 'triaged'] } },
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        }),
-        this.prisma.approvalRequest.findMany({
-          where: { tenantId, buildingId: building.id, status: 'pending' },
-          include: { steps: { orderBy: { orderNo: 'asc' } } },
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        }),
-        this.prisma.taskInstance.count({
-          where: { tenantId, buildingId: building.id, status: { in: ['open', 'overdue'] } },
-        }),
-      ]);
+          });
+          const incidents = await tx.incident.findMany({
+            where: {
+              tenantId,
+              buildingId: building.id,
+              status: { in: ['new', 'triaged', 'dispatched'] },
+            },
+            orderBy: [{ severity: 'asc' }, { reportedAt: 'desc' }],
+            take: 10,
+          });
+          const serviceOpen = await tx.serviceRequest.findMany({
+            where: { tenantId, buildingId: building.id, status: { in: ['new', 'triaged'] } },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+          });
+          const approvals = await tx.approvalRequest.findMany({
+            where: { tenantId, buildingId: building.id, status: 'pending' },
+            include: { steps: { orderBy: { orderNo: 'asc' } } },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+          });
+          const openTasks = await tx.taskInstance.count({
+            where: { tenantId, buildingId: building.id, status: { in: ['open', 'overdue'] } },
+          });
+          return { urgentDue, ppmInFlight, incidents, serviceOpen, approvals, openTasks };
+        },
+        'role-dashboards.buildingManagerToday',
+      );
 
     return {
       building: { id: building.id, slug: building.slug, name: building.name },

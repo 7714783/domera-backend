@@ -63,6 +63,9 @@ export class TasksController {
   @Get('inbox')
   async inbox(
     @Query('kind') kind?: string,
+    @Query('buildingId') buildingId?: string,
+    @Query('take') take?: string,
+    @Query('cursor') cursor?: string,
     @Headers('x-tenant-id') tenantIdHeader?: string,
     @Headers('authorization') authHeader?: string,
   ) {
@@ -72,7 +75,13 @@ export class TasksController {
     const k = (allowed as readonly string[]).includes(kind || '')
       ? (kind as (typeof allowed)[number])
       : 'all';
-    return this.tasks.inbox(tenantId, actor, { kind: k });
+    const takeN = take ? Math.min(Math.max(parseInt(take, 10) || 50, 1), 200) : undefined;
+    return this.tasks.inbox(tenantId, actor, {
+      kind: k,
+      buildingId: buildingId || undefined,
+      take: takeN,
+      cursor: cursor || undefined,
+    });
   }
 
   @Get(':id')
