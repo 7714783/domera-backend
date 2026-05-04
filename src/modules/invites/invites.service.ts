@@ -110,6 +110,16 @@ export class InvitesService {
       },
     });
 
+    // Frontend accept-invite URL — the notifications mailer templates
+    // this directly into the email body. Pulled from env so the same
+    // backend can serve dev (localhost:3000) and prod (domerahub.com)
+    // without code changes.
+    const acceptBaseUrl = (process.env.PUBLIC_APP_URL || 'http://localhost:3000').replace(
+      /\/$/,
+      '',
+    );
+    const acceptUrl = `${acceptBaseUrl}/en/accept-invite/${encodeURIComponent(token)}`;
+
     await this.outbox.publish(this.prisma, {
       type: 'invite.created',
       source: 'invites',
@@ -124,7 +134,13 @@ export class InvitesService {
         // notifications mailer template — not into audit. The audit
         // entry above intentionally omits it.
         token,
+        acceptUrl,
         expiresAt: expiresAt.toISOString(),
+        // Manual recipient strategy — the invitee may not have a
+        // TeamMember row yet, so we route by raw email. The
+        // recipient-resolver supports recipientEmails[] for the
+        // manual strategy.
+        recipientEmails: [invite.email],
       },
     });
 

@@ -43,6 +43,9 @@ const SUBSCRIBED_EVENTS = [
   // Cleaning
   'cleaning.assigned',
   'cleaning.completed',
+  // GROWTH-001 NS-22 — invitee email delivery (manual strategy, raw
+  // recipientEmails). The user does not yet have a TeamMember row.
+  'invite.created',
 ];
 
 @Injectable()

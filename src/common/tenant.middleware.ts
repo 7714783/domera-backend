@@ -65,7 +65,15 @@ const BYPASS_PATHS = [
   '/v1/documents/signed/',
   '/v1/sso/callback',
   '/v1/public/cleaning/',
+  // GROWTH-001 NS-22 — public invite acceptance (token IS authn).
+  '/v1/invites/accept',
 ];
+
+// GROWTH-001 NS-23 — paths that still need session validation but must
+// SKIP the suspended-tenant guard. Without this, an owner could not
+// reactivate their own home tenant after suspending it (would be a
+// bootstrap problem). TenancyService still enforces owner+slug-confirm.
+const SUSPEND_GUARD_BYPASS_PREFIXES = ['/v1/admin/tenants/'];
 
 // Per-process cache so repeated calls from the same session don't re-hit the
 // DB. TTL-capped at 60s — a freshly-revoked role takes effect within that
@@ -74,6 +82,12 @@ const CACHE_TTL_MS = 60_000;
 const CACHE_MAX = 2000;
 const membershipCache = new Map<string, { allowed: boolean; expiresAt: number }>();
 const activeTenantCache = new Map<string, { tenantId: string; expiresAt: number }>();
+
+// GROWTH-001 NS-23 — tenant.status cache. Suspending a tenant takes
+// effect across the cluster within TENANT_STATUS_CACHE_TTL_MS without
+// any explicit invalidation bus.
+const TENANT_STATUS_CACHE_TTL_MS = 30_000;
+const tenantStatusCache = new Map<string, { status: string; expiresAt: number }>();
 
 function cacheKey(userId: string, tenantId: string): string {
   return `${userId}:${tenantId}`;
@@ -223,6 +237,46 @@ export class TenantMiddleware implements NestMiddleware {
       if (!allowed) {
         throw new ForbiddenException(
           'X-Tenant-Id does not match the authenticated user memberships',
+        );
+      }
+    }
+
+    // GROWTH-001 NS-23 — tenant kill-switch enforcement.
+    //
+    // If Tenant.status='suspended', refuse every non-GET request to
+    // that tenant. Reads (GET) stay allowed so the operator can audit
+    // what was happening at the moment the tenant was suspended.
+    // The reactivate endpoint is owner-only; it intentionally lives
+    // under /v1/admin/tenants/:id/reactivate which targets a tenant
+    // BY ID (not via the X-Tenant-Id header) — so the suspended
+    // tenant's own header won't block it.
+    //
+    // Cached for 30s under tenantStatusCache so the per-request DB
+    // round-trip stays cheap. Suspending a tenant can take up to 30s
+    // to take effect across the cluster — acceptable given this is
+    // an emergency-only path.
+    const skipSuspendGuard = SUSPEND_GUARD_BYPASS_PREFIXES.some((p) => fullPath.startsWith(p));
+    if (tenantId && req.method !== 'GET' && req.method !== 'HEAD' && !skipSuspendGuard) {
+      const cached = tenantStatusCache.get(tenantId);
+      let status: string | null = null;
+      if (cached && cached.expiresAt > Date.now()) {
+        status = cached.status;
+      } else {
+        const t = await this.prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { status: true },
+        });
+        status = t?.status ?? null;
+        if (status) {
+          tenantStatusCache.set(tenantId, {
+            status,
+            expiresAt: Date.now() + TENANT_STATUS_CACHE_TTL_MS,
+          });
+        }
+      }
+      if (status === 'suspended') {
+        throw new ForbiddenException(
+          'Tenant is suspended; only GET requests are permitted. Contact a workspace_owner to reactivate.',
         );
       }
     }
