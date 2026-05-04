@@ -129,10 +129,21 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     if (!isSafeTenantId(tenantId)) throw new Error(`unsafe tenantId: ${tenantId}`);
     const startNs = process.hrtime.bigint();
     try {
-      return await this.$transaction(async (tx) => {
-        await tx.$executeRaw`select set_config('app.current_tenant_id', ${tenantId}, true)`;
-        return fn(tx as unknown as TenantScopedTx);
-      });
+      // Prisma's default interactive-transaction timeout is 5000ms,
+      // which is too aggressive for a 5-10 query batch crossing
+      // network. Bump to 15s; the actual transaction completes in
+      // tens of ms when api + db are colocated. Headroom is for
+      // pool-exhaustion + transient connection wobble — not for
+      // expected latency. If a real query takes >15s, that's a
+      // separate problem (missing index, broken connection) that we
+      // want surfaced as a hard fail, not a longer wait.
+      return await this.$transaction(
+        async (tx) => {
+          await tx.$executeRaw`select set_config('app.current_tenant_id', ${tenantId}, true)`;
+          return fn(tx as unknown as TenantScopedTx);
+        },
+        { maxWait: 5000, timeout: 15000 },
+      );
     } finally {
       const ms = Number(process.hrtime.bigint() - startNs) / 1_000_000;
       recordQueryTiming('_withTenant', tag, ms);
