@@ -590,4 +590,123 @@ export class TasksService {
     });
     return { total: notes.length, items: notes };
   }
+
+  // ─── Mobile contract alignment (P0) ─────────────────────────────────
+  //
+  // Mobile clients call /v1/tasks/:id/{timeline, transition, comments}.
+  // These three were missing from the backend (apps/mobile/docs/
+  // api-integration.md flagged them; mobile build compiled but runtime
+  // would 404 on first tap). Pinned by tasks-mobile-contract.test.mjs.
+
+  // GET /v1/tasks/:id/timeline — read-only feed assembled from the
+  // canonical audit trail. Returns AuditEntry rows scoped to
+  // (entityType='taskInstance', entity=:id) shaped to TaskTimelineEntry
+  // per apps/mobile/src/modules/tasks/types.ts.
+  async timeline(tenantId: string, taskId: string) {
+    const task = await this.prisma.taskInstance.findFirst({ where: { id: taskId, tenantId } });
+    if (!task) throw new NotFoundException('task not found');
+    const entries = await this.prisma.auditEntry.findMany({
+      where: { tenantId, entityType: 'taskInstance', entity: taskId },
+      orderBy: { timestamp: 'asc' },
+      take: 200,
+      select: {
+        id: true,
+        eventType: true,
+        action: true,
+        actor: true,
+        timestamp: true,
+        metadata: true,
+      },
+    });
+    return entries.map((e) => {
+      // Mobile expects `message` to be a free-text human summary; we
+      // synthesise it from metadata.{reason,note,result} or fall back
+      // to action. Audit metadata is jsonb so we narrow defensively.
+      const meta = (e.metadata as Record<string, unknown> | null) || {};
+      const message =
+        (typeof meta.reason === 'string' && meta.reason) ||
+        (typeof meta.note === 'string' && meta.note) ||
+        (typeof meta.result === 'string' && meta.result) ||
+        null;
+      return {
+        id: e.id,
+        eventType: e.eventType || e.action,
+        actor: e.actor,
+        createdAt: e.timestamp.toISOString(),
+        message,
+      };
+    });
+  }
+
+  // POST /v1/tasks/:id/transition — wraps the existing state-machine
+  // ops (start / pause / resume / complete) under a single mobile-
+  // friendly endpoint. The body's `toStatus` names the target state;
+  // we route to the matching method. No new transitions are
+  // introduced — the contract is "express the same machine, fewer
+  // routes". An unknown toStatus is a 400; an illegal source→target
+  // pair surfaces as the underlying method's error.
+  //
+  // Method name is `applyTransition` (not `transition`) because
+  // `transition` is already taken by the private state-machine
+  // helper that start/pause/resume/complete share.
+  async applyTransition(
+    tenantId: string,
+    taskId: string,
+    actorUserId: string,
+    body: { toStatus?: string; comment?: string },
+  ) {
+    const toStatus = (body?.toStatus || '').trim();
+    if (!toStatus) throw new BadRequestException('toStatus required');
+
+    // Optional comment lands as a TaskNote BEFORE the transition fires
+    // — keeps the timeline ordered "operator said X" then "system did
+    // Y" rather than the other way around. Note is only persisted when
+    // non-empty after trim.
+    const comment = body?.comment?.trim();
+    if (comment && comment.length > 0) {
+      await this.addNote(tenantId, taskId, actorUserId, { body: comment });
+    }
+
+    switch (toStatus) {
+      case 'in_progress': // Mobile uses one verb for both fresh-start and resume-from-paused.
+      // We pick by current status: paused → resume, anything-else → start.
+      // Single ambiguous client verb → server-side disambiguation.
+      {
+        const task = await this.prisma.taskInstance.findFirst({
+          where: { id: taskId, tenantId },
+          select: { status: true },
+        });
+        if (!task) throw new NotFoundException('task not found');
+        if (task.status === 'paused') return this.resume(tenantId, taskId, actorUserId);
+        return this.start(tenantId, taskId, actorUserId);
+      }
+      case 'paused':
+        return this.pause(tenantId, taskId, actorUserId);
+      case 'completed':
+        return this.complete(tenantId, taskId, actorUserId, {});
+      default:
+        throw new BadRequestException(
+          `unsupported toStatus '${toStatus}' — allowed: in_progress | paused | completed`,
+        );
+    }
+  }
+
+  // POST /v1/tasks/:id/comments — thin alias over addNote for the
+  // mobile shape `{ message }` → returns TaskComment shape
+  // `{ id, actor, message, createdAt }`. The underlying TaskNote
+  // model + RLS + length cap stay the same.
+  async addComment(
+    tenantId: string,
+    taskId: string,
+    actorUserId: string,
+    body: { message?: string },
+  ) {
+    const note = await this.addNote(tenantId, taskId, actorUserId, { body: body?.message });
+    return {
+      id: note.id,
+      actor: note.authorUserId,
+      message: note.body,
+      createdAt: note.createdAt.toISOString(),
+    };
+  }
 }

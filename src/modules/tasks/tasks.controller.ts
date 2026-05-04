@@ -185,4 +185,45 @@ export class TasksController {
     const actor = await uid(authHeader, this.auth);
     return this.tasks.addNote(tenantId, id, actor, body);
   }
+
+  // ─── Mobile contract alignment (P0) ────────────────────
+  // See apps/mobile/docs/api-integration.md § Tasks. These three
+  // routes were declared in the mobile client (tasksApi.ts) but
+  // missing from the backend — every mobile build would 404 on
+  // first tap. Pinned by tasks-mobile-contract.test.mjs.
+
+  @Get(':id/timeline')
+  async timeline(
+    @Param('id') id: string,
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    const tenantId = resolveTenantId(tenantIdHeader);
+    await uid(authHeader, this.auth);
+    return this.tasks.timeline(tenantId, id);
+  }
+
+  @Post(':id/transition')
+  async transition(
+    @Param('id') id: string,
+    @Body() body: { toStatus?: string; comment?: string },
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    const tenantId = resolveTenantId(tenantIdHeader);
+    const actor = await uid(authHeader, this.auth);
+    return this.tasks.applyTransition(tenantId, id, actor, body || {});
+  }
+
+  @Post(':id/comments')
+  async addComment(
+    @Param('id') id: string,
+    @Body() body: { message?: string },
+    @Headers('x-tenant-id') tenantIdHeader?: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    const tenantId = resolveTenantId(tenantIdHeader);
+    const actor = await uid(authHeader, this.auth);
+    return this.tasks.addComment(tenantId, id, actor, body || {});
+  }
 }

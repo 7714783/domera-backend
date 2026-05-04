@@ -18,6 +18,7 @@ import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { BuildingCoreModule } from './modules/building-core/building-core.module';
 import { BuildingSpacesModule } from './modules/building-spaces/building-spaces.module';
 import { InvitesModule } from './modules/invites/invites.module';
+import { ScannerModule } from './modules/scanner/scanner.module';
 import { PpmModule } from './modules/ppm/ppm.module';
 import { QrLocationsModule } from './modules/qr-locations/qr-locations.module';
 import { PublicQrModule } from './modules/public-qr/public-qr.module';
@@ -81,6 +82,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     BuildingCoreModule,
     BuildingSpacesModule,
     InvitesModule,
+    ScannerModule,
     PpmModule,
     QrLocationsModule,
     PublicQrModule,
