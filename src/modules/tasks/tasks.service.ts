@@ -668,9 +668,7 @@ export class TasksService {
     }
 
     switch (toStatus) {
-      case 'in_progress': // Mobile uses one verb for both fresh-start and resume-from-paused.
-      // We pick by current status: paused → resume, anything-else → start.
-      // Single ambiguous client verb → server-side disambiguation.
+      case 'in_progress': // Single ambiguous client verb → server-side disambiguation. // We pick by current status: paused → resume, anything-else → start. // Mobile uses one verb for both fresh-start and resume-from-paused.
       {
         const task = await this.prisma.taskInstance.findFirst({
           where: { id: taskId, tenantId },

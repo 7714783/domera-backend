@@ -5,6 +5,7 @@ import {
   NotFoundException,
   Logger,
 } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { PpmService } from '../ppm/ppm.service';
@@ -38,16 +39,40 @@ export class BuildingsService {
     private readonly ppm: PpmService,
   ) {}
 
+  // Slug generation that survives non-ASCII names (Hebrew, Cyrillic,
+  // Arabic, CJK, …). The /[^\w\s-]/ strip removes every non-Latin
+  // character; for a name like "בניין הראשי" or "中央大厦" the
+  // remaining string is empty/all-dashes. Returning a shared fallback
+  // ('building') would collide on the second non-Latin name and 400
+  // the create. Instead we generate a tech id `bld-<6 hex>` per such
+  // name — collision-free across ~16M possibilities, language-neutral,
+  // works for every alphabet, and the user can rename via the slug
+  // field on the Attributes page if they want a human-readable URL.
   private slugify(input: string): string {
-    return (
-      input
-        .toLowerCase()
-        .trim()
-        .replace(/[^\w\s-]/g, '')
-        .replace(/\s+/g, '-')
-        .replace(/-+/g, '-')
-        .slice(0, 60) || 'building'
-    );
+    const cleaned = input
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '') // strip leading/trailing dashes
+      .slice(0, 60);
+    // Empty after strip OR result has no letters/digits at all (e.g.
+    // pure-dash leftover) — generate a tech fallback. Distinct random
+    // bytes per call so two non-Latin-named buildings don't collide.
+    if (!cleaned || !/[a-z0-9]/.test(cleaned)) {
+      return this.generateTechId('bld');
+    }
+    return cleaned;
+  }
+
+  // Random short identifier `<prefix>-<6 hex>` — 24 bits of entropy,
+  // ~16M possibilities. Used both for slug fallback (lowercase) and
+  // buildingCode fallback (uppercase) when the user hasn't supplied
+  // a human-readable form. Collisions are caught by the existing
+  // UNIQUE check downstream and the caller sees a friendly 400.
+  private generateTechId(prefix: string): string {
+    return `${prefix}-${randomBytes(3).toString('hex')}`;
   }
 
   private requireManager = (tenantId: string, actorUserId: string) =>
@@ -165,7 +190,12 @@ export class BuildingsService {
               ? 'Residential'
               : 'Commercial',
         buildingType: body.buildingType || null,
-        buildingCode: body.buildingCode || null,
+        // Auto-fill buildingCode if the user didn't supply one. Same
+        // logic as the slug fallback — language-neutral tech id that
+        // gives the building a stable internal handle even when the
+        // name is in a non-Latin script. Uppercase so it visually
+        // reads as a "code" not a URL fragment.
+        buildingCode: body.buildingCode || this.generateTechId('BLD').toUpperCase(),
         primaryUse: body.primaryUse || null,
         secondaryUses: body.secondaryUses || [],
         complexityFlags: body.complexityFlags || [],
