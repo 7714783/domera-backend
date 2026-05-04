@@ -34,10 +34,12 @@ const OWNERSHIP = {
   // outside the unit grid (mechanical rooms / facade / roof / doors).
   buildingSpace: 'building-spaces',
   buildingElement: 'building-spaces',
-  // ── invites (GROWTH-001 NS-19) — invite-flow entity. Single live
-  // writer is the invites module; iam.bootstrap-from-invite (when it
-  // lands) reads but does not write.
-  invite: 'invites',
+  // ── invites (GROWTH-001 NS-19) — invite-flow entity. Primary
+  // writer is the invites module; iam.invite.accepted subscriber
+  // (NS-21) writes ONLY the acceptedByUserId enrich field after the
+  // invites module has flipped status='accepted'. Two-writer split
+  // is intentional and documented in docs/modules/invites/RFC.md.
+  invite: ['invites', 'iam'],
   // BuildingOccupantCompany — occupants creates/updates; tenant-companies
   // sets adminUserId; building-core has a legacy create path
   // (POST /buildings/:id/occupants) inherited from INIT-001 that

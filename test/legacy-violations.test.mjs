@@ -37,12 +37,16 @@ const PINNED = {
   // of docs/architecture/INIT-010-legacy-violations-2026-04-28.md.
   // INIT-010 Follow-up B (2026-04-28): notification collapsed (10 → 9)
   // — PPM SLA worker now calls NotificationsService.recordInAppNotification.
-  // Remaining buckets (9 entries):
+  // GROWTH-001 NS-21 (2026-05-04): invite gained a 2nd writer
+  // (iam.invite.accepted handler enriches acceptedByUserId after the
+  // invites module flips status). Documented split — RFC at
+  // docs/modules/invites/RFC.md. Bucket is now 10.
+  // Remaining buckets (10 entries):
   //   buildingOccupantCompany (3) · buildingUnitOccupancy (2) ·
   //   buildingContract (2) · taskInstance (3) · incident (2) ·
   //   serviceRequest (2) · completionRecord (3) ·
-  //   teamMember (2) · teamMemberRoleAssignment (3)
-  ownershipDualWriters: 9,
+  //   teamMember (2) · teamMemberRoleAssignment (3) · invite (2)
+  ownershipDualWriters: 10,
 };
 
 // Allow a small grace margin for normal PR churn (e.g. adding a new

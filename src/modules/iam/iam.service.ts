@@ -3,11 +3,14 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { OutboxRegistry } from '../events/outbox.registry';
 
 const SCOPE_RANK: Record<string, number> = {
   project: 1,
@@ -17,11 +20,134 @@ const SCOPE_RANK: Record<string, number> = {
 };
 
 @Injectable()
-export class IamService {
+export class IamService implements OnModuleInit {
+  private readonly inviteLog = new Logger('IamService.invite');
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly outboxRegistry: OutboxRegistry,
   ) {}
+
+  // GROWTH-001 NS-21 — subscribe to invite.accepted.
+  //
+  // The invites module marks the row accepted synchronously (so a token
+  // can't double-spend) and emits invite.accepted via the outbox. This
+  // handler is the consumer: it ensures a User row exists for the
+  // invitee email and that they have a Membership in the inviting
+  // tenant with the granted role.
+  //
+  // Idempotent — at-least-once delivery means a process restart can
+  // replay the same event. Dedup key is (tenantId, user.id, roleKey)
+  // via the existing unique index on memberships.
+  //
+  // Out of scope for v1: BuildingRoleAssignment grants for
+  // payload.buildingIds (ABAC scope). The membership row gives the
+  // user workspace-level role; building-scoped grants come in a
+  // follow-up when team-and-roles wiring is more mature.
+  onModuleInit() {
+    this.outboxRegistry.register('invite.accepted', async (event) => {
+      const payload = (event.payload || {}) as Record<string, any>;
+      const tenantId: string | undefined = payload.tenantId;
+      const email: string | undefined = payload.email;
+      const roleKey: string | undefined = payload.roleKey;
+      const inviteId: string | undefined = payload.inviteId;
+      const fullName: string | undefined = payload.fullName ?? undefined;
+      const password: string | undefined = payload.password ?? undefined;
+
+      if (!tenantId || !email || !roleKey || !inviteId) {
+        this.inviteLog.warn(
+          `invite.accepted ${event.id}: missing required payload fields — skipping`,
+        );
+        return;
+      }
+
+      try {
+        // 1. Find or create the User row by emailNormalized (the canonical
+        //    UNIQUE column). Cross-tenant invites with the same email
+        //    target the SAME user record (intentional — one human, many
+        //    workspace memberships).
+        const lower = email.toLowerCase();
+        const existingUser = await this.prisma.user.findUnique({
+          where: { emailNormalized: lower },
+          select: { id: true, displayName: true },
+        });
+
+        let userId: string;
+        if (existingUser) {
+          userId = existingUser.id;
+          // Backfill displayName if it was previously empty.
+          if (fullName && !existingUser.displayName) {
+            await this.prisma.user.update({
+              where: { id: userId },
+              data: { displayName: fullName },
+            });
+          }
+        } else {
+          // New user: bcrypt the password if provided; otherwise leave
+          // the column null so the user has to use a "set password"
+          // flow later. (Auth login refuses null-passwordHash users.)
+          const passwordHash = password ? await bcrypt.hash(password, 12) : null;
+          const created = await this.prisma.user.create({
+            data: {
+              email: lower,
+              emailNormalized: lower,
+              displayName: fullName || lower,
+              passwordHash,
+              status: 'active',
+            },
+            select: { id: true },
+          });
+          userId = created.id;
+        }
+
+        // 2. Idempotent Membership insert. Composite UNIQUE on
+        //    (tenantId, userId, roleKey) prevents duplicates if the
+        //    handler retries.
+        const existingMembership = await this.prisma.membership.findFirst({
+          where: { tenantId, userId, roleKey },
+          select: { id: true },
+        });
+        if (!existingMembership) {
+          await this.prisma.membership.create({
+            data: {
+              tenantId,
+              userId,
+              roleKey,
+              status: 'active',
+            },
+          });
+        }
+
+        // 3. Update the invite row with acceptedByUserId so the inviter
+        //    sees who actually consumed the token. The invites module
+        //    already flipped status='accepted' before publishing — we
+        //    just enrich the row.
+        await this.prisma.invite.update({
+          where: { id: inviteId },
+          data: { acceptedByUserId: userId },
+        });
+
+        await this.audit.write({
+          tenantId,
+          actor: 'invite.accepted-handler',
+          role: 'system',
+          action: 'membership.created-from-invite',
+          entity: userId,
+          entityType: 'membership',
+          building: '',
+          ip: '',
+          sensitive: false,
+          eventType: 'membership.created',
+          metadata: { inviteId, email: lower, roleKey },
+        });
+      } catch (err) {
+        this.inviteLog.warn(
+          `invite.accepted ${event.id}: handler failed — ${(err as Error).message}`,
+        );
+      }
+    });
+  }
 
   async permissions(userId: string, buildingId: string): Promise<Set<string>> {
     const assignments = await this.prisma.buildingRoleAssignment.findMany({
