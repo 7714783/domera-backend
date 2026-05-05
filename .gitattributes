@@ -1,0 +1,8 @@
+# NS-25 — pin LF line endings on the OpenAPI spec.
+#
+# Without this, Windows Git auto-CRLFs JSON files in the working tree,
+# the openapi.json baseline ends up checked in with CRLF, and CI
+# (Linux) generates LF — diff fails on every push for spurious EOL
+# differences.
+
+openapi.json text eol=lf
