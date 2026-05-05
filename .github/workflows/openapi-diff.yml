@@ -17,6 +17,7 @@ on:
       - 'src/**'
       - 'openapi.json'
       - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/openapi-diff.yml'
   pull_request:
     branches: [main]
@@ -24,6 +25,7 @@ on:
       - 'src/**'
       - 'openapi.json'
       - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/openapi-diff.yml'
   workflow_dispatch: {}
 
