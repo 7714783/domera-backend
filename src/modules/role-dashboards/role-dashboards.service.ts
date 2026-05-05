@@ -19,63 +19,131 @@ export class RoleDashboardsService {
     const now = new Date();
     const in14 = new Date(now.getTime() + 14 * 86400000);
 
-    // PERF-001 Stage 2 — 6 reads in one RLS transaction (was 6 separate
-    // set_config transactions; the Promise.all only paralleled in
-    // application code, every leg still hit the DB on its own
-    // connection-with-set_config).
-    const { urgentDue, ppmInFlight, incidents, serviceOpen, approvals, openTasks } =
-      await this.prisma.withTenant(
-        tenantId,
-        async (tx) => {
-          const urgentDue = await tx.ppmPlanItem.findMany({
-            where: { tenantId, buildingId: building.id, nextDueAt: { lte: in14 } },
-            include: { template: { select: { name: true, executionMode: true } } },
-            orderBy: { nextDueAt: 'asc' },
-            take: 20,
-          });
-          const ppmInFlight = await tx.taskInstance.count({
-            where: {
-              tenantId,
-              buildingId: building.id,
-              lifecycleStage: {
-                in: [
-                  'quote_requested',
-                  'quote_received',
-                  'awaiting_approval',
-                  'approved',
-                  'ordered',
-                  'in_progress',
-                ],
-              },
+    // PERF-001 Stage 2 + 2026-05-05 KPI consolidation — every read
+    // inside one RLS transaction. The KPI counters (6 cheap aggregate
+    // queries: ppmPrograms / ppmOverdue / ppmDue30 / approvalsPending
+    // / servicesOpen / incidentsOpen) used to be 5 separate calls
+    // from OpsOverview, each with its own RLS transaction. Folding
+    // them into this same withTenant batch eliminates 5 cross-process
+    // round-trips on every dashboard load.
+    const in30 = new Date(now.getTime() + 30 * 86400000);
+    const {
+      urgentDue,
+      ppmInFlight,
+      incidents,
+      serviceOpen,
+      approvals,
+      openTasks,
+      ppmProgramsCount,
+      ppmOverdueCount,
+      ppmDue30Count,
+      approvalsPendingCount,
+      servicesOpenCount,
+      incidentsOpenCount,
+    } = await this.prisma.withTenant(
+      tenantId,
+      async (tx) => {
+        const urgentDue = await tx.ppmPlanItem.findMany({
+          where: { tenantId, buildingId: building.id, nextDueAt: { lte: in14 } },
+          include: { template: { select: { name: true, executionMode: true } } },
+          orderBy: { nextDueAt: 'asc' },
+          take: 20,
+        });
+        const ppmInFlight = await tx.taskInstance.count({
+          where: {
+            tenantId,
+            buildingId: building.id,
+            lifecycleStage: {
+              in: [
+                'quote_requested',
+                'quote_received',
+                'awaiting_approval',
+                'approved',
+                'ordered',
+                'in_progress',
+              ],
             },
-          });
-          const incidents = await tx.incident.findMany({
-            where: {
-              tenantId,
-              buildingId: building.id,
-              status: { in: ['new', 'triaged', 'dispatched'] },
-            },
-            orderBy: [{ severity: 'asc' }, { reportedAt: 'desc' }],
-            take: 10,
-          });
-          const serviceOpen = await tx.serviceRequest.findMany({
-            where: { tenantId, buildingId: building.id, status: { in: ['new', 'triaged'] } },
-            orderBy: { createdAt: 'desc' },
-            take: 10,
-          });
-          const approvals = await tx.approvalRequest.findMany({
-            where: { tenantId, buildingId: building.id, status: 'pending' },
-            include: { steps: { orderBy: { orderNo: 'asc' } } },
-            orderBy: { createdAt: 'desc' },
-            take: 10,
-          });
-          const openTasks = await tx.taskInstance.count({
-            where: { tenantId, buildingId: building.id, status: { in: ['open', 'overdue'] } },
-          });
-          return { urgentDue, ppmInFlight, incidents, serviceOpen, approvals, openTasks };
-        },
-        'role-dashboards.buildingManagerToday',
-      );
+          },
+        });
+        const incidents = await tx.incident.findMany({
+          where: {
+            tenantId,
+            buildingId: building.id,
+            status: { in: ['new', 'triaged', 'dispatched'] },
+          },
+          orderBy: [{ severity: 'asc' }, { reportedAt: 'desc' }],
+          take: 10,
+        });
+        const serviceOpen = await tx.serviceRequest.findMany({
+          where: { tenantId, buildingId: building.id, status: { in: ['new', 'triaged'] } },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        });
+        const approvals = await tx.approvalRequest.findMany({
+          where: { tenantId, buildingId: building.id, status: 'pending' },
+          include: { steps: { orderBy: { orderNo: 'asc' } } },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        });
+        const openTasks = await tx.taskInstance.count({
+          where: { tenantId, buildingId: building.id, status: { in: ['open', 'overdue'] } },
+        });
+
+        // ── KPI counters (6 cheap aggregates) ──
+        // ppmProgramsCount — templates with at least one baseline-
+        // confirmed plan item (same filter listPrograms uses).
+        const ppmProgramsCount = await tx.ppmTemplate.count({
+          where: {
+            tenantId,
+            buildingId: building.id,
+            planItems: { some: { baselineStatus: { not: 'pending' } } },
+          },
+        });
+        const ppmOverdueCount = await tx.ppmPlanItem.count({
+          where: { tenantId, buildingId: building.id, nextDueAt: { lt: now } },
+        });
+        const ppmDue30Count = await tx.ppmPlanItem.count({
+          where: {
+            tenantId,
+            buildingId: building.id,
+            nextDueAt: { gte: now, lte: in30 },
+          },
+        });
+        const approvalsPendingCount = await tx.approvalRequest.count({
+          where: { tenantId, buildingId: building.id, status: 'pending' },
+        });
+        const servicesOpenCount = await tx.serviceRequest.count({
+          where: {
+            tenantId,
+            buildingId: building.id,
+            status: { in: ['new', 'triaged'] },
+          },
+        });
+        const incidentsOpenCount = await tx.incident.count({
+          where: {
+            tenantId,
+            buildingId: building.id,
+            status: { in: ['new', 'triaged', 'dispatched'] },
+          },
+        });
+
+        return {
+          urgentDue,
+          ppmInFlight,
+          incidents,
+          serviceOpen,
+          approvals,
+          openTasks,
+          ppmProgramsCount,
+          ppmOverdueCount,
+          ppmDue30Count,
+          approvalsPendingCount,
+          servicesOpenCount,
+          incidentsOpenCount,
+        };
+      },
+      'role-dashboards.buildingManagerToday',
+    );
 
     return {
       building: { id: building.id, slug: building.slug, name: building.name },
@@ -112,6 +180,18 @@ export class RoleDashboardsService {
         totalSteps: a.steps.length,
       })),
       openTasks,
+      // 2026-05-05 KPI consolidation. Replaces the 5 separate calls
+      // OpsOverview used to make (ppm/programs, ppm/calendar,
+      // approvals, service-requests, incidents). All counters come
+      // from the same withTenant batch above — one RLS transaction.
+      kpiCounts: {
+        ppmPrograms: ppmProgramsCount,
+        ppmOverdue: ppmOverdueCount,
+        ppmDue30: ppmDue30Count,
+        approvalsPending: approvalsPendingCount,
+        servicesOpen: servicesOpenCount,
+        incidentsOpen: incidentsOpenCount,
+      },
     };
   }
 
