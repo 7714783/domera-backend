@@ -96,6 +96,17 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   async onModuleInit() {
+    // NS-25 — OpenAPI spec generation creates an application context
+    // purely to enumerate controllers. It never queries the DB, so we
+    // skip $connect() in that mode to avoid requiring a live Postgres
+    // (and a postgres service container) in the openapi-diff CI gate.
+    // Any code path that DID try to query Prisma in spec-gen mode
+    // would surface a clean "client not connected" error rather than
+    // pretend to work.
+    if (process.env.OPENAPI_GEN_MODE === '1') {
+      this.log.log('OPENAPI_GEN_MODE=1 — skipping Prisma $connect()');
+      return;
+    }
     await this.$connect();
     this.log.log(
       'RLS auto-wrap active (tenant-aware $extends; set_config per tenant-scoped request)',

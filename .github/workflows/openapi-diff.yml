@@ -1,0 +1,68 @@
+name: openapi-diff
+
+# NS-25 — anti-drift gate for the OpenAPI spec.
+#
+# Backend generates openapi.json from controller decorators on every
+# build. This workflow regenerates and `git diff --exit-code` against
+# the committed file. Drift = either re-commit the spec or revert the
+# controller change. That single line IS the gate.
+#
+# Scope discipline: spec generation + CI diff only. No client SDK
+# auto-gen, no public API portal, no doc-site publish.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'openapi.json'
+      - 'package.json'
+      - '.github/workflows/openapi-diff.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'openapi.json'
+      - 'package.json'
+      - '.github/workflows/openapi-diff.yml'
+  workflow_dispatch: {}
+
+concurrency:
+  group: openapi-diff-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+  # Placeholder; openapi:gen sets its own dummy URLs internally so it
+  # can build without a live postgres. We still need a value here for
+  # `prisma generate` in the postinstall hook.
+  DATABASE_URL: 'postgresql://openapi:gen@localhost:5432/openapi_dummy?schema=public'
+
+jobs:
+  diff:
+    name: Generate OpenAPI + diff against committed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Generate OpenAPI spec from controllers
+        env:
+          OPENAPI_GEN_MODE: '1'
+        run: npm run openapi:gen
+
+      - name: Diff committed spec against generated
+        run: |
+          if ! git diff --exit-code openapi.json; then
+            echo ""
+            echo "::error::OpenAPI spec drifted from committed openapi.json."
+            echo "Either re-run 'npm run openapi:gen' locally and commit the result,"
+            echo "or revert the controller change that introduced the drift."
+            exit 1
+          fi
+          echo "OpenAPI spec is in sync with controllers."

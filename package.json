@@ -27,7 +27,8 @@
     "test:rls": "node --test --test-reporter=spec test/rls.isolation.test.mjs",
     "test:rls-smoke": "node test/rls-isolation-smoke.mjs",
     "test:smoke": "node test/auth-smoke.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "openapi:gen": "nest build && OPENAPI_GEN_MODE=1 node dist/openapi-gen.js"
   },
   "prisma": {
     "seed": "node prisma/seeds/seed-test-building.mjs"
@@ -36,6 +37,7 @@
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/swagger": "^11.4.2",
     "@prisma/client": "^6.16.3",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.58.0",

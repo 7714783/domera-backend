@@ -29,6 +29,9 @@ export class DeliveryDispatcher implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    // NS-25 — OPENAPI_GEN_MODE skips background timers so the spec
+    // generator can exit cleanly without dangling intervals.
+    if (process.env.OPENAPI_GEN_MODE === '1') return;
     if (process.env.NOTIFY_DISABLE === '1') {
       this.log.warn('Delivery dispatcher disabled via NOTIFY_DISABLE=1');
       return;

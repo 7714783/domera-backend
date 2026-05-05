@@ -17,6 +17,9 @@ export class MigratorPrismaService extends PrismaClient implements OnModuleInit,
     });
   }
   async onModuleInit() {
+    // NS-25 — see PrismaService.onModuleInit; OPENAPI_GEN_MODE skips
+    // $connect so the spec gen does not require a live Postgres.
+    if (process.env.OPENAPI_GEN_MODE === '1') return;
     await this.$connect();
   }
   async onModuleDestroy() {

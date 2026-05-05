@@ -17,6 +17,7 @@ import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { assertProdEnv } from './common/env-guard';
+import { setupSwagger } from './openapi';
 
 async function bootstrap() {
   // INIT-008 Phase 3 — fail fast in PROD if env is incomplete or
@@ -42,6 +43,10 @@ async function bootstrap() {
     origin: corsOrigins,
     credentials: true,
   });
+
+  // NS-25 — OpenAPI / Swagger UI at GET /api/docs. Read-only; the
+  // served data only mirrors what's already exposed under /v1/*.
+  setupSwagger(app);
 
   await app.listen(process.env.PORT || 4000);
 }

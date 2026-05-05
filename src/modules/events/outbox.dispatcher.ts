@@ -48,6 +48,9 @@ export class OutboxDispatcher implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    // NS-25 — OPENAPI_GEN_MODE skips background timers so the spec
+    // generator can exit cleanly without dangling intervals.
+    if (process.env.OPENAPI_GEN_MODE === '1') return;
     if (!ENABLED) {
       this.log.log('OUTBOX_DISPATCHER_ENABLED=false — dispatcher idle');
       return;
