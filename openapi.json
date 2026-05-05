@@ -10,7 +10,9 @@
             "description": ""
           }
         },
-        "tags": ["Health"]
+        "tags": [
+          "Health"
+        ]
       }
     },
     "/v1/ready": {
@@ -22,7 +24,9 @@
             "description": ""
           }
         },
-        "tags": ["Health"]
+        "tags": [
+          "Health"
+        ]
       }
     },
     "/v1/admin/tenants/{id}/suspend": {
@@ -51,7 +55,9 @@
             "description": ""
           }
         },
-        "tags": ["Tenancy"]
+        "tags": [
+          "Tenancy"
+        ]
       }
     },
     "/v1/admin/tenants/{id}/reactivate": {
@@ -80,7 +86,9 @@
             "description": ""
           }
         },
-        "tags": ["Tenancy"]
+        "tags": [
+          "Tenancy"
+        ]
       }
     },
     "/v1/admin/tenants/{id}/export": {
@@ -109,7 +117,9 @@
             "description": ""
           }
         },
-        "tags": ["Tenancy"]
+        "tags": [
+          "Tenancy"
+        ]
       }
     },
     "/v1/auth/register": {
@@ -121,7 +131,9 @@
             "description": ""
           }
         },
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/v1/auth/login": {
@@ -133,7 +145,9 @@
             "description": ""
           }
         },
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/v1/auth/me": {
@@ -154,7 +168,9 @@
             "description": ""
           }
         },
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/v1/auth/sessions": {
@@ -175,7 +191,9 @@
             "description": ""
           }
         },
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/v1/auth/logout": {
@@ -196,7 +214,9 @@
             "description": ""
           }
         },
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/v1/auth/logout-all": {
@@ -217,7 +237,9 @@
             "description": ""
           }
         },
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/v1/auth/switch-workspace": {
@@ -238,7 +260,9 @@
             "description": ""
           }
         },
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/v1/audit": {
@@ -259,7 +283,9 @@
             "description": ""
           }
         },
-        "tags": ["Audit"]
+        "tags": [
+          "Audit"
+        ]
       }
     },
     "/v1/audit/stats": {
@@ -280,7 +306,9 @@
             "description": ""
           }
         },
-        "tags": ["Audit"]
+        "tags": [
+          "Audit"
+        ]
       }
     },
     "/v1/audit/search": {
@@ -381,7 +409,9 @@
             "description": ""
           }
         },
-        "tags": ["Audit"]
+        "tags": [
+          "Audit"
+        ]
       }
     },
     "/v1/audit/export.csv": {
@@ -458,7 +488,9 @@
             "description": ""
           }
         },
-        "tags": ["Audit"]
+        "tags": [
+          "Audit"
+        ]
       }
     },
     "/v1/audit/{id}": {
@@ -487,7 +519,9 @@
             "description": ""
           }
         },
-        "tags": ["Audit"]
+        "tags": [
+          "Audit"
+        ]
       }
     },
     "/v1/organizations": {
@@ -508,7 +542,9 @@
             "description": ""
           }
         },
-        "tags": ["Organizations"]
+        "tags": [
+          "Organizations"
+        ]
       }
     },
     "/v1/approvals": {
@@ -537,7 +573,9 @@
             "description": ""
           }
         },
-        "tags": ["Approvals"]
+        "tags": [
+          "Approvals"
+        ]
       }
     },
     "/v1/approvals/{id}/approve": {
@@ -582,7 +620,9 @@
             "description": ""
           }
         },
-        "tags": ["Approvals"]
+        "tags": [
+          "Approvals"
+        ]
       }
     },
     "/v1/approvals/policies": {
@@ -627,7 +667,9 @@
             "description": ""
           }
         },
-        "tags": ["Approvals"]
+        "tags": [
+          "Approvals"
+        ]
       },
       "post": {
         "operationId": "ApprovalsController_createPolicy",
@@ -654,7 +696,9 @@
             "description": ""
           }
         },
-        "tags": ["Approvals"]
+        "tags": [
+          "Approvals"
+        ]
       }
     },
     "/v1/approvals/policies/{id}/history": {
@@ -683,7 +727,9 @@
             "description": ""
           }
         },
-        "tags": ["Approvals"]
+        "tags": [
+          "Approvals"
+        ]
       }
     },
     "/v1/approvals/policies/{id}/supersede": {
@@ -720,7 +766,9 @@
             "description": ""
           }
         },
-        "tags": ["Approvals"]
+        "tags": [
+          "Approvals"
+        ]
       }
     },
     "/v1/approvals/policies/{id}": {
@@ -749,7 +797,9 @@
             "description": ""
           }
         },
-        "tags": ["Approvals"]
+        "tags": [
+          "Approvals"
+        ]
       }
     },
     "/v1/approvals/policies/resolve": {
@@ -770,7 +820,9 @@
             "description": ""
           }
         },
-        "tags": ["Approvals"]
+        "tags": [
+          "Approvals"
+        ]
       }
     },
     "/v1/approvals/delegations": {
@@ -815,7 +867,9 @@
             "description": ""
           }
         },
-        "tags": ["Approvals"]
+        "tags": [
+          "Approvals"
+        ]
       },
       "post": {
         "operationId": "ApprovalsController_createDelegation",
@@ -842,7 +896,9 @@
             "description": ""
           }
         },
-        "tags": ["Approvals"]
+        "tags": [
+          "Approvals"
+        ]
       }
     },
     "/v1/approvals/delegations/{id}/revoke": {
@@ -879,7 +935,9 @@
             "description": ""
           }
         },
-        "tags": ["Approvals"]
+        "tags": [
+          "Approvals"
+        ]
       }
     },
     "/v1/approvals/bottlenecks": {
@@ -916,7 +974,9 @@
             "description": ""
           }
         },
-        "tags": ["Approvals"]
+        "tags": [
+          "Approvals"
+        ]
       }
     },
     "/v1/buildings": {
@@ -937,7 +997,9 @@
             "description": ""
           }
         },
-        "tags": ["Buildings"]
+        "tags": [
+          "Buildings"
+        ]
       },
       "post": {
         "operationId": "BuildingsController_create",
@@ -964,7 +1026,9 @@
             "description": ""
           }
         },
-        "tags": ["Buildings"]
+        "tags": [
+          "Buildings"
+        ]
       }
     },
     "/v1/buildings/{idOrSlug}": {
@@ -993,7 +1057,9 @@
             "description": ""
           }
         },
-        "tags": ["Buildings"]
+        "tags": [
+          "Buildings"
+        ]
       }
     },
     "/v1/buildings/{slug}": {
@@ -1030,7 +1096,9 @@
             "description": ""
           }
         },
-        "tags": ["Buildings"]
+        "tags": [
+          "Buildings"
+        ]
       },
       "delete": {
         "operationId": "BuildingsController_remove",
@@ -1065,7 +1133,9 @@
             "description": ""
           }
         },
-        "tags": ["Buildings"]
+        "tags": [
+          "Buildings"
+        ]
       }
     },
     "/v1/buildings/{slug}/publish": {
@@ -1102,7 +1172,9 @@
             "description": ""
           }
         },
-        "tags": ["Buildings"]
+        "tags": [
+          "Buildings"
+        ]
       }
     },
     "/v1/buildings/{slug}/archive": {
@@ -1139,7 +1211,9 @@
             "description": ""
           }
         },
-        "tags": ["Buildings"]
+        "tags": [
+          "Buildings"
+        ]
       }
     },
     "/v1/buildings/{slug}/reactivate": {
@@ -1176,7 +1250,9 @@
             "description": ""
           }
         },
-        "tags": ["Buildings"]
+        "tags": [
+          "Buildings"
+        ]
       }
     },
     "/v1/ppm/sla/scan-now": {
@@ -1197,7 +1273,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/buildings/{id}/ppm/programs": {
@@ -1234,7 +1312,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       },
       "post": {
         "operationId": "PpmController_createProgram",
@@ -1269,7 +1349,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/buildings/{id}/ppm/executions": {
@@ -1322,7 +1404,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/buildings/{id}/ppm/calendar": {
@@ -1359,7 +1443,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/ppm/plan-items/{planItemId}/schedule": {
@@ -1396,7 +1482,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/buildings/{id}/ppm/wizard/catalog": {
@@ -1425,7 +1513,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/buildings/{id}/ppm/wizard/apply": {
@@ -1462,7 +1552,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/buildings/{id}/ppm/plan-items": {
@@ -1499,7 +1591,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/ppm/plan-items/{planItemId}/baseline": {
@@ -1536,7 +1630,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/buildings/{id}/ppm/setup-baseline": {
@@ -1573,7 +1669,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/ppm/executions/{id}": {
@@ -1602,7 +1700,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/ppm/executions/{id}/request-quote": {
@@ -1639,7 +1739,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/ppm/executions/{id}/record-quote": {
@@ -1676,7 +1778,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/ppm/executions/{id}/submit-for-approval": {
@@ -1713,7 +1817,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/ppm/executions/{id}/mark-approved": {
@@ -1750,7 +1856,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/ppm/executions/{id}/place-order": {
@@ -1787,7 +1895,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/ppm/executions/{id}/mark-in-progress": {
@@ -1824,7 +1934,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/ppm/executions/{id}/record-completion": {
@@ -1861,7 +1973,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/ppm/executions/{id}/review-completion": {
@@ -1898,7 +2012,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/ppm/executions/{id}/distribute-evidence": {
@@ -1935,7 +2051,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/ppm/executions/{id}/archive": {
@@ -1972,7 +2090,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/ppm/executions/{id}/cancel": {
@@ -2009,7 +2129,9 @@
             "description": ""
           }
         },
-        "tags": ["Ppm"]
+        "tags": [
+          "Ppm"
+        ]
       }
     },
     "/v1/compliance/dashboard": {
@@ -2030,7 +2152,9 @@
             "description": ""
           }
         },
-        "tags": ["Compliance"]
+        "tags": [
+          "Compliance"
+        ]
       }
     },
     "/v1/workspaces/{slug}": {
@@ -2051,7 +2175,9 @@
             "description": ""
           }
         },
-        "tags": ["SeedRuntime"]
+        "tags": [
+          "SeedRuntime"
+        ]
       }
     },
     "/v1/buildings/{slug}/overview": {
@@ -2072,7 +2198,9 @@
             "description": ""
           }
         },
-        "tags": ["SeedRuntime"]
+        "tags": [
+          "SeedRuntime"
+        ]
       }
     },
     "/v1/buildings/{slug}/assets/tree": {
@@ -2093,7 +2221,9 @@
             "description": ""
           }
         },
-        "tags": ["SeedRuntime"]
+        "tags": [
+          "SeedRuntime"
+        ]
       }
     },
     "/v1/buildings/{slug}/compliance-dashboard": {
@@ -2114,7 +2244,9 @@
             "description": ""
           }
         },
-        "tags": ["SeedRuntime"]
+        "tags": [
+          "SeedRuntime"
+        ]
       }
     },
     "/v1/buildings/{slug}/budgets": {
@@ -2135,7 +2267,9 @@
             "description": ""
           }
         },
-        "tags": ["SeedRuntime"]
+        "tags": [
+          "SeedRuntime"
+        ]
       }
     },
     "/v1/buildings/{slug}/approvals": {
@@ -2156,7 +2290,9 @@
             "description": ""
           }
         },
-        "tags": ["SeedRuntime"]
+        "tags": [
+          "SeedRuntime"
+        ]
       }
     },
     "/v1/buildings/{slug}/documents": {
@@ -2177,7 +2313,9 @@
             "description": ""
           }
         },
-        "tags": ["SeedRuntime"]
+        "tags": [
+          "SeedRuntime"
+        ]
       }
     },
     "/v1/buildings/{slug}/audit": {
@@ -2198,7 +2336,9 @@
             "description": ""
           }
         },
-        "tags": ["SeedRuntime"]
+        "tags": [
+          "SeedRuntime"
+        ]
       }
     },
     "/v1/tasks/{id}/complete": {
@@ -2235,7 +2375,9 @@
             "description": ""
           }
         },
-        "tags": ["Tasks"]
+        "tags": [
+          "Tasks"
+        ]
       }
     },
     "/v1/imports/ppm-xlsx/preview": {
@@ -2272,7 +2414,9 @@
             "description": ""
           }
         },
-        "tags": ["Imports"]
+        "tags": [
+          "Imports"
+        ]
       }
     },
     "/v1/imports/{id}": {
@@ -2293,7 +2437,9 @@
             "description": ""
           }
         },
-        "tags": ["Imports"]
+        "tags": [
+          "Imports"
+        ]
       }
     },
     "/v1/imports/{id}/commit": {
@@ -2322,7 +2468,9 @@
             "description": ""
           }
         },
-        "tags": ["Imports"]
+        "tags": [
+          "Imports"
+        ]
       }
     },
     "/v1/imports/{id}/rollback": {
@@ -2351,7 +2499,9 @@
             "description": ""
           }
         },
-        "tags": ["Imports"]
+        "tags": [
+          "Imports"
+        ]
       }
     },
     "/v1/imports/pdf-bundle/preview": {
@@ -2380,7 +2530,9 @@
             "description": ""
           }
         },
-        "tags": ["Imports"]
+        "tags": [
+          "Imports"
+        ]
       }
     },
     "/v1/imports/pdf-bundle/{id}/commit": {
@@ -2409,7 +2561,9 @@
             "description": ""
           }
         },
-        "tags": ["Imports"]
+        "tags": [
+          "Imports"
+        ]
       }
     },
     "/v1/buildings/{slug}/obligations/apply-templates": {
@@ -2438,7 +2592,9 @@
             "description": ""
           }
         },
-        "tags": ["Obligations"]
+        "tags": [
+          "Obligations"
+        ]
       }
     },
     "/v1/buildings/{slug}/obligations": {
@@ -2467,7 +2623,9 @@
             "description": ""
           }
         },
-        "tags": ["Obligations"]
+        "tags": [
+          "Obligations"
+        ]
       }
     },
     "/v1/buildings/{slug}/roles/assign": {
@@ -2504,7 +2662,9 @@
             "description": ""
           }
         },
-        "tags": ["Iam"]
+        "tags": [
+          "Iam"
+        ]
       }
     },
     "/v1/buildings/{slug}/roles": {
@@ -2533,7 +2693,9 @@
             "description": ""
           }
         },
-        "tags": ["Iam"]
+        "tags": [
+          "Iam"
+        ]
       }
     },
     "/v1/buildings/{slug}/roles/{assignmentId}": {
@@ -2578,7 +2740,9 @@
             "description": ""
           }
         },
-        "tags": ["Iam"]
+        "tags": [
+          "Iam"
+        ]
       }
     },
     "/v1/buildings/{slug}/staff": {
@@ -2607,7 +2771,9 @@
             "description": ""
           }
         },
-        "tags": ["Staff"]
+        "tags": [
+          "Staff"
+        ]
       },
       "post": {
         "operationId": "StaffController_create",
@@ -2642,7 +2808,9 @@
             "description": ""
           }
         },
-        "tags": ["Staff"]
+        "tags": [
+          "Staff"
+        ]
       }
     },
     "/v1/takeover/cases": {
@@ -2671,7 +2839,9 @@
             "description": ""
           }
         },
-        "tags": ["Takeover"]
+        "tags": [
+          "Takeover"
+        ]
       }
     },
     "/v1/takeover/{id}/gap-analysis": {
@@ -2700,7 +2870,9 @@
             "description": ""
           }
         },
-        "tags": ["Takeover"]
+        "tags": [
+          "Takeover"
+        ]
       }
     },
     "/v1/takeover/{id}/readiness": {
@@ -2729,7 +2901,9 @@
             "description": ""
           }
         },
-        "tags": ["Takeover"]
+        "tags": [
+          "Takeover"
+        ]
       }
     },
     "/v1/takeover/{id}/signoff": {
@@ -2774,7 +2948,9 @@
             "description": ""
           }
         },
-        "tags": ["Takeover"]
+        "tags": [
+          "Takeover"
+        ]
       }
     },
     "/v1/onboarding/my-workspaces": {
@@ -2795,7 +2971,9 @@
             "description": ""
           }
         },
-        "tags": ["Onboarding"]
+        "tags": [
+          "Onboarding"
+        ]
       }
     },
     "/v1/onboarding/workspace": {
@@ -2816,7 +2994,9 @@
             "description": ""
           }
         },
-        "tags": ["Onboarding"]
+        "tags": [
+          "Onboarding"
+        ]
       }
     },
     "/v1/onboarding/organization": {
@@ -2837,7 +3017,9 @@
             "description": ""
           }
         },
-        "tags": ["Onboarding"]
+        "tags": [
+          "Onboarding"
+        ]
       }
     },
     "/v1/onboarding/building": {
@@ -2858,7 +3040,9 @@
             "description": ""
           }
         },
-        "tags": ["Onboarding"]
+        "tags": [
+          "Onboarding"
+        ]
       }
     },
     "/v1/onboarding/bootstrap": {
@@ -2879,7 +3063,9 @@
             "description": ""
           }
         },
-        "tags": ["Onboarding"]
+        "tags": [
+          "Onboarding"
+        ]
       }
     },
     "/v1/onboarding/buildings/{slug}/full": {
@@ -2916,7 +3102,9 @@
             "description": ""
           }
         },
-        "tags": ["Onboarding"]
+        "tags": [
+          "Onboarding"
+        ]
       }
     },
     "/v1/onboarding/buildings/{slug}": {
@@ -2953,7 +3141,9 @@
             "description": ""
           }
         },
-        "tags": ["Onboarding"]
+        "tags": [
+          "Onboarding"
+        ]
       }
     },
     "/v1/buildings/{id}/summary": {
@@ -2982,7 +3172,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/floors": {
@@ -3011,7 +3203,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       },
       "post": {
         "operationId": "BuildingCoreController_createFloor",
@@ -3046,7 +3240,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/locations": {
@@ -3075,7 +3271,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       },
       "post": {
         "operationId": "BuildingCoreController_createLocation",
@@ -3110,7 +3308,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/units": {
@@ -3139,7 +3339,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       },
       "post": {
         "operationId": "BuildingCoreController_createUnit",
@@ -3174,7 +3376,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/units/{unitId}": {
@@ -3219,7 +3423,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/unit-groups": {
@@ -3248,7 +3454,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       },
       "post": {
         "operationId": "BuildingCoreController_createUnitGroup",
@@ -3283,7 +3491,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/unit-groups/{groupId}": {
@@ -3328,7 +3538,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       },
       "delete": {
         "operationId": "BuildingCoreController_deleteUnitGroup",
@@ -3371,7 +3583,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/transport": {
@@ -3400,7 +3614,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       },
       "post": {
         "operationId": "BuildingCoreController_createTransport",
@@ -3435,7 +3651,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/systems": {
@@ -3464,7 +3682,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       },
       "post": {
         "operationId": "BuildingCoreController_createSystem",
@@ -3499,7 +3719,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/systems/{systemId}": {
@@ -3544,7 +3766,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/occupants": {
@@ -3573,7 +3797,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       },
       "post": {
         "operationId": "BuildingCoreController_createOccupant",
@@ -3608,7 +3834,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/occupancies": {
@@ -3645,7 +3873,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/contracts": {
@@ -3674,7 +3904,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       },
       "post": {
         "operationId": "BuildingCoreController_createContract",
@@ -3709,7 +3941,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/parking": {
@@ -3738,7 +3972,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       },
       "post": {
         "operationId": "BuildingCoreController_createParking",
@@ -3773,7 +4009,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/storage": {
@@ -3802,7 +4040,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       },
       "post": {
         "operationId": "BuildingCoreController_createStorage",
@@ -3837,7 +4077,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/equipment-relations": {
@@ -3866,7 +4108,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       },
       "post": {
         "operationId": "BuildingCoreController_createRelation",
@@ -3901,7 +4145,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/elevators": {
@@ -3930,7 +4176,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       },
       "post": {
         "operationId": "BuildingCoreController_upsertElevatorProfile",
@@ -3965,7 +4213,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/sensors": {
@@ -3994,7 +4244,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       },
       "post": {
         "operationId": "BuildingCoreController_createSensorPoint",
@@ -4029,7 +4281,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/alarms": {
@@ -4058,7 +4312,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       },
       "post": {
         "operationId": "BuildingCoreController_createAlarmSource",
@@ -4093,7 +4349,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/buildings/{id}/assets/{assetId}/tags": {
@@ -4138,7 +4396,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingCore"]
+        "tags": [
+          "BuildingCore"
+        ]
       }
     },
     "/v1/assets": {
@@ -4207,7 +4467,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       }
     },
     "/v1/buildings/{id}/assets": {
@@ -4316,7 +4578,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       },
       "post": {
         "operationId": "AssetsController_create",
@@ -4351,7 +4615,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       }
     },
     "/v1/buildings/{id}/assets/bulk-import": {
@@ -4388,7 +4654,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       }
     },
     "/v1/assets/{id}": {
@@ -4417,7 +4685,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       },
       "patch": {
         "operationId": "AssetsController_update",
@@ -4452,7 +4722,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       },
       "delete": {
         "operationId": "AssetsController_softDelete",
@@ -4487,7 +4759,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       }
     },
     "/v1/assets/{id}/custom-attributes": {
@@ -4516,7 +4790,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       }
     },
     "/v1/assets/{id}/custom-attributes/{key}": {
@@ -4553,7 +4829,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       }
     },
     "/v1/assets/{id}/documents": {
@@ -4582,7 +4860,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       }
     },
     "/v1/assets/documents/{linkId}": {
@@ -4611,7 +4891,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       }
     },
     "/v1/assets/{id}/media": {
@@ -4640,7 +4922,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       }
     },
     "/v1/assets/media/{mediaId}": {
@@ -4669,7 +4953,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       }
     },
     "/v1/assets/{id}/ppm": {
@@ -4698,7 +4984,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       }
     },
     "/v1/assets/{id}/ppm/attach": {
@@ -4735,7 +5023,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       }
     },
     "/v1/assets/{id}/ppm/detach": {
@@ -4772,7 +5062,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       }
     },
     "/v1/asset-types": {
@@ -4801,7 +5093,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       },
       "post": {
         "operationId": "AssetsController_createType",
@@ -4820,7 +5114,9 @@
             "description": ""
           }
         },
-        "tags": ["Assets"]
+        "tags": [
+          "Assets"
+        ]
       }
     },
     "/v1/buildings/{slug}/spaces": {
@@ -4849,7 +5145,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingSpaces"]
+        "tags": [
+          "BuildingSpaces"
+        ]
       },
       "post": {
         "operationId": "BuildingSpacesController_createSpace",
@@ -4884,7 +5182,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingSpaces"]
+        "tags": [
+          "BuildingSpaces"
+        ]
       }
     },
     "/v1/buildings/{slug}/spaces/{spaceId}": {
@@ -4929,7 +5229,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingSpaces"]
+        "tags": [
+          "BuildingSpaces"
+        ]
       },
       "delete": {
         "operationId": "BuildingSpacesController_deleteSpace",
@@ -4972,7 +5274,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingSpaces"]
+        "tags": [
+          "BuildingSpaces"
+        ]
       }
     },
     "/v1/buildings/{slug}/elements": {
@@ -5001,7 +5305,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingSpaces"]
+        "tags": [
+          "BuildingSpaces"
+        ]
       },
       "post": {
         "operationId": "BuildingSpacesController_createElement",
@@ -5036,7 +5342,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingSpaces"]
+        "tags": [
+          "BuildingSpaces"
+        ]
       }
     },
     "/v1/buildings/{slug}/elements/{elementId}": {
@@ -5081,7 +5389,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingSpaces"]
+        "tags": [
+          "BuildingSpaces"
+        ]
       },
       "delete": {
         "operationId": "BuildingSpacesController_deleteElement",
@@ -5124,7 +5434,9 @@
             "description": ""
           }
         },
-        "tags": ["BuildingSpaces"]
+        "tags": [
+          "BuildingSpaces"
+        ]
       }
     },
     "/v1/invites": {
@@ -5153,7 +5465,9 @@
             "description": ""
           }
         },
-        "tags": ["Invites"]
+        "tags": [
+          "Invites"
+        ]
       },
       "get": {
         "operationId": "InvitesController_list",
@@ -5188,7 +5502,9 @@
             "description": ""
           }
         },
-        "tags": ["Invites"]
+        "tags": [
+          "Invites"
+        ]
       }
     },
     "/v1/invites/{id}/revoke": {
@@ -5225,7 +5541,9 @@
             "description": ""
           }
         },
-        "tags": ["Invites"]
+        "tags": [
+          "Invites"
+        ]
       }
     },
     "/v1/invites/accept": {
@@ -5237,7 +5555,9 @@
             "description": ""
           }
         },
-        "tags": ["Invites"]
+        "tags": [
+          "Invites"
+        ]
       }
     },
     "/v1/scanner/resolve": {
@@ -5266,7 +5586,9 @@
             "description": ""
           }
         },
-        "tags": ["Scanner"]
+        "tags": [
+          "Scanner"
+        ]
       }
     },
     "/v1/buildings/{id}/qr-locations/print-sheet": {
@@ -5295,7 +5617,9 @@
             "description": ""
           }
         },
-        "tags": ["QrLocations"]
+        "tags": [
+          "QrLocations"
+        ]
       }
     },
     "/v1/buildings/{id}/qr-locations": {
@@ -5316,7 +5640,9 @@
             "description": ""
           }
         },
-        "tags": ["QrLocations"]
+        "tags": [
+          "QrLocations"
+        ]
       },
       "post": {
         "operationId": "QrLocationsController_create",
@@ -5335,7 +5661,9 @@
             "description": ""
           }
         },
-        "tags": ["QrLocations"]
+        "tags": [
+          "QrLocations"
+        ]
       }
     },
     "/v1/buildings/{id}/qr-locations/{code}": {
@@ -5364,7 +5692,9 @@
             "description": ""
           }
         },
-        "tags": ["QrLocations"]
+        "tags": [
+          "QrLocations"
+        ]
       },
       "delete": {
         "operationId": "QrLocationsController_remove",
@@ -5391,7 +5721,9 @@
             "description": ""
           }
         },
-        "tags": ["QrLocations"]
+        "tags": [
+          "QrLocations"
+        ]
       }
     },
     "/v1/public/qr/{qrId}": {
@@ -5412,7 +5744,9 @@
             "description": ""
           }
         },
-        "tags": ["PublicQr"]
+        "tags": [
+          "PublicQr"
+        ]
       }
     },
     "/v1/public/qr/{qrId}/service-requests": {
@@ -5433,7 +5767,9 @@
             "description": ""
           }
         },
-        "tags": ["PublicQr"]
+        "tags": [
+          "PublicQr"
+        ]
       }
     },
     "/v1/public/qr/{qrId}/png": {
@@ -5462,7 +5798,9 @@
             "description": ""
           }
         },
-        "tags": ["PublicQr"]
+        "tags": [
+          "PublicQr"
+        ]
       }
     },
     "/v1/buildings/{id}/floor-assignments": {
@@ -5507,7 +5845,9 @@
             "description": ""
           }
         },
-        "tags": ["Assignment"]
+        "tags": [
+          "Assignment"
+        ]
       },
       "post": {
         "operationId": "AssignmentController_create",
@@ -5542,7 +5882,9 @@
             "description": ""
           }
         },
-        "tags": ["Assignment"]
+        "tags": [
+          "Assignment"
+        ]
       }
     },
     "/v1/floor-assignments/{id}": {
@@ -5579,7 +5921,9 @@
             "description": ""
           }
         },
-        "tags": ["Assignment"]
+        "tags": [
+          "Assignment"
+        ]
       }
     },
     "/v1/user-availability": {
@@ -5624,7 +5968,9 @@
             "description": ""
           }
         },
-        "tags": ["Assignment"]
+        "tags": [
+          "Assignment"
+        ]
       },
       "post": {
         "operationId": "AssignmentController_setAvailability",
@@ -5651,7 +5997,9 @@
             "description": ""
           }
         },
-        "tags": ["Assignment"]
+        "tags": [
+          "Assignment"
+        ]
       }
     },
     "/v1/buildings/{id}/incidents": {
@@ -5704,7 +6052,9 @@
             "description": ""
           }
         },
-        "tags": ["Reactive"]
+        "tags": [
+          "Reactive"
+        ]
       },
       "post": {
         "operationId": "ReactiveController_createIncident",
@@ -5739,7 +6089,9 @@
             "description": ""
           }
         },
-        "tags": ["Reactive"]
+        "tags": [
+          "Reactive"
+        ]
       }
     },
     "/v1/incidents/{id}/ack": {
@@ -5776,7 +6128,9 @@
             "description": ""
           }
         },
-        "tags": ["Reactive"]
+        "tags": [
+          "Reactive"
+        ]
       }
     },
     "/v1/incidents/{id}/assign": {
@@ -5813,7 +6167,9 @@
             "description": ""
           }
         },
-        "tags": ["Reactive"]
+        "tags": [
+          "Reactive"
+        ]
       }
     },
     "/v1/service-requests/{id}/assign": {
@@ -5850,7 +6206,9 @@
             "description": ""
           }
         },
-        "tags": ["Reactive"]
+        "tags": [
+          "Reactive"
+        ]
       }
     },
     "/v1/incidents/{id}/resolve": {
@@ -5887,7 +6245,9 @@
             "description": ""
           }
         },
-        "tags": ["Reactive"]
+        "tags": [
+          "Reactive"
+        ]
       }
     },
     "/v1/buildings/{id}/service-requests": {
@@ -5940,7 +6300,9 @@
             "description": ""
           }
         },
-        "tags": ["Reactive"]
+        "tags": [
+          "Reactive"
+        ]
       },
       "post": {
         "operationId": "ReactiveController_createSR",
@@ -5975,7 +6337,9 @@
             "description": ""
           }
         },
-        "tags": ["Reactive"]
+        "tags": [
+          "Reactive"
+        ]
       }
     },
     "/v1/service-requests/{id}/resolve": {
@@ -6012,7 +6376,9 @@
             "description": ""
           }
         },
-        "tags": ["Reactive"]
+        "tags": [
+          "Reactive"
+        ]
       }
     },
     "/v1/triage": {
@@ -6049,7 +6415,9 @@
             "description": ""
           }
         },
-        "tags": ["Reactive"]
+        "tags": [
+          "Reactive"
+        ]
       }
     },
     "/v1/work-orders/from-intake": {
@@ -6078,7 +6446,9 @@
             "description": ""
           }
         },
-        "tags": ["Reactive"]
+        "tags": [
+          "Reactive"
+        ]
       }
     },
     "/v1/quotes": {
@@ -6107,7 +6477,9 @@
             "description": ""
           }
         },
-        "tags": ["Reactive"]
+        "tags": [
+          "Reactive"
+        ]
       }
     },
     "/v1/purchase-orders": {
@@ -6136,7 +6508,9 @@
             "description": ""
           }
         },
-        "tags": ["Reactive"]
+        "tags": [
+          "Reactive"
+        ]
       }
     },
     "/v1/completions": {
@@ -6165,7 +6539,9 @@
             "description": ""
           }
         },
-        "tags": ["Reactive"]
+        "tags": [
+          "Reactive"
+        ]
       }
     },
     "/v1/compliance-profiles": {
@@ -6186,7 +6562,9 @@
             "description": ""
           }
         },
-        "tags": ["ComplianceProfiles"]
+        "tags": [
+          "ComplianceProfiles"
+        ]
       },
       "post": {
         "operationId": "ComplianceProfilesController_upsert",
@@ -6205,7 +6583,9 @@
             "description": ""
           }
         },
-        "tags": ["ComplianceProfiles"]
+        "tags": [
+          "ComplianceProfiles"
+        ]
       }
     },
     "/v1/compliance-profiles/seed-built-ins": {
@@ -6226,7 +6606,9 @@
             "description": ""
           }
         },
-        "tags": ["ComplianceProfiles"]
+        "tags": [
+          "ComplianceProfiles"
+        ]
       }
     },
     "/v1/buildings/{id}/compliance-profiles": {
@@ -6255,7 +6637,9 @@
             "description": ""
           }
         },
-        "tags": ["ComplianceProfiles"]
+        "tags": [
+          "ComplianceProfiles"
+        ]
       }
     },
     "/v1/buildings/{id}/compliance-profiles/{key}": {
@@ -6300,7 +6684,9 @@
             "description": ""
           }
         },
-        "tags": ["ComplianceProfiles"]
+        "tags": [
+          "ComplianceProfiles"
+        ]
       },
       "delete": {
         "operationId": "ComplianceProfilesController_unassign",
@@ -6335,7 +6721,9 @@
             "description": ""
           }
         },
-        "tags": ["ComplianceProfiles"]
+        "tags": [
+          "ComplianceProfiles"
+        ]
       }
     },
     "/v1/role-dashboards/building-manager/{building}": {
@@ -6364,7 +6752,9 @@
             "description": ""
           }
         },
-        "tags": ["RoleDashboards"]
+        "tags": [
+          "RoleDashboards"
+        ]
       }
     },
     "/v1/role-dashboards/technician": {
@@ -6393,7 +6783,9 @@
             "description": ""
           }
         },
-        "tags": ["RoleDashboards"]
+        "tags": [
+          "RoleDashboards"
+        ]
       }
     },
     "/v1/role-dashboards/technician/{building}": {
@@ -6430,7 +6822,9 @@
             "description": ""
           }
         },
-        "tags": ["RoleDashboards"]
+        "tags": [
+          "RoleDashboards"
+        ]
       }
     },
     "/v1/role-dashboards/fm-director": {
@@ -6451,7 +6845,9 @@
             "description": ""
           }
         },
-        "tags": ["RoleDashboards"]
+        "tags": [
+          "RoleDashboards"
+        ]
       }
     },
     "/v1/role-dashboards/tenant-representative": {
@@ -6480,7 +6876,9 @@
             "description": ""
           }
         },
-        "tags": ["RoleDashboards"]
+        "tags": [
+          "RoleDashboards"
+        ]
       }
     },
     "/v1/document-links": {
@@ -6517,7 +6915,9 @@
             "description": ""
           }
         },
-        "tags": ["DocumentLinks"]
+        "tags": [
+          "DocumentLinks"
+        ]
       },
       "post": {
         "operationId": "DocumentLinksController_create",
@@ -6544,7 +6944,9 @@
             "description": ""
           }
         },
-        "tags": ["DocumentLinks"]
+        "tags": [
+          "DocumentLinks"
+        ]
       }
     },
     "/v1/document-links/{id}": {
@@ -6573,7 +6975,9 @@
             "description": ""
           }
         },
-        "tags": ["DocumentLinks"]
+        "tags": [
+          "DocumentLinks"
+        ]
       }
     },
     "/v1/inventory/items": {
@@ -6594,7 +6998,9 @@
             "description": ""
           }
         },
-        "tags": ["Inventory"]
+        "tags": [
+          "Inventory"
+        ]
       },
       "post": {
         "operationId": "InventoryController_upsertItem",
@@ -6621,7 +7027,9 @@
             "description": ""
           }
         },
-        "tags": ["Inventory"]
+        "tags": [
+          "Inventory"
+        ]
       }
     },
     "/v1/inventory/locations": {
@@ -6642,7 +7050,9 @@
             "description": ""
           }
         },
-        "tags": ["Inventory"]
+        "tags": [
+          "Inventory"
+        ]
       },
       "post": {
         "operationId": "InventoryController_upsertLocation",
@@ -6669,7 +7079,9 @@
             "description": ""
           }
         },
-        "tags": ["Inventory"]
+        "tags": [
+          "Inventory"
+        ]
       }
     },
     "/v1/inventory/balances": {
@@ -6706,7 +7118,9 @@
             "description": ""
           }
         },
-        "tags": ["Inventory"]
+        "tags": [
+          "Inventory"
+        ]
       }
     },
     "/v1/inventory/movements": {
@@ -6751,7 +7165,9 @@
             "description": ""
           }
         },
-        "tags": ["Inventory"]
+        "tags": [
+          "Inventory"
+        ]
       },
       "post": {
         "operationId": "InventoryController_record",
@@ -6778,7 +7194,9 @@
             "description": ""
           }
         },
-        "tags": ["Inventory"]
+        "tags": [
+          "Inventory"
+        ]
       }
     },
     "/v1/inventory/reconciliation": {
@@ -6799,7 +7217,9 @@
             "description": ""
           }
         },
-        "tags": ["Inventory"]
+        "tags": [
+          "Inventory"
+        ]
       }
     },
     "/v1/documents/upload": {
@@ -6884,7 +7304,9 @@
             "description": ""
           }
         },
-        "tags": ["Documents"]
+        "tags": [
+          "Documents"
+        ]
       }
     },
     "/v1/documents": {
@@ -6945,7 +7367,9 @@
             "description": ""
           }
         },
-        "tags": ["Documents"]
+        "tags": [
+          "Documents"
+        ]
       }
     },
     "/v1/documents/{id}/legal-hold": {
@@ -6982,7 +7406,9 @@
             "description": ""
           }
         },
-        "tags": ["Documents"]
+        "tags": [
+          "Documents"
+        ]
       }
     },
     "/v1/documents/{id}/virus-scan": {
@@ -7011,7 +7437,9 @@
             "description": ""
           }
         },
-        "tags": ["Documents"]
+        "tags": [
+          "Documents"
+        ]
       }
     },
     "/v1/documents/{id}": {
@@ -7040,7 +7468,9 @@
             "description": ""
           }
         },
-        "tags": ["Documents"]
+        "tags": [
+          "Documents"
+        ]
       }
     },
     "/v1/documents/{id}/signed-url": {
@@ -7077,7 +7507,9 @@
             "description": ""
           }
         },
-        "tags": ["Documents"]
+        "tags": [
+          "Documents"
+        ]
       }
     },
     "/v1/documents/signed/{token}": {
@@ -7098,7 +7530,9 @@
             "description": ""
           }
         },
-        "tags": ["DocumentsSigned"]
+        "tags": [
+          "DocumentsSigned"
+        ]
       }
     },
     "/v1/vendor-invoices": {
@@ -7135,7 +7569,9 @@
             "description": ""
           }
         },
-        "tags": ["VendorInvoices"]
+        "tags": [
+          "VendorInvoices"
+        ]
       },
       "post": {
         "operationId": "VendorInvoicesController_create",
@@ -7162,7 +7598,9 @@
             "description": ""
           }
         },
-        "tags": ["VendorInvoices"]
+        "tags": [
+          "VendorInvoices"
+        ]
       }
     },
     "/v1/vendor-invoices/{id}/match": {
@@ -7199,7 +7637,9 @@
             "description": ""
           }
         },
-        "tags": ["VendorInvoices"]
+        "tags": [
+          "VendorInvoices"
+        ]
       }
     },
     "/v1/vendor-invoices/{id}/approve": {
@@ -7236,7 +7676,9 @@
             "description": ""
           }
         },
-        "tags": ["VendorInvoices"]
+        "tags": [
+          "VendorInvoices"
+        ]
       }
     },
     "/v1/emergency-overrides": {
@@ -7273,7 +7715,9 @@
             "description": ""
           }
         },
-        "tags": ["EmergencyOverrides"]
+        "tags": [
+          "EmergencyOverrides"
+        ]
       },
       "post": {
         "operationId": "EmergencyOverridesController_invoke",
@@ -7300,7 +7744,9 @@
             "description": ""
           }
         },
-        "tags": ["EmergencyOverrides"]
+        "tags": [
+          "EmergencyOverrides"
+        ]
       }
     },
     "/v1/emergency-overrides/{id}/ratify": {
@@ -7337,7 +7783,9 @@
             "description": ""
           }
         },
-        "tags": ["EmergencyOverrides"]
+        "tags": [
+          "EmergencyOverrides"
+        ]
       }
     },
     "/v1/emergency-overrides/mark-lapsed": {
@@ -7349,7 +7797,9 @@
             "description": ""
           }
         },
-        "tags": ["EmergencyOverrides"]
+        "tags": [
+          "EmergencyOverrides"
+        ]
       }
     },
     "/v1/calendar-blackouts": {
@@ -7370,7 +7820,9 @@
             "description": ""
           }
         },
-        "tags": ["CalendarBlackouts"]
+        "tags": [
+          "CalendarBlackouts"
+        ]
       },
       "post": {
         "operationId": "CalendarBlackoutsController_create",
@@ -7380,7 +7832,9 @@
             "description": ""
           }
         },
-        "tags": ["CalendarBlackouts"]
+        "tags": [
+          "CalendarBlackouts"
+        ]
       }
     },
     "/v1/calendar-blackouts/seed-israel-defaults": {
@@ -7392,7 +7846,9 @@
             "description": ""
           }
         },
-        "tags": ["CalendarBlackouts"]
+        "tags": [
+          "CalendarBlackouts"
+        ]
       }
     },
     "/v1/calendar-blackouts/{id}": {
@@ -7413,7 +7869,9 @@
             "description": ""
           }
         },
-        "tags": ["CalendarBlackouts"]
+        "tags": [
+          "CalendarBlackouts"
+        ]
       }
     },
     "/v1/condition-triggers": {
@@ -7442,7 +7900,9 @@
             "description": ""
           }
         },
-        "tags": ["ConditionTriggers"]
+        "tags": [
+          "ConditionTriggers"
+        ]
       },
       "post": {
         "operationId": "ConditionTriggersController_create",
@@ -7461,7 +7921,9 @@
             "description": ""
           }
         },
-        "tags": ["ConditionTriggers"]
+        "tags": [
+          "ConditionTriggers"
+        ]
       }
     },
     "/v1/condition-triggers/evaluate": {
@@ -7482,7 +7944,9 @@
             "description": ""
           }
         },
-        "tags": ["ConditionTriggers"]
+        "tags": [
+          "ConditionTriggers"
+        ]
       }
     },
     "/v1/condition-triggers/events": {
@@ -7535,7 +7999,9 @@
             "description": ""
           }
         },
-        "tags": ["ConditionTriggers"]
+        "tags": [
+          "ConditionTriggers"
+        ]
       }
     },
     "/v1/projects": {
@@ -7572,7 +8038,9 @@
             "description": ""
           }
         },
-        "tags": ["Projects"]
+        "tags": [
+          "Projects"
+        ]
       },
       "post": {
         "operationId": "ProjectsController_create",
@@ -7599,7 +8067,9 @@
             "description": ""
           }
         },
-        "tags": ["Projects"]
+        "tags": [
+          "Projects"
+        ]
       }
     },
     "/v1/projects/{id}": {
@@ -7628,7 +8098,9 @@
             "description": ""
           }
         },
-        "tags": ["Projects"]
+        "tags": [
+          "Projects"
+        ]
       }
     },
     "/v1/projects/{id}/classify": {
@@ -7665,7 +8137,9 @@
             "description": ""
           }
         },
-        "tags": ["Projects"]
+        "tags": [
+          "Projects"
+        ]
       }
     },
     "/v1/projects/{id}/stage": {
@@ -7702,7 +8176,9 @@
             "description": ""
           }
         },
-        "tags": ["Projects"]
+        "tags": [
+          "Projects"
+        ]
       }
     },
     "/v1/projects/{id}/stages": {
@@ -7731,7 +8207,9 @@
             "description": ""
           }
         },
-        "tags": ["Projects"]
+        "tags": [
+          "Projects"
+        ]
       }
     },
     "/v1/projects/stages/{stageId}": {
@@ -7760,7 +8238,9 @@
             "description": ""
           }
         },
-        "tags": ["Projects"]
+        "tags": [
+          "Projects"
+        ]
       }
     },
     "/v1/projects/{id}/budget-lines": {
@@ -7789,7 +8269,9 @@
             "description": ""
           }
         },
-        "tags": ["Projects"]
+        "tags": [
+          "Projects"
+        ]
       }
     },
     "/v1/projects/budget-lines/{lineId}/classify": {
@@ -7826,7 +8308,9 @@
             "description": ""
           }
         },
-        "tags": ["Projects"]
+        "tags": [
+          "Projects"
+        ]
       }
     },
     "/v1/projects/{id}/change-orders": {
@@ -7863,7 +8347,9 @@
             "description": ""
           }
         },
-        "tags": ["Projects"]
+        "tags": [
+          "Projects"
+        ]
       }
     },
     "/v1/projects/change-orders/{coId}/decide": {
@@ -7900,7 +8386,9 @@
             "description": ""
           }
         },
-        "tags": ["Projects"]
+        "tags": [
+          "Projects"
+        ]
       }
     },
     "/v1/projects/{id}/acceptance-pack": {
@@ -7929,7 +8417,9 @@
             "description": ""
           }
         },
-        "tags": ["Projects"]
+        "tags": [
+          "Projects"
+        ]
       }
     },
     "/v1/projects/{id}/acceptance-pack/submit": {
@@ -7966,7 +8456,9 @@
             "description": ""
           }
         },
-        "tags": ["Projects"]
+        "tags": [
+          "Projects"
+        ]
       }
     },
     "/v1/projects/{id}/acceptance-pack/signoff": {
@@ -8003,7 +8495,9 @@
             "description": ""
           }
         },
-        "tags": ["Projects"]
+        "tags": [
+          "Projects"
+        ]
       }
     },
     "/v1/projects/{id}/acceptance-pack/reject": {
@@ -8040,7 +8534,9 @@
             "description": ""
           }
         },
-        "tags": ["Projects"]
+        "tags": [
+          "Projects"
+        ]
       }
     },
     "/v1/contracts/{id}/escalation": {
@@ -8077,7 +8573,9 @@
             "description": ""
           }
         },
-        "tags": ["Leases"]
+        "tags": [
+          "Leases"
+        ]
       }
     },
     "/v1/contracts/{id}/insurance": {
@@ -8114,7 +8612,9 @@
             "description": ""
           }
         },
-        "tags": ["Leases"]
+        "tags": [
+          "Leases"
+        ]
       }
     },
     "/v1/contracts/{id}/allocations": {
@@ -8143,7 +8643,9 @@
             "description": ""
           }
         },
-        "tags": ["Leases"]
+        "tags": [
+          "Leases"
+        ]
       },
       "post": {
         "operationId": "LeasesController_add",
@@ -8178,7 +8680,9 @@
             "description": ""
           }
         },
-        "tags": ["Leases"]
+        "tags": [
+          "Leases"
+        ]
       }
     },
     "/v1/lease-allocations/{allocationId}": {
@@ -8215,7 +8719,9 @@
             "description": ""
           }
         },
-        "tags": ["Leases"]
+        "tags": [
+          "Leases"
+        ]
       }
     },
     "/v1/documents/expiring": {
@@ -8252,7 +8758,9 @@
             "description": ""
           }
         },
-        "tags": ["Leases"]
+        "tags": [
+          "Leases"
+        ]
       }
     },
     "/v1/documents/{id}/expiry": {
@@ -8289,7 +8797,9 @@
             "description": ""
           }
         },
-        "tags": ["Leases"]
+        "tags": [
+          "Leases"
+        ]
       }
     },
     "/v1/events": {
@@ -8334,7 +8844,9 @@
             "description": ""
           }
         },
-        "tags": ["Events"]
+        "tags": [
+          "Events"
+        ]
       }
     },
     "/v1/webhooks/subscriptions": {
@@ -8355,7 +8867,9 @@
             "description": ""
           }
         },
-        "tags": ["Webhooks"]
+        "tags": [
+          "Webhooks"
+        ]
       },
       "post": {
         "operationId": "WebhooksController_createSub",
@@ -8382,7 +8896,9 @@
             "description": ""
           }
         },
-        "tags": ["Webhooks"]
+        "tags": [
+          "Webhooks"
+        ]
       }
     },
     "/v1/webhooks/subscriptions/{id}": {
@@ -8411,7 +8927,9 @@
             "description": ""
           }
         },
-        "tags": ["Webhooks"]
+        "tags": [
+          "Webhooks"
+        ]
       }
     },
     "/v1/webhooks/inbound": {
@@ -8432,7 +8950,9 @@
             "description": ""
           }
         },
-        "tags": ["Webhooks"]
+        "tags": [
+          "Webhooks"
+        ]
       },
       "post": {
         "operationId": "WebhooksController_registerInbound",
@@ -8459,7 +8979,9 @@
             "description": ""
           }
         },
-        "tags": ["Webhooks"]
+        "tags": [
+          "Webhooks"
+        ]
       }
     },
     "/v1/webhooks/inbound/events": {
@@ -8496,7 +9018,9 @@
             "description": ""
           }
         },
-        "tags": ["Webhooks"]
+        "tags": [
+          "Webhooks"
+        ]
       }
     },
     "/v1/webhooks/inbound/{channel}": {
@@ -8525,7 +9049,9 @@
             "description": ""
           }
         },
-        "tags": ["Webhooks"]
+        "tags": [
+          "Webhooks"
+        ]
       }
     },
     "/v1/privacy/categories": {
@@ -8546,7 +9072,9 @@
             "description": ""
           }
         },
-        "tags": ["Privacy"]
+        "tags": [
+          "Privacy"
+        ]
       },
       "post": {
         "operationId": "PrivacyController_upsertCategory",
@@ -8573,7 +9101,9 @@
             "description": ""
           }
         },
-        "tags": ["Privacy"]
+        "tags": [
+          "Privacy"
+        ]
       }
     },
     "/v1/privacy/categories/seed-built-ins": {
@@ -8602,7 +9132,9 @@
             "description": ""
           }
         },
-        "tags": ["Privacy"]
+        "tags": [
+          "Privacy"
+        ]
       }
     },
     "/v1/privacy/ropa": {
@@ -8623,7 +9155,9 @@
             "description": ""
           }
         },
-        "tags": ["Privacy"]
+        "tags": [
+          "Privacy"
+        ]
       }
     },
     "/v1/privacy/dsar": {
@@ -8644,7 +9178,9 @@
             "description": ""
           }
         },
-        "tags": ["Privacy"]
+        "tags": [
+          "Privacy"
+        ]
       },
       "get": {
         "operationId": "PrivacyController_listDsar",
@@ -8671,7 +9207,9 @@
             "description": ""
           }
         },
-        "tags": ["Privacy"]
+        "tags": [
+          "Privacy"
+        ]
       }
     },
     "/v1/privacy/dsar/{id}/process": {
@@ -8708,7 +9246,9 @@
             "description": ""
           }
         },
-        "tags": ["Privacy"]
+        "tags": [
+          "Privacy"
+        ]
       }
     },
     "/v1/privacy/subprocessors": {
@@ -8745,7 +9285,9 @@
             "description": ""
           }
         },
-        "tags": ["Privacy"]
+        "tags": [
+          "Privacy"
+        ]
       },
       "post": {
         "operationId": "PrivacyController_upsertSubprocessor",
@@ -8772,7 +9314,9 @@
             "description": ""
           }
         },
-        "tags": ["Privacy"]
+        "tags": [
+          "Privacy"
+        ]
       }
     },
     "/v1/privacy/subprocessors/{id}/approve": {
@@ -8809,7 +9353,9 @@
             "description": ""
           }
         },
-        "tags": ["Privacy"]
+        "tags": [
+          "Privacy"
+        ]
       }
     },
     "/v1/privacy/subprocessors/{id}/retire": {
@@ -8846,7 +9392,9 @@
             "description": ""
           }
         },
-        "tags": ["Privacy"]
+        "tags": [
+          "Privacy"
+        ]
       }
     },
     "/v1/privacy/subprocessors/seed-built-ins": {
@@ -8875,7 +9423,9 @@
             "description": ""
           }
         },
-        "tags": ["Privacy"]
+        "tags": [
+          "Privacy"
+        ]
       }
     },
     "/v1/privacy/dpa-templates": {
@@ -8912,7 +9462,9 @@
             "description": ""
           }
         },
-        "tags": ["Privacy"]
+        "tags": [
+          "Privacy"
+        ]
       },
       "post": {
         "operationId": "PrivacyController_createDpaTemplate",
@@ -8939,7 +9491,9 @@
             "description": ""
           }
         },
-        "tags": ["Privacy"]
+        "tags": [
+          "Privacy"
+        ]
       }
     },
     "/v1/privacy/dpa-templates/{id}/render": {
@@ -8968,7 +9522,9 @@
             "description": ""
           }
         },
-        "tags": ["Privacy"]
+        "tags": [
+          "Privacy"
+        ]
       }
     },
     "/v1/privacy/dpa-templates/seed-built-ins": {
@@ -8997,7 +9553,9 @@
             "description": ""
           }
         },
-        "tags": ["Privacy"]
+        "tags": [
+          "Privacy"
+        ]
       }
     },
     "/v1/mfa/status": {
@@ -9018,7 +9576,9 @@
             "description": ""
           }
         },
-        "tags": ["Mfa"]
+        "tags": [
+          "Mfa"
+        ]
       }
     },
     "/v1/mfa/enroll/start": {
@@ -9039,7 +9599,9 @@
             "description": ""
           }
         },
-        "tags": ["Mfa"]
+        "tags": [
+          "Mfa"
+        ]
       }
     },
     "/v1/mfa/enroll/verify": {
@@ -9060,7 +9622,9 @@
             "description": ""
           }
         },
-        "tags": ["Mfa"]
+        "tags": [
+          "Mfa"
+        ]
       }
     },
     "/v1/mfa/disable": {
@@ -9081,7 +9645,9 @@
             "description": ""
           }
         },
-        "tags": ["Mfa"]
+        "tags": [
+          "Mfa"
+        ]
       }
     },
     "/v1/metrics": {
@@ -9093,7 +9659,9 @@
             "description": ""
           }
         },
-        "tags": ["Metrics"]
+        "tags": [
+          "Metrics"
+        ]
       }
     },
     "/v1/sso/providers": {
@@ -9114,7 +9682,9 @@
             "description": ""
           }
         },
-        "tags": ["Sso"]
+        "tags": [
+          "Sso"
+        ]
       },
       "post": {
         "operationId": "SsoController_upsertProvider",
@@ -9141,7 +9711,9 @@
             "description": ""
           }
         },
-        "tags": ["Sso"]
+        "tags": [
+          "Sso"
+        ]
       }
     },
     "/v1/sso/login/{providerKey}": {
@@ -9186,7 +9758,9 @@
             "description": ""
           }
         },
-        "tags": ["Sso"]
+        "tags": [
+          "Sso"
+        ]
       }
     },
     "/v1/sso/callback": {
@@ -9223,7 +9797,9 @@
             "description": ""
           }
         },
-        "tags": ["Sso"]
+        "tags": [
+          "Sso"
+        ]
       }
     },
     "/v1/sso/callback/exchange": {
@@ -9244,7 +9820,9 @@
             "description": ""
           }
         },
-        "tags": ["Sso"]
+        "tags": [
+          "Sso"
+        ]
       }
     },
     "/v1/scim/tokens": {
@@ -9265,7 +9843,9 @@
             "description": ""
           }
         },
-        "tags": ["Scim"]
+        "tags": [
+          "Scim"
+        ]
       },
       "post": {
         "operationId": "ScimController_createToken",
@@ -9292,7 +9872,9 @@
             "description": ""
           }
         },
-        "tags": ["Scim"]
+        "tags": [
+          "Scim"
+        ]
       }
     },
     "/v1/scim/tokens/{id}": {
@@ -9321,7 +9903,9 @@
             "description": ""
           }
         },
-        "tags": ["Scim"]
+        "tags": [
+          "Scim"
+        ]
       }
     },
     "/v1/scim/v2/ServiceProviderConfig": {
@@ -9333,7 +9917,9 @@
             "description": ""
           }
         },
-        "tags": ["Scim"]
+        "tags": [
+          "Scim"
+        ]
       }
     },
     "/v1/scim/v2/Users": {
@@ -9370,7 +9956,9 @@
             "description": ""
           }
         },
-        "tags": ["Scim"]
+        "tags": [
+          "Scim"
+        ]
       },
       "post": {
         "operationId": "ScimController_createUser",
@@ -9397,7 +9985,9 @@
             "description": ""
           }
         },
-        "tags": ["Scim"]
+        "tags": [
+          "Scim"
+        ]
       }
     },
     "/v1/scim/v2/Users/{id}": {
@@ -9434,7 +10024,9 @@
             "description": ""
           }
         },
-        "tags": ["Scim"]
+        "tags": [
+          "Scim"
+        ]
       },
       "patch": {
         "operationId": "ScimController_patchUser",
@@ -9469,7 +10061,9 @@
             "description": ""
           }
         },
-        "tags": ["Scim"]
+        "tags": [
+          "Scim"
+        ]
       },
       "put": {
         "operationId": "ScimController_replaceUser",
@@ -9504,7 +10098,9 @@
             "description": ""
           }
         },
-        "tags": ["Scim"]
+        "tags": [
+          "Scim"
+        ]
       },
       "delete": {
         "operationId": "ScimController_deleteUser",
@@ -9539,7 +10135,9 @@
             "description": ""
           }
         },
-        "tags": ["Scim"]
+        "tags": [
+          "Scim"
+        ]
       }
     },
     "/v1/connectors": {
@@ -9551,7 +10149,9 @@
             "description": ""
           }
         },
-        "tags": ["Connectors"]
+        "tags": [
+          "Connectors"
+        ]
       }
     },
     "/v1/connectors/accounting/export.csv": {
@@ -9604,7 +10204,9 @@
             "description": ""
           }
         },
-        "tags": ["Connectors"]
+        "tags": [
+          "Connectors"
+        ]
       }
     },
     "/v1/connectors/vendor-master/import.csv": {
@@ -9633,7 +10235,9 @@
             "description": ""
           }
         },
-        "tags": ["Connectors"]
+        "tags": [
+          "Connectors"
+        ]
       }
     },
     "/v1/connectors/{connectorId}/ingest": {
@@ -9670,7 +10274,9 @@
             "description": ""
           }
         },
-        "tags": ["Connectors"]
+        "tags": [
+          "Connectors"
+        ]
       }
     },
     "/v1/cleaning/requests": {
@@ -9763,7 +10369,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       },
       "post": {
         "operationId": "CleaningInternalController_createRequest",
@@ -9790,7 +10398,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       }
     },
     "/v1/cleaning/requests/{id}": {
@@ -9827,7 +10437,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       }
     },
     "/v1/cleaning/requests/{id}/status": {
@@ -9864,7 +10476,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       }
     },
     "/v1/cleaning/requests/{id}/assign": {
@@ -9901,7 +10515,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       }
     },
     "/v1/cleaning/requests/{id}/comments": {
@@ -9938,7 +10554,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       }
     },
     "/v1/cleaning/contractors": {
@@ -9975,7 +10593,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       },
       "post": {
         "operationId": "CleaningInternalController_createContractor",
@@ -10002,7 +10622,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       }
     },
     "/v1/cleaning/contractors/{id}/staff": {
@@ -10039,7 +10661,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       },
       "post": {
         "operationId": "CleaningInternalController_createStaff",
@@ -10074,7 +10698,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       }
     },
     "/v1/cleaning/zones": {
@@ -10111,7 +10737,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       },
       "post": {
         "operationId": "CleaningInternalController_createZone",
@@ -10138,7 +10766,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       }
     },
     "/v1/cleaning/zones/{id}/assignment": {
@@ -10175,7 +10805,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       }
     },
     "/v1/cleaning/qr-points": {
@@ -10212,7 +10844,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       },
       "post": {
         "operationId": "CleaningInternalController_createQr",
@@ -10239,7 +10873,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       }
     },
     "/v1/cleaning/qr-locations": {
@@ -10276,7 +10912,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       }
     },
     "/v1/cleaning/qr-points/{id}/image": {
@@ -10337,7 +10975,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningInternal"]
+        "tags": [
+          "CleaningInternal"
+        ]
       }
     },
     "/v1/public/cleaning/qr/{code}": {
@@ -10358,7 +10998,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningPublic"]
+        "tags": [
+          "CleaningPublic"
+        ]
       }
     },
     "/v1/public/cleaning/qr/{code}/request": {
@@ -10379,7 +11021,9 @@
             "description": ""
           }
         },
-        "tags": ["CleaningPublic"]
+        "tags": [
+          "CleaningPublic"
+        ]
       }
     },
     "/v1/document-templates": {
@@ -10424,7 +11068,9 @@
             "description": ""
           }
         },
-        "tags": ["DocumentTemplates"]
+        "tags": [
+          "DocumentTemplates"
+        ]
       },
       "post": {
         "operationId": "DocumentTemplatesController_create",
@@ -10451,7 +11097,9 @@
             "description": ""
           }
         },
-        "tags": ["DocumentTemplates"]
+        "tags": [
+          "DocumentTemplates"
+        ]
       }
     },
     "/v1/document-templates/{id}": {
@@ -10480,7 +11128,9 @@
             "description": ""
           }
         },
-        "tags": ["DocumentTemplates"]
+        "tags": [
+          "DocumentTemplates"
+        ]
       },
       "patch": {
         "operationId": "DocumentTemplatesController_update",
@@ -10507,7 +11157,9 @@
             "description": ""
           }
         },
-        "tags": ["DocumentTemplates"]
+        "tags": [
+          "DocumentTemplates"
+        ]
       },
       "delete": {
         "operationId": "DocumentTemplatesController_del",
@@ -10534,7 +11186,9 @@
             "description": ""
           }
         },
-        "tags": ["DocumentTemplates"]
+        "tags": [
+          "DocumentTemplates"
+        ]
       }
     },
     "/v1/document-templates/{id}/applied-to": {
@@ -10563,7 +11217,9 @@
             "description": ""
           }
         },
-        "tags": ["DocumentTemplates"]
+        "tags": [
+          "DocumentTemplates"
+        ]
       }
     },
     "/v1/rounds": {
@@ -10592,7 +11248,9 @@
             "description": ""
           }
         },
-        "tags": ["Rounds"]
+        "tags": [
+          "Rounds"
+        ]
       },
       "post": {
         "operationId": "RoundsController_create",
@@ -10619,7 +11277,9 @@
             "description": ""
           }
         },
-        "tags": ["Rounds"]
+        "tags": [
+          "Rounds"
+        ]
       }
     },
     "/v1/rounds/{id}": {
@@ -10648,7 +11308,9 @@
             "description": ""
           }
         },
-        "tags": ["Rounds"]
+        "tags": [
+          "Rounds"
+        ]
       },
       "patch": {
         "operationId": "RoundsController_update",
@@ -10675,7 +11337,9 @@
             "description": ""
           }
         },
-        "tags": ["Rounds"]
+        "tags": [
+          "Rounds"
+        ]
       },
       "delete": {
         "operationId": "RoundsController_del",
@@ -10702,7 +11366,9 @@
             "description": ""
           }
         },
-        "tags": ["Rounds"]
+        "tags": [
+          "Rounds"
+        ]
       }
     },
     "/v1/rounds/{id}/waypoints": {
@@ -10731,7 +11397,9 @@
             "description": ""
           }
         },
-        "tags": ["Rounds"]
+        "tags": [
+          "Rounds"
+        ]
       }
     },
     "/v1/rounds/waypoints/{wpId}": {
@@ -10760,7 +11428,9 @@
             "description": ""
           }
         },
-        "tags": ["Rounds"]
+        "tags": [
+          "Rounds"
+        ]
       }
     },
     "/v1/tenants": {
@@ -10781,7 +11451,9 @@
             "description": ""
           }
         },
-        "tags": ["OccupantsPortfolio"]
+        "tags": [
+          "OccupantsPortfolio"
+        ]
       }
     },
     "/v1/buildings/{buildingId}/tenants": {
@@ -10810,7 +11482,9 @@
             "description": ""
           }
         },
-        "tags": ["Occupants"]
+        "tags": [
+          "Occupants"
+        ]
       },
       "post": {
         "operationId": "OccupantsController_create",
@@ -10845,7 +11519,9 @@
             "description": ""
           }
         },
-        "tags": ["Occupants"]
+        "tags": [
+          "Occupants"
+        ]
       }
     },
     "/v1/buildings/{buildingId}/tenants/{id}": {
@@ -10882,7 +11558,9 @@
             "description": ""
           }
         },
-        "tags": ["Occupants"]
+        "tags": [
+          "Occupants"
+        ]
       },
       "patch": {
         "operationId": "OccupantsController_patchProfile",
@@ -10925,7 +11603,9 @@
             "description": ""
           }
         },
-        "tags": ["Occupants"]
+        "tags": [
+          "Occupants"
+        ]
       }
     },
     "/v1/buildings/{buildingId}/tenants/{id}/settings": {
@@ -10970,7 +11650,9 @@
             "description": ""
           }
         },
-        "tags": ["Occupants"]
+        "tags": [
+          "Occupants"
+        ]
       }
     },
     "/v1/devices": {
@@ -10991,7 +11673,9 @@
             "description": ""
           }
         },
-        "tags": ["Devices"]
+        "tags": [
+          "Devices"
+        ]
       },
       "get": {
         "operationId": "DevicesController_list",
@@ -11010,7 +11694,9 @@
             "description": ""
           }
         },
-        "tags": ["Devices"]
+        "tags": [
+          "Devices"
+        ]
       }
     },
     "/v1/devices/{id}": {
@@ -11039,7 +11725,9 @@
             "description": ""
           }
         },
-        "tags": ["Devices"]
+        "tags": [
+          "Devices"
+        ]
       }
     },
     "/v1/tasks": {
@@ -11100,7 +11788,9 @@
             "description": ""
           }
         },
-        "tags": ["Tasks"]
+        "tags": [
+          "Tasks"
+        ]
       }
     },
     "/v1/tasks/inbox": {
@@ -11161,7 +11851,9 @@
             "description": ""
           }
         },
-        "tags": ["Tasks"]
+        "tags": [
+          "Tasks"
+        ]
       }
     },
     "/v1/tasks/{id}": {
@@ -11198,7 +11890,9 @@
             "description": ""
           }
         },
-        "tags": ["Tasks"]
+        "tags": [
+          "Tasks"
+        ]
       }
     },
     "/v1/tasks/{id}/start": {
@@ -11235,7 +11929,9 @@
             "description": ""
           }
         },
-        "tags": ["Tasks"]
+        "tags": [
+          "Tasks"
+        ]
       }
     },
     "/v1/tasks/{id}/pause": {
@@ -11272,7 +11968,9 @@
             "description": ""
           }
         },
-        "tags": ["Tasks"]
+        "tags": [
+          "Tasks"
+        ]
       }
     },
     "/v1/tasks/{id}/resume": {
@@ -11309,7 +12007,9 @@
             "description": ""
           }
         },
-        "tags": ["Tasks"]
+        "tags": [
+          "Tasks"
+        ]
       }
     },
     "/v1/tasks/{id}/request-expense": {
@@ -11346,7 +12046,9 @@
             "description": ""
           }
         },
-        "tags": ["Tasks"]
+        "tags": [
+          "Tasks"
+        ]
       }
     },
     "/v1/tasks/{id}/notes": {
@@ -11383,7 +12085,9 @@
             "description": ""
           }
         },
-        "tags": ["Tasks"]
+        "tags": [
+          "Tasks"
+        ]
       },
       "post": {
         "operationId": "TasksController_addNote",
@@ -11418,7 +12122,9 @@
             "description": ""
           }
         },
-        "tags": ["Tasks"]
+        "tags": [
+          "Tasks"
+        ]
       }
     },
     "/v1/tasks/{id}/timeline": {
@@ -11455,7 +12161,9 @@
             "description": ""
           }
         },
-        "tags": ["Tasks"]
+        "tags": [
+          "Tasks"
+        ]
       }
     },
     "/v1/tasks/{id}/transition": {
@@ -11492,7 +12200,9 @@
             "description": ""
           }
         },
-        "tags": ["Tasks"]
+        "tags": [
+          "Tasks"
+        ]
       }
     },
     "/v1/tasks/{id}/comments": {
@@ -11529,7 +12239,9 @@
             "description": ""
           }
         },
-        "tags": ["Tasks"]
+        "tags": [
+          "Tasks"
+        ]
       }
     },
     "/v1/buildings/{id}/tenant-companies": {
@@ -11566,7 +12278,9 @@
             "description": ""
           }
         },
-        "tags": ["TenantCompanies"]
+        "tags": [
+          "TenantCompanies"
+        ]
       }
     },
     "/v1/tenant-companies/{id}": {
@@ -11603,7 +12317,9 @@
             "description": ""
           }
         },
-        "tags": ["TenantCompanies"]
+        "tags": [
+          "TenantCompanies"
+        ]
       }
     },
     "/v1/tenant-companies/{id}/admin": {
@@ -11640,7 +12356,9 @@
             "description": ""
           }
         },
-        "tags": ["TenantCompanies"]
+        "tags": [
+          "TenantCompanies"
+        ]
       }
     },
     "/v1/contractor-companies": {
@@ -11677,7 +12395,9 @@
             "description": ""
           }
         },
-        "tags": ["ContractorCompanies"]
+        "tags": [
+          "ContractorCompanies"
+        ]
       },
       "post": {
         "operationId": "ContractorCompaniesController_create",
@@ -11704,7 +12424,9 @@
             "description": ""
           }
         },
-        "tags": ["ContractorCompanies"]
+        "tags": [
+          "ContractorCompanies"
+        ]
       }
     },
     "/v1/contractor-companies/{id}": {
@@ -11733,7 +12455,9 @@
             "description": ""
           }
         },
-        "tags": ["ContractorCompanies"]
+        "tags": [
+          "ContractorCompanies"
+        ]
       },
       "patch": {
         "operationId": "ContractorCompaniesController_update",
@@ -11768,7 +12492,9 @@
             "description": ""
           }
         },
-        "tags": ["ContractorCompanies"]
+        "tags": [
+          "ContractorCompanies"
+        ]
       }
     },
     "/v1/public-contractors": {
@@ -11805,7 +12531,9 @@
             "description": ""
           }
         },
-        "tags": ["ContractorsPublic"]
+        "tags": [
+          "ContractorsPublic"
+        ]
       },
       "post": {
         "operationId": "ContractorsPublicController_create",
@@ -11824,7 +12552,9 @@
             "description": ""
           }
         },
-        "tags": ["ContractorsPublic"]
+        "tags": [
+          "ContractorsPublic"
+        ]
       }
     },
     "/v1/public-contractors/{id}": {
@@ -11853,7 +12583,9 @@
             "description": ""
           }
         },
-        "tags": ["ContractorsPublic"]
+        "tags": [
+          "ContractorsPublic"
+        ]
       },
       "patch": {
         "operationId": "ContractorsPublicController_update",
@@ -11880,7 +12612,9 @@
             "description": ""
           }
         },
-        "tags": ["ContractorsPublic"]
+        "tags": [
+          "ContractorsPublic"
+        ]
       }
     },
     "/v1/workspace-contractors": {
@@ -11925,7 +12659,9 @@
             "description": ""
           }
         },
-        "tags": ["ContractorsWorkspace"]
+        "tags": [
+          "ContractorsWorkspace"
+        ]
       },
       "post": {
         "operationId": "ContractorsWorkspaceController_create",
@@ -11952,7 +12688,9 @@
             "description": ""
           }
         },
-        "tags": ["ContractorsWorkspace"]
+        "tags": [
+          "ContractorsWorkspace"
+        ]
       }
     },
     "/v1/workspace-contractors/{id}": {
@@ -11989,7 +12727,9 @@
             "description": ""
           }
         },
-        "tags": ["ContractorsWorkspace"]
+        "tags": [
+          "ContractorsWorkspace"
+        ]
       },
       "patch": {
         "operationId": "ContractorsWorkspaceController_update",
@@ -12024,7 +12764,9 @@
             "description": ""
           }
         },
-        "tags": ["ContractorsWorkspace"]
+        "tags": [
+          "ContractorsWorkspace"
+        ]
       },
       "delete": {
         "operationId": "ContractorsWorkspaceController_unlink",
@@ -12059,7 +12801,9 @@
             "description": ""
           }
         },
-        "tags": ["ContractorsWorkspace"]
+        "tags": [
+          "ContractorsWorkspace"
+        ]
       }
     },
     "/v1/team/eligible": {
@@ -12136,7 +12880,9 @@
             "description": ""
           }
         },
-        "tags": ["Team"]
+        "tags": [
+          "Team"
+        ]
       }
     },
     "/v1/team": {
@@ -12189,7 +12935,9 @@
             "description": ""
           }
         },
-        "tags": ["Team"]
+        "tags": [
+          "Team"
+        ]
       },
       "post": {
         "operationId": "TeamController_create",
@@ -12216,7 +12964,9 @@
             "description": ""
           }
         },
-        "tags": ["Team"]
+        "tags": [
+          "Team"
+        ]
       }
     },
     "/v1/team/{id}": {
@@ -12253,7 +13003,9 @@
             "description": ""
           }
         },
-        "tags": ["Team"]
+        "tags": [
+          "Team"
+        ]
       },
       "patch": {
         "operationId": "TeamController_update",
@@ -12288,7 +13040,9 @@
             "description": ""
           }
         },
-        "tags": ["Team"]
+        "tags": [
+          "Team"
+        ]
       },
       "delete": {
         "operationId": "TeamController_deactivate",
@@ -12323,7 +13077,9 @@
             "description": ""
           }
         },
-        "tags": ["Team"]
+        "tags": [
+          "Team"
+        ]
       }
     },
     "/v1/roles": {
@@ -12352,7 +13108,9 @@
             "description": ""
           }
         },
-        "tags": ["Roles"]
+        "tags": [
+          "Roles"
+        ]
       },
       "post": {
         "operationId": "RolesController_create",
@@ -12379,7 +13137,9 @@
             "description": ""
           }
         },
-        "tags": ["Roles"]
+        "tags": [
+          "Roles"
+        ]
       }
     },
     "/v1/roles/{key}": {
@@ -12416,7 +13176,9 @@
             "description": ""
           }
         },
-        "tags": ["Roles"]
+        "tags": [
+          "Roles"
+        ]
       },
       "patch": {
         "operationId": "RolesController_update",
@@ -12451,7 +13213,9 @@
             "description": ""
           }
         },
-        "tags": ["Roles"]
+        "tags": [
+          "Roles"
+        ]
       },
       "delete": {
         "operationId": "RolesController_remove",
@@ -12486,7 +13250,9 @@
             "description": ""
           }
         },
-        "tags": ["Roles"]
+        "tags": [
+          "Roles"
+        ]
       }
     },
     "/v1/roles/{key}/clone": {
@@ -12523,7 +13289,9 @@
             "description": ""
           }
         },
-        "tags": ["Roles"]
+        "tags": [
+          "Roles"
+        ]
       }
     },
     "/v1/role-assignments": {
@@ -12576,7 +13344,9 @@
             "description": ""
           }
         },
-        "tags": ["RoleAssignments"]
+        "tags": [
+          "RoleAssignments"
+        ]
       },
       "post": {
         "operationId": "RoleAssignmentsController_create",
@@ -12603,7 +13373,9 @@
             "description": ""
           }
         },
-        "tags": ["RoleAssignments"]
+        "tags": [
+          "RoleAssignments"
+        ]
       }
     },
     "/v1/role-assignments/{id}": {
@@ -12640,7 +13412,9 @@
             "description": ""
           }
         },
-        "tags": ["RoleAssignments"]
+        "tags": [
+          "RoleAssignments"
+        ]
       },
       "delete": {
         "operationId": "RoleAssignmentsController_remove",
@@ -12675,7 +13449,9 @@
             "description": ""
           }
         },
-        "tags": ["RoleAssignments"]
+        "tags": [
+          "RoleAssignments"
+        ]
       }
     },
     "/v1/notifications": {
@@ -12712,7 +13488,9 @@
             "description": ""
           }
         },
-        "tags": ["Notifications"]
+        "tags": [
+          "Notifications"
+        ]
       }
     },
     "/v1/notifications/{id}/read": {
@@ -12749,7 +13527,9 @@
             "description": ""
           }
         },
-        "tags": ["Notifications"]
+        "tags": [
+          "Notifications"
+        ]
       }
     },
     "/v1/notifications/devices": {
@@ -12778,7 +13558,9 @@
             "description": ""
           }
         },
-        "tags": ["Notifications"]
+        "tags": [
+          "Notifications"
+        ]
       }
     },
     "/v1/notifications/devices/{id}": {
@@ -12815,7 +13597,9 @@
             "description": ""
           }
         },
-        "tags": ["Notifications"]
+        "tags": [
+          "Notifications"
+        ]
       }
     },
     "/v1/notifications/test-email": {
@@ -12844,7 +13628,9 @@
             "description": ""
           }
         },
-        "tags": ["Notifications"]
+        "tags": [
+          "Notifications"
+        ]
       }
     },
     "/v1/notifications/deliveries": {
@@ -12897,7 +13683,9 @@
             "description": ""
           }
         },
-        "tags": ["Notifications"]
+        "tags": [
+          "Notifications"
+        ]
       }
     },
     "/v1/notifications/rules": {
@@ -12926,7 +13714,9 @@
             "description": ""
           }
         },
-        "tags": ["Notifications"]
+        "tags": [
+          "Notifications"
+        ]
       }
     },
     "/v1/notifications/templates": {
@@ -12955,7 +13745,9 @@
             "description": ""
           }
         },
-        "tags": ["Notifications"]
+        "tags": [
+          "Notifications"
+        ]
       }
     },
     "/v1/notifications/preferences": {
@@ -12992,7 +13784,9 @@
             "description": ""
           }
         },
-        "tags": ["Notifications"]
+        "tags": [
+          "Notifications"
+        ]
       },
       "post": {
         "operationId": "NotificationsController_upsertPreference",
@@ -13019,7 +13813,9 @@
             "description": ""
           }
         },
-        "tags": ["Notifications"]
+        "tags": [
+          "Notifications"
+        ]
       }
     },
     "/v1/mail/inbound/{provider}": {
@@ -13040,7 +13836,9 @@
             "description": ""
           }
         },
-        "tags": ["MailInbound"]
+        "tags": [
+          "MailInbound"
+        ]
       }
     }
   },
